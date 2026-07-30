@@ -28,7 +28,7 @@ func InitCronjobs(ctx context.Context) {
 				_ ,err := services.FetchDataService("BTC", "USD")
 
 				if(err != nil){
-				  fmt.Println("error fetching data:", err)
+				  fmt.Println("error fetching data:", err)	
 				}
 			}
 		}
