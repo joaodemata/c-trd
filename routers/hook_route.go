@@ -7,14 +7,15 @@ import (
 	"c_trd/controllers"
 )
 
-func listRoutes(server *http.ServeMux) *http.ServeMux  {
 
+func hookRoutes(server *http.ServeMux) *http.ServeMux  {
 	// Router Decorator pointing to server
 	api := common.NewRouter(server)
 	// Call method
-	api.Get("/list/oportunities", controllers.ListOportunitiesController())
+	api.Post("/hook/trading_view", controllers.TradingViewHookController())
 	
 	return server
 
 }
+
 

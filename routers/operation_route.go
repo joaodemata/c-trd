@@ -2,20 +2,19 @@ package routers
 
 import (
 	"net/http"
+
+	"c_trd/common"
+	"c_trd/controllers"
 )
 
-// RegisterAssetRoutes recibe el enrutador maestro y "monta" sus propias rutas.
 func operationRoutes(server *http.ServeMux) *http.ServeMux  {
-	// Agrupamos bajo el prefijo /api/assets
-	server.HandleFunc("GET /operation/record_assets", handleOperationRecordAssets())
-
+	// Router Decorator pointing to server
+	api := common.NewRouter(server)
+	// Call method
+	api.Post("/operation/create/oportunity", controllers.CreateOportunityController())
+	
 	return server
 
 }
 
 
-func handleOperationRecordAssets() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Solo peticiones POST entran aquí"))
-	}
-}

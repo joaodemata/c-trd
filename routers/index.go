@@ -4,12 +4,12 @@ import (
 	"net/http"
 )
 
-// SetupRouter actúa como el index.js abstracto
+// Call and group all the routes
 func SetupRouter(server *http.ServeMux) *http.ServeMux {
-	// Aquí delegas de forma abstracta. El index no sabe si AssetRoutes 
-	// tiene 1 o 100 rutas, ni si son POST o GET. Delega la responsabilidad.
+	// Load all the routes
 	listRoutes(server)
 	operationRoutes(server)
+	hookRoutes(server)
 
 	return server
 }
