@@ -11,7 +11,7 @@ import (
 func hookRoutes(server *http.ServeMux) *http.ServeMux  {
 	// Router Decorator pointing to server
 	api := common.NewRouter(server)
-	// Call method
+	// Routesf
 	api.Post("/hook/trading_view", controllers.TradingViewHookController())
 	
 	return server

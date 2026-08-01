@@ -12,11 +12,10 @@ func NewRouter(mux *http.ServeMux) *Router {
 
 
 func chainMiddlewares(handler http.HandlerFunc, middlewares ...func(http.Handler) http.Handler) http.Handler {
-    // 1. Empezamos con el controlador final
+    // 1. Start with final controller
     var finalHandler http.Handler = handler
 
-    // 2. Envolvemos el handler con los middlewares en orden inverso 
-    // para que el primero de la lista se ejecute primero.
+    // 2. Reverse join of handlers
     for i := len(middlewares) - 1; i >= 0; i-- {
         finalHandler = middlewares[i](finalHandler)
     }

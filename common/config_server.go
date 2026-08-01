@@ -54,9 +54,9 @@ func ConnectDB() *mongo.Database {
 	return database
 }
 
-func GetCollection(collectionName string) (*mongo.Collection, error) {
+func GetCollection(collectionName string) (*mongo.Collection) {
 	if collectionName == "" {
-		return nil, fmt.Errorf("collection name can not be empty.")
+		panic(fmt.Errorf("collection name can not be empty."))
 	}
-	return Database.Collection(collectionName), nil
+	return Database.Collection(collectionName)
 }

@@ -10,7 +10,7 @@ import (
 func operationRoutes(server *http.ServeMux) *http.ServeMux  {
 	// Router Decorator pointing to server
 	api := common.NewRouter(server)
-	// Call method
+	// Routes
 	api.Post("/operation/create/oportunity", controllers.CreateOportunityController())
 	
 	return server
