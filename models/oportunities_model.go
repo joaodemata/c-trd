@@ -8,7 +8,7 @@ import (
 )
 
 // Condiciones
-type Condition struct {
+type condition struct {
 	Status             string             `bson:"status" json:"status" description:"Id del Estado actual de la condición"`
 	IDStatus           primitive.ObjectID `bson:"id_status" json:"id_status" description:"Estado actual de la condición"`
 	IDProvider         primitive.ObjectID `bson:"id_provider" json:"id_provider" description:"Id del proveedor de informacion del servicio"`
@@ -19,7 +19,6 @@ type Condition struct {
 
 type OportunitiesModelType struct {
 	ID                     primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	IDOpportunity          primitive.ObjectID `bson:"id_opportunity" json:"id_opportunity"`
 	IDAsset                primitive.ObjectID `bson:"id_asset" json:"id_asset"`
 	Asset                  string             `bson:"asset" json:"asset"`
 	IDAction               primitive.ObjectID `bson:"id_action" json:"id_action"`
@@ -28,15 +27,19 @@ type OportunitiesModelType struct {
 	Trigger                string             `bson:"trigger" json:"trigger"`
 	IDStatus               primitive.ObjectID `bson:"id_status" json:"id_status"`
 	Status                 string             `bson:"status" json:"status"`
-	Conditions             []Condition        `bson:"conditions" json:"conditions"`
+	Conditions             []condition        `bson:"conditions" json:"conditions"`
 	MaxCandlestickQty      int                `bson:"max_candlestick_qty" json:"max_candlestick_qty" description:"Maxima Cantidad de velas que puede haber para la oportunidad pasar a descartada"`
 	IDCandlestickTimeframe primitive.ObjectID `bson:"id_candlestick_timeframe" json:"id_candlestick_timeframe" description:"Tiempo que representa cada vela"`
 	CandlestickTimeframe   string             `bson:"candlestick_timeframe" json:"candlestick_timeframe"`
+
 	// Common
-	CreatedDate            time.Time          `bson:"created_date" json:"created_date"`
-	LastUpdate             time.Time          `bson:"last_update" json:"last_update"`
-	LogicalDelete          bool               `bson:"logical_delete" json:"logical_delete"`
-	Core                   string             `bson:"core" json:"core"`
+	LastUpdatedAt time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
+	CreatedDate   time.Time          `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
+	LogicalDelete bool               `bson:"logical_delete" json:"logical_delete" description:"Borrado Logico"`
+	CoreDB        string             `bson:"core_db" json:"core_db" description:"Nombre del Core de Base de datos que hizo el registro"`
+	CoreVersion   string             `bson:"core_version" json:"core_version" description:"Version del Core"`
+	UserDB        string             `bson:"user_db" json:"user_db" description:"Usuario de Base de datos que hizo el registro"`
+	SchemaDB      string             `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
 }
 
 
