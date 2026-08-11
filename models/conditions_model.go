@@ -14,6 +14,7 @@ type ConditionsModelType struct {
 	NameProvider         string             `bson:"name_provider" json:"nameProvider"`
 	NameCondition        string             `bson:"name_condition" json:"nameCondition"`
 	DescriptionCondition string             `bson:"description_condition" json:"descriptionCondition"`
+	Metadata             interface{}       `bson:"metadata" json:"metadata" description:"Objeto con datos a guardar para data analisis"`
 	
 	// Common
 	LastUpdatedAt time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`

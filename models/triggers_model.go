@@ -32,6 +32,8 @@ type TriggersModelType struct {
 	IDCandlestickTimeframe primitive.ObjectID `bson:"id_candlestick_timeframe" json:"id_candlestick_timeframe" description:"Tiempo que representa cada vela"`
 	CandlestickTimeframe   string             `bson:"candlestick_timeframe" json:"candlestick_timeframe"`
 	IdReference            primitive.ObjectID `bson:"id_reference" json:"id_reference" description:"Trigger generado a partir de otro trigger"`
+	PineCode			   string             `bson:"pine_code" json:"pine_code" description:"Codigo de pine utilizado en trading view para el trigger"`
+
 
 
 	// Common

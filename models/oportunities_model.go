@@ -31,6 +31,13 @@ type OportunitiesModelType struct {
 	MaxCandlestickQty      int                `bson:"max_candlestick_qty" json:"max_candlestick_qty" description:"Maxima Cantidad de velas que puede haber para la oportunidad pasar a descartada"`
 	IDCandlestickTimeframe primitive.ObjectID `bson:"id_candlestick_timeframe" json:"id_candlestick_timeframe" description:"Tiempo que representa cada vela"`
 	CandlestickTimeframe   string             `bson:"candlestick_timeframe" json:"candlestick_timeframe"`
+	PriceTriggered         float64            `bson:"price_triggered" json:"price_triggered" description:"Precio en el cual se disparo la oportunidad"`
+  	PriceActiveOportunity  float64            `bson:"price_active_opportunity" json:"price_active_opportunity" description:"Precio en el cual la oportunidad paso a estar activa"`
+	PriceAchieved          float64            `bson:"price_achieved" json:"price_achieved" description:"Precio en el cual la oportunidad paso de status activa a completada o cancelada"`
+	IDCancel               primitive.ObjectID `bson:"id_cancel" json:"id_cancel" description:"id de la razon por la cual la oportunidad fue descartada"`
+	CancelReason           string             `bson:"cancel_reason" json:"cancel_reason" description:"Razon por la cual la oportunidad fue descartada"`
+	Metadata               interface{}        `bson:"metadata" json:"metadata" description:"Objeto opcional para guardar data"`
+
 
 	// Common
 	LastUpdatedAt time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
