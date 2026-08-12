@@ -1,7 +1,6 @@
 package models
 
 import (
-	"c_trd/common"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -28,4 +27,4 @@ type AssetsModelType struct {
 }
 
 // Export model to be used directly
-var AssetsModel = common.GetCollection("assets")
+// var AssetsModel = common.GetCollection("assets")

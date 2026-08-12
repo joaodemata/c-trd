@@ -1,9 +1,9 @@
 package services
 
-import (
-	"c_trd/models"
-)
+// import (
+// 	"c_trd/models"
+// )
 
-// Modelos de bd
+// // Modelos de bd
 
-var opportunitiesModel = models.OportunitiesModel
+// var opportunitiesModel = models.OportunitiesModel

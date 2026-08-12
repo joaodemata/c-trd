@@ -1,7 +1,6 @@
 package models
 
 import (
-	"c_trd/common"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -48,5 +47,5 @@ type TriggersModelType struct {
 
 
 // Expoprt model to be used directly
-var TriggersModel = common.GetCollection("oportunities")
+// var TriggersModel = common.GetCollection("oportunities")
 

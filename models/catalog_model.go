@@ -1,7 +1,6 @@
 package models
 
 import (
-	"c_trd/common"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,4 +28,4 @@ type CatalogsModelType struct {
 }
 
 // Export model to be used directly
-var CatalogsModel = common.GetCollection("catalogs")
+// var CatalogsModel = common.GetCollection("catalogs")

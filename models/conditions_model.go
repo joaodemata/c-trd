@@ -1,7 +1,6 @@
 package models
 
 import (
-	"c_trd/common"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -27,5 +26,5 @@ type ConditionsModelType struct {
 }
 
 // Expoprt model to be used directly
-var ConditionsModel = common.GetCollection("conditions")
+// var ConditionsModel = common.GetCollection("conditions")
 

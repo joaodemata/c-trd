@@ -1,3 +1,4 @@
 .env
 .vscode
 API_KEY.txt
+go.sum

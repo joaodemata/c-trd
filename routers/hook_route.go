@@ -4,7 +4,8 @@ import (
 	"net/http"
 
 	"c_trd/common"
-	"c_trd/controllers"
+	c "c_trd/controllers"
+	fv "c_trd/format_validates"
 )
 
 
@@ -14,7 +15,7 @@ func hookRoutes(server *http.ServeMux) *http.ServeMux  {
 	// Routes
 
 	// Ruta para recibir los triggers de trading view 
-	api.Post("/hook/trading_view", controllers.TradingViewHookController())
+	api.Post("/hook/trading_view", c.TradingViewHookController(), fv.TradingViewTriggerFormatValidate)
 	
 	return server
 
