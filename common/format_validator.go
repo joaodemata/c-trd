@@ -58,7 +58,7 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":    "Datos de entrada inválidos",
-				"detalles": errors,
+				"details": errors,
 			})
 			return
 		}
