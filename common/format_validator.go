@@ -83,7 +83,7 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 		// 3. Inyectar en el contexto
 		ctx := context.WithValue(r.Context(), "payload", &payloadFormat)
 
-		// 4. Continuar al controlador
+		// 4. Continuar al data validate
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
