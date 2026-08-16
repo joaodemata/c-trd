@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Inicializamos el validador a nivel global (es thread-safe y optimiza el rendimiento)
@@ -15,11 +16,31 @@ var validate *validator.Validate
 
 func init() {
 	validate = validator.New()
+
+
+	// Registramos la etiqueta personalizada "mongodb"
+	_ = validate.RegisterValidation("mongodb", validateMongoDBID)
+
+}
+
+
+// validateMongoDBID es la función interna que ejecuta la lógica de validación
+func validateMongoDBID(fl validator.FieldLevel) bool {
+	idStr := fl.Field().String()
+	
+	// primitive.ObjectIDFromHex intenta convertir el string. 
+	// Si da error, significa que no es un ID válido de Mongo.
+	_, err := primitive.ObjectIDFromHex(idStr)
+	return err == nil
 }
 
 // Validador de si hubo errores y que tipo fue para devolverlo
 func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Creamos el response
+		res := NewResponseHandler(w)
+
+
 		// Instaciamos copia del datos para no realizar race conditions
 		var payloadFormat T
 		
@@ -31,15 +52,13 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 			
 			if errors.As(err, &typeError) {
 				// Mismatch data type
-				message := fmt.Sprintf("Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", 
-					typeError.Field, typeError.Type.String(), typeError.Value)
-				
-				http.Error(w, message, http.StatusBadRequest)
+				res.Error("FAIL", "Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", "CC001", nil)
 				return
 			}
 
 			// No es formato JSON
-			http.Error(w, "El JSON está mal formateado o es inválido estructuralmente", http.StatusBadRequest)
+			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", nil)
+
 			return
 		}
 		// Validammos la estructura del JSON en base a las reglas enviadas
@@ -52,11 +71,9 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 				errorMessage := fmt.Sprintf("El campo '%s' falló en la regla: '%s'", err.Field(), err.Tag())
 				errors = append(errors, errorMessage)
 			}
+			
 
-			// Devolvemos un HTTP 400 (Bad Request) con el array de errores
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", map[string]interface{}{
 				"error":    "Datos de entrada inválidos",
 				"details": errors,
 			})
