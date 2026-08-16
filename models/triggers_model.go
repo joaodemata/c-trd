@@ -1,10 +1,10 @@
 package models
 
 import (
-	cmm "c_trd/common"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Condiciones
@@ -47,6 +47,8 @@ type TriggersModelType struct {
 }
 
 
-// Expoprt model to be used directly
-var TriggersModel = cmm.GetCollection("oportunities")
+// Model pointer
+var TriggersModel *mongo.Collection
+
+
 

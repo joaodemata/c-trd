@@ -15,7 +15,13 @@ import (
 // Database client
 var Database *mongo.Database
 
-func ConnectDB() *mongo.Database {
+type ModelRegistry struct {
+	Name string
+	Ptr  **mongo.Collection
+}
+
+
+func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 	err := godotenv.Load()
 
 
@@ -57,6 +63,11 @@ func ConnectDB() *mongo.Database {
 	
 	Database = database
 
+	for _, model := range modelsToInit {
+		*model.Ptr = database.Collection(model.Name)
+	}
+
+	fmt.Println("All models initialized abstractly.")
 
 	return database
 }

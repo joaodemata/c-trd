@@ -12,13 +12,14 @@ import (
 
 	"c_trd/common"
 	"c_trd/cronjobs"
+	"c_trd/models"
 	"c_trd/routers"
 )
 
 func main() {
 	// 1. Initialize MongoDB
 	fmt.Println("Connecting to MongoDB...")
-	db := common.ConnectDB()
+	db := common.ConnectDB(models.RegistryList)
 	mongoClient := db.Client()
 
 	// 2. Setup context for cronjobs
