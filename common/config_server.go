@@ -43,10 +43,17 @@ func ConnectDB() *mongo.Database {
 
 	fmt.Println("Connection to MongoDB succesfull")
 
-	fmt.Println("Connection to DB", os.Getenv("JM_CTRD_MONGODB_DATABASE_NAME"))
+	dbName := os.Getenv("JM_CTRD_MONGODB_DATABASE_NAME")
+
+	if dbName == "" {
+		dbName = "c_trd_default_db" // Valor por defecto por si olvidas ponerlo en el .env
+	}
 
 
-	database := client.Database("JM_CTRD_MONGODB_DATABASE_NAME")
+	fmt.Println("Connection to DB", dbName)
+
+
+	database := client.Database(dbName)
 	
 	Database = database
 

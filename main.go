@@ -1,8 +1,6 @@
 package main
 
 import (
-	"c_trd/cronjobs"
-	"c_trd/routers"
 	"context"
 	"fmt"
 	"log"
@@ -11,23 +9,28 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"c_trd/common"
+	"c_trd/cronjobs"
+	"c_trd/routers"
 )
 
 func main() {
-	// 1. Creamos un Context que puede ser cancelado
-	ctxCronjob, cancelCronjob := context.WithCancel(context.Background())
-	defer cancelCronjob() // Por seguridad, nos aseguramos de limpiarlo al final
+	// 1. Initialize MongoDB
+	fmt.Println("Connecting to MongoDB...")
+	db := common.ConnectDB()
+	mongoClient := db.Client()
 
+	// 2. Setup context for cronjobs
+	ctxCronjob, cancelCronjob := context.WithCancel(context.Background())
+	defer cancelCronjob() 
 
 	fmt.Println("Initializing cronjobs...")
 	cronjobs.InitCronjobs(ctxCronjob)
 
-
+	// 3. Setup HTTP server
 	fmt.Println("Initializing server...")
-	// 1. Configurar el servidor HTTP
 	mux := http.NewServeMux()
-	
-	// 2. Routes 
 	routers.SetupRouter(mux)
 
 	srv := &http.Server{
@@ -37,30 +40,38 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	// 5. Graceful Shutdown (Apagado seguro)
-	// Esto intercepta señales del sistema (como Ctrl+C) para cerrar conexiones limpiamente
+	// 4. Start HTTP server in a goroutine
 	go func() {
-		fmt.Printf("Servidor escuchando en http://localhost%s\n", srv.Addr)
+		fmt.Printf("Server listening on http://localhost%s\n", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Error iniciando servidor: %v", err)
+			log.Fatalf("Server error: %v", err)
 		}
 	}()
 
-	// Canal para escuchar señales de interrupción
+	// 5. Wait for system interrupt signals (Ctrl+C)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit // El programa se bloquea aquí hasta recibir la señal
+	<-quit 
 
-	fmt.Println("\nApagando servidor...")
+	fmt.Println("\nShutting down server...")
 	
+	// 6. Stop cronjobs
 	cancelCronjob()
 
+	// 7. Graceful shutdown timeout (5 seconds)
 	ctxTimeout, cancelTimeout := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelTimeout()
 
+	// 8. Shutdown HTTP server
 	if err := srv.Shutdown(ctxTimeout); err != nil {
-		log.Fatalf("Error forzando el apagado: %v", err)
+		log.Printf("HTTP shutdown error: %v", err)
 	}
 
-	fmt.Println("Servidor detenido correctamente.")
+	// 9. Disconnect MongoDB
+	fmt.Println("Disconnecting from MongoDB...")
+	if err := mongoClient.Disconnect(ctxTimeout); err != nil {
+		log.Printf("MongoDB disconnect error: %v", err)
+	}
+
+	fmt.Println("Server stopped successfully.")
 }
