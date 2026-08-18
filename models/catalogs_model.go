@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type CatalogsModelType struct {
@@ -14,9 +15,7 @@ type CatalogsModelType struct {
 	Description   string             `bson:"description" json:"description" description:"Nombre"`
 	Configs       interface{}        `bson:"configs" json:"configs" description:"Objeto con configuraciones varias"`
 	Comment       string             `bson:"comment,omitempty" json:"comment,omitempty" description:"Comentario"`
-	TagStatus     string             `bson:"tag_status" json:"tag_status" description:"Tag estatus del catalogo"`
-	Status        string             `bson:"status" json:"status" description:"Estatus del catalogo"`
-	
+
 	// Common
 	LastUpdatedAt time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
 	CreatedDate   time.Time          `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
@@ -27,5 +26,5 @@ type CatalogsModelType struct {
 	SchemaDB      string             `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
 }
 
-// Export model to be used directly
-// var CatalogsModel = common.GetCollection("catalogs")
+// Model pointer
+var CatalogsModel  *mongo.Collection

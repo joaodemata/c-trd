@@ -1,1 +1,0 @@
-//TODO: Agregar un validador para que nadie pueda modificar el array models fuera del archivo models.go

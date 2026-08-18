@@ -9,12 +9,11 @@ import (
 
 // Condiciones
 type conditionTriggers struct {
-	Status             string             `bson:"status" json:"status" description:"Id del Estado actual de la condición"`
-	IDStatus           primitive.ObjectID `bson:"id_status" json:"id_status" description:"Estado actual de la condición"`
-	IDProvider         primitive.ObjectID `bson:"id_provider" json:"id_provider" description:"Id del proveedor de informacion del servicio"`
-	NameProvider       string             `bson:"name_provider" json:"name_provider" description:" Proveedor de informacion del servicio"`
-	NameCondition      string             `bson:"name_condition" json:"name_condition" `
-	DescriptionCondition string           `bson:"description_condition" json:"description_condition"`
+	IDCondition          primitive.ObjectID `bson:"id_condition" json:"id_condition" description:"Id de la condicion"`
+	IDProvider           primitive.ObjectID `bson:"id_provider" json:"id_provider" description:"Id del proveedor de informacion del servicio"`
+	NameProvider         string             `bson:"name_provider" json:"name_provider" description:" Proveedor de informacion del servicio"`
+	NameCondition        string             `bson:"name_condition" json:"name_condition" `
+	DescriptionCondition string           `bson:"description_condition" json:"description_condition"`	
 }
 
 type TriggersModelType struct {

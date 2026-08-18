@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ProvidersModelType struct {
@@ -11,7 +12,7 @@ type ProvidersModelType struct {
 	Tag           string             `bson:"tag" json:"tag" description:"Tag o identificador"`
 	Name          string             `bson:"name" json:"name" description:"Nombre"`
 	Description   string             `bson:"description" json:"description" description:"Nombre"`
-	Configs       interface{}        `bson:"configs" json:"configs" description:"Objeto con configuraciones varias"`
+	Configs       interface{}        `bson:"configs" json:"configs" description:"Objeto con configuraciones varias (URLS, HEADERS, ETC)"`
 	Comment       string             `bson:"comment,omitempty" json:"comment,omitempty" description:"Comentario"`
 	TagStatus     string             `bson:"tag_status" json:"tag_status" description:"Tag estatus del catalogo"`
 	Status        string             `bson:"status" json:"status" description:"Estatus del catalogo"`
@@ -26,5 +27,6 @@ type ProvidersModelType struct {
 	SchemaDB      string             `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
 }
 
-// Export model to be used directly
-// var ProvidersModel = common.GetCollection("providers")
+
+// Model pointer
+var ProvidersModel *mongo.Collection
