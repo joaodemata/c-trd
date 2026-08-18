@@ -13,7 +13,7 @@ type RiskManagement struct {
 	Probability *float64 `bson:"probability,omitempty" json:"probability,omitempty" description:"Probabilidad estimada de alcanzar el precio (opcional)"`
 }
 
-// Condiciones
+// Condiciones en oportunidad, guardamos status para tener un rastreo de porque la operacion fue ejecutada o no
 type condition struct {
 	IDCondition        primitive.ObjectID `bson:"id_condition" json:"id_condition" description:"Id de la condición"`
 	IDProvider         primitive.ObjectID `bson:"id_provider" json:"id_provider" description:"Id del proveedor de informacion del servicio"`
@@ -30,22 +30,39 @@ type condition struct {
 
 type OpportunitiesModelType struct {
 	ID                     primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	IDAsset                primitive.ObjectID `bson:"id_asset" json:"id_asset"`
-	Asset                  string             `bson:"asset" json:"asset"`
-	IDAction               primitive.ObjectID `bson:"id_action" json:"id_action"`
-	Action                 string             `bson:"action" json:"action"`
+	// Trigger
 	IDTrigger              primitive.ObjectID `bson:"id_trigger" json:"id_trigger"`
+	TagTrigger             string             `bson:"tag_trigger" json:"tag_trigger"`
 	Trigger                string             `bson:"trigger" json:"trigger"`
-	IDStatus               primitive.ObjectID `bson:"id_status" json:"id_status"`
-	Status                 string             `bson:"status" json:"status"`
+	//Asset
+	IDAsset                 primitive.ObjectID `bson:"id_asset" json:"id_asset"`
+	TagAsset                string             `bson:"tag_asset" json:"tag_asset"` 
+	Asset                   string             `bson:"asset" json:"asset"`
+	// Action
+	IDAction                primitive.ObjectID `bson:"id_action" json:"id_action"`
+	TagAction               string             `bson:"tag_action" json:"tag_action"`
+	Action                  string             `bson:"action" json:"action"`
+	// Status
+	IDStatus                primitive.ObjectID `bson:"id_status" json:"id_status"`
+	TagStatus               string             `bson:"tag_status" json:"tag_status"`
+	Status                  string             `bson:"status" json:"status"`
+	//Conditions
 	Conditions             []condition        `bson:"conditions" json:"conditions"`
+	// Candles
 	MaxCandlestickQty      int                `bson:"max_candlestick_qty" json:"max_candlestick_qty" description:"Maxima Cantidad de velas que puede haber para la oportunidad pasar a descartada"`
 	IDCandlestickTimeframe primitive.ObjectID `bson:"id_candlestick_timeframe" json:"id_candlestick_timeframe" description:"Tiempo que representa cada vela"`
+	TagCandlestickTimeframe string             `bson:"tag_candlestick_timeframe" json:"tag_candlestick_timeframe"`
 	CandlestickTimeframe   string             `bson:"candlestick_timeframe" json:"candlestick_timeframe"`
+	// Expiration
+	ExpirationDate         time.Time          `bson:"expiration_date" json:"expiration_date" description:"Tiempo de expiracion de la oportunidad dependiendo del maximo cantidad de velas"`
+
+	// Prices executed
 	PriceTriggered         float64            `bson:"price_triggered" json:"price_triggered" description:"Precio en el cual se disparo la oportunidad"`
 	PriceActiveOportunity  float64            `bson:"price_active_opportunity" json:"price_active_opportunity" description:"Precio en el cual la oportunidad paso a estar activa"`
 	PriceAchieved          float64            `bson:"price_achieved" json:"price_achieved" description:"Precio en el cual la oportunidad paso de status activa a completada o cancelada"`
+	// Cancels
 	IDCancel               primitive.ObjectID `bson:"id_cancel" json:"id_cancel" description:"id de la razon por la cual la oportunidad fue descartada"`
+	TagCancelReason        string             `bson:"tag_cancel_reason" json:"tag_cancel_reason" description:"Tag de la Razon por la cual la oportunidad fue descartada"`
 	CancelReason           string             `bson:"cancel_reason" json:"cancel_reason" description:"Razon por la cual la oportunidad fue descartada"`
 	
 	// Campos de gestión de riesgo

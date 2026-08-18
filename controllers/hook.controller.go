@@ -3,21 +3,31 @@ package controllers
 import (
 	"net/http"
 
-	fv "c_trd/format_validates"
+	cmm "c_trd/common"
+	"c_trd/models"
 )
 
 
 func TradingViewHookController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 1. Extraemos el valor usando la llave pública que exportaste en 'common'
-		// Extracción y aserción en la misma línea
-		_, ok := r.Context().Value("payload").(*fv.TradingViewTriggerFormat)
+		// Creamos el response
+		res := cmm.NewResponseHandler(w)
+	
 
-		if !ok {
+		triggerData, err := cmm.GetFromRequestContext[*models.TriggersModelType](r, "triggerData")
+
+		// Verificamos si hay error de parseo 
+		if err != nil {
 			http.Error(w, "Error interno del servidor", http.StatusInternalServerError)
 			return
 		}
 
-		w.Write([]byte("Solo peticiones POST entran aquí test"))
+		// 1. Armas tu JSON usando un mapa
+    	data := map[string]any{
+        "idOpportunity":  triggerData.ID,
+    }
+
+
+		res.Send(http.StatusAccepted, "SUCCESS", "Oportunidad creada exitosamente", "CHOOK001", data)
 	}
 }

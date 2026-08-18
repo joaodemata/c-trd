@@ -1,7 +1,6 @@
 package common
 
 import (
-	"context"
 	"encoding/json" // Importamos el paquete de errores estándar
 	"errors"
 	"fmt"
@@ -81,9 +80,9 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 		}
 
 		// 3. Inyectar en el contexto
-		ctx := context.WithValue(r.Context(), "payload", &payloadFormat)
+		r = SetInRequestContext(r, "payload", &payloadFormat)
 
 		// 4. Continuar al data validate
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }

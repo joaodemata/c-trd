@@ -1,7 +1,6 @@
 package cronjobs
 
 import (
-	"c_trd/services"
 	"context"
 	"fmt"
 	"time"
@@ -25,11 +24,13 @@ func InitCronjobs(ctx context.Context) {
 
 			// Caso 2: El ticker hace "tick" (pasan los 10 minutos)
 			case <-ticker.C:
-				_ ,err := services.FetchDataService("BTC", "USD")
+				fmt.Println("Corriendo tarea")	
 
-				if(err != nil){
-				  fmt.Println("error fetching data:", err)	
-				}
+				// _ ,err := services.FetchDataService("BTC", "USD")
+
+				// if(err != nil){
+				//   fmt.Println("error fetching data:", err)	
+				// }
 			}
 		}
 	}()
