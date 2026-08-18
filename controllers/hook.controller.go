@@ -25,7 +25,7 @@ func TradingViewHookController() http.HandlerFunc {
 		// 1. Armas tu JSON usando un mapa
     	data := map[string]any{
         "idOpportunity":  triggerData.ID,
-    }
+    	}
 
 
 		res.Send(http.StatusAccepted, "SUCCESS", "Oportunidad creada exitosamente", "CHOOK001", data)
