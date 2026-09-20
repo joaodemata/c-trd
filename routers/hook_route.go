@@ -3,7 +3,7 @@ package routers
 import (
 	"net/http"
 
-	"c_trd/common"
+	cmm "c_trd/common"
 	c "c_trd/controllers"
 	dv "c_trd/data_validates"
 	fv "c_trd/format_validates"
@@ -12,7 +12,7 @@ import (
 
 func hookRoutes(server *http.ServeMux) *http.ServeMux  {
 	// Router Decorator pointing to server
-	api := common.NewRouter(server)
+	api := cmm.NewRouter(server)
 	// Routes
 
 	// Ruta para recibir los triggers de trading view 

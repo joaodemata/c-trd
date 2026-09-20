@@ -61,6 +61,15 @@ func NewErrorHandler(err error, msg string, level ErrorLevel, trackCode string) 
 }
 
 
+
+func NewServerErrorHandler(trackingCode string) *ErrorHandler {
+	return &ErrorHandler{
+		Message:      "Servicio no disponible",
+		Level:        LevelEmpty,
+		TrackingCode: trackingCode,
+	}
+}
+
 func NewEmptyErrorHandler() *ErrorHandler {
 	return &ErrorHandler{
 		Message:      "",

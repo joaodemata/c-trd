@@ -17,12 +17,14 @@ func TradingViewHookController() http.HandlerFunc {
 		triggerData, err := cmm.GetFromRequestContext[*models.TriggersModelType](r, "triggerData")
 
 		// Verificamos si hay error de parseo 
-		if err != nil {
-			http.Error(w, "Error interno del servidor", http.StatusInternalServerError)
+		if !err.IsEmtpy(){
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
 		}
 
-		// 1. Armas tu JSON usando un mapa
+		// TODO: crear y verificar que no hay una oportunidad activa para no duplicar 
+
+		// Response Data
     	data := map[string]any{
         "idOpportunity":  triggerData.ID,
     	}

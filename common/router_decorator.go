@@ -94,3 +94,11 @@ func (r *Router) Trace(path string, handler http.HandlerFunc, middlewares ...fun
     // Create route with method and middlewares
     r.mux.Handle("TRACE "+path, finalHandler)
 }
+
+// Metodo de router para activar una comunicacion tipo socket 
+func (r *Router) WebSocketOn(hub *Hub) {
+
+    r.mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+        ServeWs(hub, w, r) 
+    })
+}

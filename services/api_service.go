@@ -6,18 +6,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 
 func FetchDataService(fromCurrency string, toCurrency string) (string, error) {
-	// Cargamos las variables de entorno
-	err := godotenv.Load()
 
-	if err != nil {
-		return "", fmt.Errorf("error loading the file: .env", err)
-	}
 
 	// 1. API URL
 	baseURL := os.Getenv("JM_CTRD_STOCK_API_URL")

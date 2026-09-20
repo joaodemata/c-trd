@@ -4,6 +4,7 @@ import (
 	"encoding/json" // Importamos el paquete de errores estándar
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
@@ -46,19 +47,28 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 		err := json.NewDecoder(r.Body).Decode(&payloadFormat)
 
 		if err != nil {
-			// Verificar si el error es de tipo de dato erroneo
-			var typeError *json.UnmarshalTypeError
-			
-			if errors.As(err, &typeError) {
-				// Mismatch data type
-				res.Error("FAIL", "Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", "CC001", nil, NewEmptyErrorHandler())
+			// Validamos que el error no sea por estar vacio 
+			if errors.Is(err, io.EOF) {
+
+                // Forzamos err a nil para que continúe a la validación del Struct
+                // con los valores por defecto (vacíos) de la estructura.
+                err = nil
+
+			} else{
+
+				// Verificar si el error es de tipo de dato erroneo
+				var typeError *json.UnmarshalTypeError
+				
+				if errors.As(err, &typeError) {
+					// Mismatch data type
+					res.Error("FAIL", "Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", "CC001", nil, NewEmptyErrorHandler())
+					return
+				}
+				// No es formato JSON
+				res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", nil, NewEmptyErrorHandler())
+	
 				return
 			}
-
-			// No es formato JSON
-			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", nil, NewEmptyErrorHandler())
-
-			return
 		}
 		// Validammos la estructura del JSON en base a las reglas enviadas
 		err = validate.Struct(payloadFormat)
@@ -72,7 +82,7 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 			}
 			
 
-			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", map[string]interface{}{
+			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC003", map[string]interface{}{
 				"error":    "Datos de entrada inválidos",
 				"details": errors,
 			}, NewEmptyErrorHandler())

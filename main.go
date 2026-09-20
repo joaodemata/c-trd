@@ -7,19 +7,34 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
-	"c_trd/common"
+	cmm "c_trd/common"
 	"c_trd/cronjobs"
 	"c_trd/models"
 	"c_trd/routers"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Cargamos las variables de entorno solo si es windows 
+	if runtime.GOOS == "windows" {
+		
+		err := godotenv.Load()	
+
+		// Validamos si hay  error
+		if err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}
+
+
 	// 1. Initialize MongoDB
 	fmt.Println("Connecting to MongoDB...")
-	db := common.ConnectDB(models.RegistryList)
+	db := cmm.ConnectDB(models.RegistryList)
 	mongoClient := db.Client()
 
 	// 2. Setup context for cronjobs
@@ -32,8 +47,12 @@ func main() {
 	// 3. Setup HTTP server
 	fmt.Println("Initializing server...")
 	mux := http.NewServeMux()
-	routers.SetupRouter(mux)
 
+	// Start web socket  
+	hub := cmm.NewHub()
+	routers.SetupRouter(mux, hub)
+
+	
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
@@ -47,7 +66,10 @@ func main() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
-	}()
+		}()
+		
+	// Start websocket
+	go hub.Run()
 
 	// 5. Wait for system interrupt signals (Ctrl+C)
 	quit := make(chan os.Signal, 1)
