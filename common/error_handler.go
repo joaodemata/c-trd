@@ -1,63 +1,92 @@
 package common
 
 import (
-	"encoding/json"
-	"net/http"
-	"time"
+	"fmt"
 )
 
+// ErrorLevel define la severidad del error.
+type ErrorLevel string
 
-type APIResponse struct {
-	Status    string    `json:"status"`
-	Message   string    `json:"message"`
-	Tracking  string    `json:"tracking"` 
-	Date      time.Time `json:"date"`
-	Data      any       `json:"data,omitempty"`
+const (
+	LevelInfo     ErrorLevel = "INFO"
+	LevelWarning  ErrorLevel = "WARNING"
+	LevelError    ErrorLevel = "ERROR"
+	LevelFatal    ErrorLevel = "FATAL"
+	LevelDatabase ErrorLevel = "DATABASE"
+	LevelEmpty    ErrorLevel = "EMPTY"
+
+)
+
+// AppError es nuestra estructura personalizada.
+type ErrorHandler struct {
+	Err          error      // El error original (underlying error)
+	Message      string     // Mensaje amigable o de contexto
+	Level        ErrorLevel // Nivel de severidad
+	TrackingCode string     // Código para rastrear dónde ocurrió
 }
 
-type ResponseHandler struct {
-	w http.ResponseWriter
+// Método Error() para implementar la interfaz 'error' de Go.
+func (e *ErrorHandler) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("[%s] %s | Reason: %v | Track: %s", e.Level, e.Message, e.Err, e.TrackingCode)
+	}
+	return fmt.Sprintf("[%s] %s | Track: %s", e.Level, e.Message, e.TrackingCode)
 }
 
-// NewResponseHandler inicializa el ayudante
-func NewResponseHandler(w http.ResponseWriter) *ResponseHandler {
-	return &ResponseHandler{w: w}
+// Método Unwrap() para soportar errors.Is y errors.As (Go 1.13+).
+func (e *ErrorHandler) Unwrap() error {
+	return e.Err
 }
 
-// Send es tu método "core" para despachar la respuesta
-func (rh *ResponseHandler) Send(statusCode int, statusMsg string, message string, tracking string, data any) {
-	// Seteamos el header de que es un JSON antes de escribir nada
-	rh.w.Header().Set("Content-Type", "application/json")
-	rh.w.WriteHeader(statusCode)
 
-	// Construimos la estructura de la respuesta
-	res := APIResponse{
-		Status:    statusMsg,
-		Message:   message,
-		Tracking:  tracking,
-		Date:      time.Now(),
-		Data:      data,
+// Valida si el error no es vacio
+func (e *ErrorHandler) IsEmtpy() bool {
+	
+	if (e.Level == LevelEmpty){
+		return true
 	}
 
-	// Transformamos a JSON y escribimos directamente en el ResponseWriter
-	json.NewEncoder(rh.w).Encode(res)
+	return false
 }
 
-// Send es tu método "core" para despachar la respuesta
-func (rh *ResponseHandler) Error(statusMsg string, message string, tracking string, data any) {
-	// Seteamos el header de que es un JSON antes de escribir nada
-	rh.w.Header().Set("Content-Type", "application/json")
-	rh.w.WriteHeader(http.StatusBadRequest)
 
-	// Construimos la estructura de la respuesta
-	res := APIResponse{
-		Status:    statusMsg,
-		Message:   message,
-		Tracking:  tracking,
-		Date:      time.Now(),
-		Data:      data,
+// Constructor para facilitar la creación del error.
+func NewErrorHandler(err error, msg string, level ErrorLevel, trackCode string) *ErrorHandler {
+	return &ErrorHandler{
+		Err:          err,
+		Message:      msg,
+		Level:        level,
+		TrackingCode: trackCode,
 	}
-
-	// Transformamos a JSON y escribimos directamente en el ResponseWriter
-	json.NewEncoder(rh.w).Encode(res)
 }
+
+
+func NewEmptyErrorHandler() *ErrorHandler {
+	return &ErrorHandler{
+		Message:      "",
+		Level:        LevelEmpty,
+		TrackingCode: "",
+	}
+}
+
+
+
+// func main() {
+// 	// Simulamos un error de base de datos
+// 	dbErr := errors.New("connection timeout")
+
+// 	// Envolvemos el error con nuestro struct personalizado
+// 	myErr := NewAppError(
+// 		dbErr, 
+// 		"No se pudo conectar a la base de datos de usuarios", 
+// 		LevelError, 
+// 		"DB_CONN_001",
+// 	)
+
+// 	fmt.Println(myErr.Error())
+
+// 	// Comprobamos si el error original era 'dbErr' usando Unwrap (automático con errors.Is)
+// 	if errors.Is(myErr, dbErr) {
+// 		fmt.Println("-> El sistema detectó que la causa raíz fue un timeout de DB.")
+// 	}
+// }

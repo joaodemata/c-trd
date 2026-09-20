@@ -51,12 +51,12 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 			
 			if errors.As(err, &typeError) {
 				// Mismatch data type
-				res.Error("FAIL", "Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", "CC001", nil)
+				res.Error("FAIL", "Error de tipo en el campo '%s': se esperaba %s pero se recibió un %s", "CC001", nil, NewEmptyErrorHandler())
 				return
 			}
 
 			// No es formato JSON
-			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", nil)
+			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", nil, NewEmptyErrorHandler())
 
 			return
 		}
@@ -75,7 +75,7 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 			res.Error("FAIL", "El JSON está mal formateado o es inválido estructuralmente", "CC002", map[string]interface{}{
 				"error":    "Datos de entrada inválidos",
 				"details": errors,
-			})
+			}, NewEmptyErrorHandler())
 			return
 		}
 

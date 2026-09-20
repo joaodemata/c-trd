@@ -3,8 +3,9 @@ package services
 import (
 	"c_trd/models"
 	"context"
-	"errors"
 	"time"
+
+	cmm "c_trd/common"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -12,22 +13,21 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// GetTriggerService finds a document by hex ID and returns it as a generic map
-func GetTriggerService(idTrigger string) (models.TriggersModelType, error) {
+// GetTriggerService finds a document by hex ID
+func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHandler) {
 	var result models.TriggersModelType
 
-	// 1. Convert string ID to MongoDB ObjectID
 	idTriggerParsed, err := primitive.ObjectIDFromHex(idTrigger)
-
+	
 	if err != nil {
-		return result, errors.New("invalid mongodb id format")
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelFatal, "SLISE001")
 	}
 
-	// 2. Set timeout context for the query
+	//Set timeout context for the query
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 4. Create filter and variable to hold the result
+	//Create filter and variable to hold the result
 	//TODO: agregar el idStatus al query
 	filter := bson.M{"_id": idTriggerParsed,  "logical_delete": false}
 
@@ -51,8 +51,8 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, error) {
 			return result, nil
 		} 
 
-		return result, err
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE002")
 	}
 
-	return result, nil
+	return result, cmm.NewEmptyErrorHandler()
 }

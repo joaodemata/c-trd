@@ -16,15 +16,17 @@ func SetInRequestContext(r *http.Request, key string, value any) *http.Request {
 }
 
 // GetFromRequestContext devuelve T (puede ser un struct normal o un puntero)
-func GetFromRequestContext[T any](r *http.Request, key string) (T, error) {
+func GetFromRequestContext[T any](r *http.Request, key string) (T, *ErrorHandler) {
     ctxKey := ContextKey(key)
     
     val, ok := r.Context().Value(ctxKey).(T)
 
     if !ok {
         var zero T 
-        return zero, fmt.Errorf("no se encontro la data o el tipo es incorrecto para la llave: %s", key)
+        var err error =  fmt.Errorf("no se encontro la data o el tipo es incorrecto para la llave: %s", key)
+        
+        return zero,  NewErrorHandler(err, err.Error(), LevelFatal, "CMMREH001")
     }
 
-    return val, nil
+    return val, NewEmptyErrorHandler()
 }
