@@ -18,38 +18,36 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHa
 	var result models.TriggersModelType
 
 	idTriggerParsed, err := primitive.ObjectIDFromHex(idTrigger)
-	
 	if err != nil {
 		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelFatal, "SLISE001")
 	}
 
-	//Set timeout context for the query
+	// Set timeout context for the query
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	//Create filter and variable to hold the result
-	//TODO: agregar el idStatus al query
-	filter := bson.M{"_id": idTriggerParsed,  "logical_delete": false}
+	// Create filter and variable to hold the result
+	// TODO: agregar el idStatus al query
+	filter := bson.M{"_id": idTriggerParsed, "logical_delete": false}
 
 	// Extraemos la data que nos importa
 	opts := options.FindOne().SetProjection(bson.M{
-		"pine_code": 0, 
-		"last_updated_at": 0, 
-		"created_date": 0,
-		"logical_delete": 0,
-		"core_db": 0,
-		"core_version": 0,
-		"user_db": 0,
-		"schema_db": 0,
+		"pine_code":       0,
+		"last_updated_at": 0,
+		"created_date":    0,
+		"logical_delete":  0,
+		"core_db":         0,
+		"core_version":    0,
+		"user_db":         0,
+		"schema_db":       0,
 	})
-	
+
 	// 5. Execute query
 	err = models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
-
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return result, nil
-		} 
+		}
 
 		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE002")
 	}
@@ -57,7 +55,7 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHa
 	return result, cmm.NewEmptyErrorHandler()
 }
 
-// Obtener listado de oportunidades 
+// Obtener listado de oportunidades
 // GetOpportunitiesService obtiene un listado paginado de oportunidades basado en filtros
 
 // Retorna: el arreglo de datos, el total de documentos encontrados (para paginación) y el error handler
@@ -97,7 +95,7 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 	if Search != "" {
 		// Creamos un regex para que la búsqueda sea case-insensitive (opción "i")
 		regexPattern := primitive.Regex{Pattern: Search, Options: "i"}
-		
+
 		// Buscamos en varios campos al mismo tiempo usando $or
 		filter["$or"] = []bson.M{
 			{"asset": regexPattern},
@@ -134,7 +132,6 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 
 	// 4. Ejecutar el Query (Usar OpportunityModel en vez de TriggersModel)
 	cursor, err := models.OpportunityModel.Find(ctx, filter, opts)
-
 	if err != nil {
 		return result, 0, cmm.NewErrorHandler(err, "Error consultando listado", cmm.LevelDatabase, "SLISE004")
 	}
@@ -147,4 +144,35 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 	}
 
 	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetActiveOpportunity busca si hay una oportunidad activa de algun idTrigger
+func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	var result models.OpportunitiesModelType
+
+	// 2. Crear contexto con timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 3. Crear filtro: idTrigger, status activo y que no esté borrado lógicamente
+	filter := bson.M{
+		"id_trigger":     idTrigger,
+		"tag_status":     "OPPORTUNITY-ONGOING",
+		"logical_delete": false,
+	}
+
+	// 4. Ejecutar consulta FindOne y decodificar directamente en result
+	err := models.OpportunityModel.FindOne(ctx, filter).Decode(&result)
+	// Check error
+	if err != nil {
+		// Manejar el caso donde no existe ninguna oportunidad activa para ese trigger
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler() // Retorna el struct vacío y ningún error
+		}
+
+		// Manejar cualquier otro error de base de datos
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE006")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
 }

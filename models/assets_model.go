@@ -11,8 +11,8 @@ type AssetsModelType struct {
 	ID              primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	IDTypeAsset     primitive.ObjectID `bson:"id_type_asset,omitempty" json:"id_type_asset"`
 	TypeTag         string             `bson:"type_tag" json:"type_tag" description:"Tag del tipo de asset"`
-	TypeName        string            `bson:"type_name" json:"type_name" description:"Nombre del tipo de asset"`
-	TypeDescription string           `bson:"type_description" json:"type_description" description:"Descripcion del tipo de asset"`
+	TypeName        string             `bson:"type_name" json:"type_name" description:"Nombre del tipo de asset"`
+	TypeDescription string             `bson:"type_description" json:"type_description" description:"Descripcion del tipo de asset"`
 	Tag             string             `bson:"tag" json:"tag" description:"Tag o identificador"`
 	Name            string             `bson:"name" json:"name" description:"Nombre"`
 	Description     string             `bson:"description" json:"description" description:"Nombre"`

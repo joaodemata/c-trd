@@ -29,7 +29,7 @@ func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 	defer cancel()
 
 	// Obtener URI de .env (asegúrate de agregarla)
-	uri := os.Getenv("JM_CTRD_MONGODB_SERVER_URL")
+	uri := os.Getenv("JM_CTRD_MDB_HOST")
 
 	if uri == "" {
 		uri = "mongodb://localhost:27017"
@@ -49,10 +49,10 @@ func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 
 	fmt.Println("Connection to MongoDB succesfull")
 
-	dbName := os.Getenv("JM_CTRD_MONGODB_DATABASE_NAME")
+	dbName := os.Getenv("JM_CTRD_MDB_NAME")
 
 	if dbName == "" {
-		dbName = "c_trd_default_db" // Valor por defecto por si olvidas ponerlo en el .env
+		dbName = "test" 
 	}
 
 

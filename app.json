@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0",
+  "description": "Business logic for ctrd",
+  "features": {
+    "enable_new_telemetry": true,
+    "debug_mode": false
+  }
+}
