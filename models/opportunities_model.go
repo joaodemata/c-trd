@@ -33,9 +33,10 @@ type condition struct {
 type OpportunitiesModelType struct {
 	ID primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	// Trigger
-	IDTrigger  primitive.ObjectID `bson:"id_trigger" json:"idTrigger"`
-	TagTrigger string             `bson:"tag_trigger" json:"tagTrigger"`
-	Trigger    string             `bson:"trigger" json:"trigger"`
+	IDTrigger          primitive.ObjectID `bson:"id_trigger" json:"idTrigger"`
+	TagTrigger         string             `bson:"tag_trigger" json:"tagTrigger"`
+	Trigger            string             `bson:"trigger" json:"trigger"`
+	DescriptionTrigger string             `bson:"description_trigger" json:"description_trigger"`
 	// Asset
 	IDAsset  primitive.ObjectID `bson:"id_asset" json:"idAsset"`
 	TagAsset string             `bson:"tag_asset" json:"tagAsset"`
@@ -59,19 +60,19 @@ type OpportunitiesModelType struct {
 	ExpirationDate time.Time `bson:"expiration_date" json:"expirationDate" description:"Tiempo de expiracion de la oportunidad dependiendo del maximo cantidad de velas"`
 
 	// Prices executed
-	PriceTriggered        float64 `bson:"price_triggered" json:"priceTriggered" description:"Precio en el cual se disparo la oportunidad"`
-	PriceActiveOportunity float64 `bson:"price_active_opportunity" json:"priceActiveOpportunity" description:"Precio en el cual la oportunidad paso a estar activa"`
-	PriceAchieved         float64 `bson:"price_achieved" json:"priceAchieved" description:"Precio en el cual la oportunidad paso de status activa a completada o cancelada"`
+	PriceTriggered        *float64 `bson:"price_triggered" json:"priceTriggered" description:"Precio en el cual se disparo la oportunidad"`
+	PriceActiveOportunity *float64 `bson:"price_active_opportunity" json:"priceActiveOpportunity" description:"Precio en el cual la oportunidad paso a estar activa"`
+	PriceAchieved         *float64 `bson:"price_achieved" json:"priceAchieved" description:"Precio en el cual la oportunidad paso de status activa a completada o cancelada"`
 	// Cancels
-	IDCancel        primitive.ObjectID `bson:"id_cancel" json:"idCancel" description:"id de la razon por la cual la oportunidad fue descartada"`
-	TagCancelReason string             `bson:"tag_cancel_reason" json:"tagCancelReason" description:"Tag de la Razon por la cual la oportunidad fue descartada"`
-	CancelReason    string             `bson:"cancel_reason" json:"cancelReason" description:"Razon por la cual la oportunidad fue descartada"`
+	IDCancel        *primitive.ObjectID `bson:"id_cancel" json:"idCancel" description:"id de la razon por la cual la oportunidad fue descartada"`
+	TagCancelReason *string             `bson:"tag_cancel_reason" json:"tagCancelReason" description:"Tag de la Razon por la cual la oportunidad fue descartada"`
+	CancelReason    *string             `bson:"cancel_reason" json:"cancelReason" description:"Razon por la cual la oportunidad fue descartada"`
 
 	// Campos de gestión de riesgo
-	StopLoss   *RiskManagement `bson:"stop_loss,omitempty" json:"stopLoss,omitempty" description:"Gestión de riesgo para límite de pérdidas"`
-	TakeProfit *RiskManagement `bson:"take_profit,omitempty" json:"takeProfit,omitempty" description:"Gestión de riesgo para toma de ganancias"`
+	StopLoss   *RiskManagement `bson:"stop_loss" json:"stopLoss" description:"Gestión de riesgo para límite de pérdidas"`
+	TakeProfit *RiskManagement `bson:"take_profit" json:"takeProfit" description:"Gestión de riesgo para toma de ganancias"`
 
-	Metadata interface{} `bson:"metadata,omitempty" json:"metadata,omitempty" description:"Objeto opcional para guardar data"`
+	Metadata interface{} `bson:"metadata" json:"metadata" description:"Objeto opcional para guardar data"`
 
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
@@ -99,18 +100,18 @@ type OpportunityOptionalData struct {
 // NewOpportunity es el método/constructor que crea una nueva instancia de OpportunitiesModelType.
 func NewOpportunityModel(
 	// --- Trigger ---
-	idTrigger primitive.ObjectID, tagTrigger, nameTrigger string,
+	idTrigger primitive.ObjectID, tagTrigger, nameTrigger string, descriptionTrigger string,
 	// --- Asset ---
 	idAsset primitive.ObjectID, tagAsset, asset string,
 	// --- Action ---
 	idAction primitive.ObjectID, tagAction, action string,
-	// --- Status ---
-	idStatus primitive.ObjectID, tagStatus, status string,
 	// --- Candles & Expiration ---
 	maxCandles int, idTimeframe primitive.ObjectID, tagTimeframe, timeframe string,
 	// --- Opcionales (omitempty) ---
 	opts *OpportunityOptionalData,
-) OpportunitiesModelType {
+) (OpportunitiesModelType, *cmm.ErrorHandler) {
+	// Variable a devolver
+	var opp OpportunitiesModelType
 	// Tiempo actual
 	now := time.Now()
 
@@ -120,11 +121,20 @@ func NewOpportunityModel(
 	totalDuration := time.Duration(maxCandles) * candleDuration
 	calculatedExpiration := now.Add(totalDuration)
 
+	// Generamos el objectId //TODO:MEJORAR ESTO, capaz apenas inicialize el servidor hacer un query a catalogs y formatear todo y guardarlo en un map
+	idStatus, err := cmm.ParseHexToObjectId("6a84257d9687e916f29f234e")
+
+	// Validamos que no este vacio
+	if !err.IsEmtpy() {
+		return opp, cmm.NewErrorHandler(err, err.Error(), cmm.LevelFatal, "MODE001")
+	}
+
 	// 1. Instanciamos la oportunidad con todos los campos obligatorios
-	opp := OpportunitiesModelType{
+	opp = OpportunitiesModelType{
 		IDTrigger:               idTrigger,
 		TagTrigger:              tagTrigger,
 		Trigger:                 nameTrigger,
+		DescriptionTrigger:      descriptionTrigger,
 		IDAsset:                 idAsset,
 		TagAsset:                tagAsset,
 		Asset:                   asset,
@@ -132,8 +142,8 @@ func NewOpportunityModel(
 		TagAction:               tagAction,
 		Action:                  action,
 		IDStatus:                idStatus,
-		TagStatus:               tagStatus,
-		Status:                  status,
+		TagStatus:               "OPPORTUNITY-ONGOING",
+		Status:                  "En Curso",
 		MaxCandlestickQty:       maxCandles,
 		IDCandlestickTimeframe:  idTimeframe,
 		TagCandlestickTimeframe: tagTimeframe,
@@ -170,9 +180,9 @@ func NewOpportunityModel(
 			opp.Conditions = opts.Conditions
 		}
 	} else {
-		// Si opts es nil (no mandaron datos opcionales), solo aseguramos de generar el ID
+		// guardamos vacio para integridad de la data
 		opp.ID = primitive.NewObjectID()
 	}
 
-	return opp
+	return opp, cmm.NewEmptyErrorHandler()
 }

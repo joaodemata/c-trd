@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"log/slog"
 )
 
 // ErrorLevel define la severidad del error.
@@ -14,7 +15,6 @@ const (
 	LevelFatal    ErrorLevel = "FATAL"
 	LevelDatabase ErrorLevel = "DATABASE"
 	LevelEmpty    ErrorLevel = "EMPTY"
-
 )
 
 // AppError es nuestra estructura personalizada.
@@ -38,20 +38,20 @@ func (e *ErrorHandler) Unwrap() error {
 	return e.Err
 }
 
-
 // Valida si el error no es vacio
 func (e *ErrorHandler) IsEmtpy() bool {
-	
-	if (e.Level == LevelEmpty){
+	if e.Level == LevelEmpty {
 		return true
 	}
 
 	return false
 }
 
-
 // Constructor para facilitar la creación del error.
 func NewErrorHandler(err error, msg string, level ErrorLevel, trackCode string) *ErrorHandler {
+	//
+	slog.Error(msg, "TRACKING CODE: "+trackCode, err)
+
 	return &ErrorHandler{
 		Err:          err,
 		Message:      msg,
@@ -59,8 +59,6 @@ func NewErrorHandler(err error, msg string, level ErrorLevel, trackCode string) 
 		TrackingCode: trackCode,
 	}
 }
-
-
 
 func NewServerErrorHandler(trackingCode string) *ErrorHandler {
 	return &ErrorHandler{
@@ -78,17 +76,15 @@ func NewEmptyErrorHandler() *ErrorHandler {
 	}
 }
 
-
-
 // func main() {
 // 	// Simulamos un error de base de datos
 // 	dbErr := errors.New("connection timeout")
 
 // 	// Envolvemos el error con nuestro struct personalizado
 // 	myErr := NewAppError(
-// 		dbErr, 
-// 		"No se pudo conectar a la base de datos de usuarios", 
-// 		LevelError, 
+// 		dbErr,
+// 		"No se pudo conectar a la base de datos de usuarios",
+// 		LevelError,
 // 		"DB_CONN_001",
 // 	)
 

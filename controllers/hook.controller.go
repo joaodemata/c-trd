@@ -35,23 +35,29 @@ func TradingViewHookController() http.HandlerFunc {
 		// Si no existe lo creamos
 		if existOpportunity.ID.IsZero() {
 
-			opportunity := models.NewOpportunityModel(triggerData.ID,
+			opportunity, err := models.NewOpportunityModel(triggerData.ID,
 				triggerData.Tag,
 				triggerData.Name,
+				triggerData.Description,
 				triggerData.IDAsset,
 				triggerData.TagAsset,
 				triggerData.Asset,
 				triggerData.IDAction,
 				triggerData.TagAction,
 				triggerData.Action,
-				triggerData.IDStatus,
-				triggerData.TagStatus,
-				triggerData.Status,
 				triggerData.MaxCandlestickQty,
 				triggerData.IDCandlestickTimeframe,
 				triggerData.TagCandlestickTimeframe,
 				triggerData.CandlestickTimeframe,
 				nil)
+
+			// Validamos que no haya errores
+
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+
 			// Oportunidad creada
 			createdOpportunity, err := services.CreateOpportunityService(opportunity)
 

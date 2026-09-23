@@ -1,8 +1,12 @@
 package common
 
-import "time"
+import (
+	"time"
 
-//TODO: MEJORAR NOMBRE Y PROPOSITO DE ESTE ARCHIVO
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+// TODO: MEJORAR NOMBRE Y PROPOSITO DE ESTE ARCHIVO
 
 // parseTimeframeTag convierte el tag de la vela (ej: "1H", "15M", "1D") a un time.Duration
 func ParseTimeframeTag(tag string) time.Duration {
@@ -25,6 +29,18 @@ func ParseTimeframeTag(tag string) time.Duration {
 		return 7 * 24 * time.Hour
 	default:
 		// Valor por defecto en caso de un tag desconocido (puedes ajustarlo o retornar error)
-		return 1 * time.Hour 
+		return 1 * time.Hour
 	}
+}
+
+// Convierte un hexadecimal en un objectId
+func ParseHexToObjectId(id string) (primitive.ObjectID, *ErrorHandler) {
+	// Parse
+	objectId, err := primitive.ObjectIDFromHex(id)
+	// Check error
+	if err != nil {
+		return objectId, NewErrorHandler(err, err.Error(), LevelFatal, "CMMPE001")
+	}
+
+	return objectId, NewEmptyErrorHandler()
 }
