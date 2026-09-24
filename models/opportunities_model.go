@@ -17,7 +17,7 @@ type RiskManagement struct {
 }
 
 // Condiciones en oportunidad, guardamos status para tener un rastreo de porque la operacion fue ejecutada o no
-type condition struct {
+type Condition struct {
 	IDCondition          primitive.ObjectID `bson:"id_condition" json:"idCondition" description:"Id de la condición"`
 	IDProvider           primitive.ObjectID `bson:"id_provider" json:"idProvider" description:"Id del proveedor de informacion del servicio"`
 	NameProvider         string             `bson:"name_provider" json:"nameProvider" description:" Proveedor de informacion del servicio"`
@@ -50,7 +50,7 @@ type OpportunitiesModelType struct {
 	TagStatus string             `bson:"tag_status" json:"tagStatus"`
 	Status    string             `bson:"status" json:"status"`
 	// Conditions
-	Conditions []condition `bson:"conditions" json:"conditions"`
+	Conditions []Condition `bson:"conditions" json:"conditions"`
 	// Candles
 	MaxCandlestickQty       int                `bson:"max_candlestick_qty" json:"maxCandlestickQty" description:"Maxima Cantidad de velas que puede haber para la oportunidad pasar a descartada"`
 	IDCandlestickTimeframe  primitive.ObjectID `bson:"id_candlestick_timeframe" json:"idCandlestickTimeframe" description:"Tiempo que representa cada vela"`
@@ -69,8 +69,8 @@ type OpportunitiesModelType struct {
 	CancelReason    *string             `bson:"cancel_reason" json:"cancelReason" description:"Razon por la cual la oportunidad fue descartada"`
 
 	// Campos de gestión de riesgo
-	StopLoss   *RiskManagement `bson:"stop_loss" json:"stopLoss" description:"Gestión de riesgo para límite de pérdidas"`
-	TakeProfit *RiskManagement `bson:"take_profit" json:"takeProfit" description:"Gestión de riesgo para toma de ganancias"`
+	StopLoss   []RiskManagement `bson:"stop_loss" json:"stopLoss" description:"Gestión de riesgo para límite de pérdidas"`
+	TakeProfit []RiskManagement `bson:"take_profit" json:"takeProfit" description:"Gestión de riesgo para toma de ganancias"`
 
 	Metadata interface{} `bson:"metadata" json:"metadata" description:"Objeto opcional para guardar data"`
 
@@ -91,10 +91,10 @@ var OpportunityModel *mongo.Collection
 
 type OpportunityOptionalData struct {
 	ID         primitive.ObjectID // Si viene vacío, lo generamos dentro
-	StopLoss   *RiskManagement
-	TakeProfit *RiskManagement
+	StopLoss   []RiskManagement
+	TakeProfit []RiskManagement
 	Metadata   interface{}
-	Conditions []condition // Incluido aquí porque a veces la oportunidad nace sin condiciones evaluadas
+	Conditions []Condition // Incluido aquí porque a veces la oportunidad nace sin condiciones evaluadas
 }
 
 // NewOpportunity es el método/constructor que crea una nueva instancia de OpportunitiesModelType.
@@ -112,6 +112,10 @@ func NewOpportunityModel(
 ) (OpportunitiesModelType, *cmm.ErrorHandler) {
 	// Variable a devolver
 	var opp OpportunitiesModelType
+	// Variables opcionales
+	conditions := []Condition{}
+	stopLoss := []RiskManagement{}
+	takeProfit := []RiskManagement{}
 	// Tiempo actual
 	now := time.Now()
 
@@ -144,11 +148,14 @@ func NewOpportunityModel(
 		IDStatus:                idStatus,
 		TagStatus:               "OPPORTUNITY-ONGOING",
 		Status:                  "En Curso",
+		Conditions:              conditions,
 		MaxCandlestickQty:       maxCandles,
 		IDCandlestickTimeframe:  idTimeframe,
 		TagCandlestickTimeframe: tagTimeframe,
 		CandlestickTimeframe:    timeframe,
 		ExpirationDate:          calculatedExpiration,
+		StopLoss:                stopLoss,
+		TakeProfit:              takeProfit,
 
 		// Auditoría
 		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),

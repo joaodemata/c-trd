@@ -12,4 +12,5 @@ var RegistryList = []cmm.ModelRegistry{
 	{Name: "opportunities", Ptr: &OpportunityModel},
 	{Name: "providers", Ptr: &ProvidersModel},
 	{Name: "conditions", Ptr: &ConditionsModel},
-}	
+	{Name: "apis", Ptr: &ApisModel},
+}
