@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -13,17 +14,26 @@ import (
 )
 
 // Database client
-var Database *mongo.Database
+var (
+	Database *mongo.Database
+	// configuration app
+	AppConfig *AppConfigType
+)
 
 type ModelRegistry struct {
 	Name string
 	Ptr  **mongo.Collection
 }
 
+type AppConfigType struct {
+	Server        *http.Server
+	MongoDatabase *mongo.Database
+	MongoClient   *mongo.Client
+	config        interface{}
+}
 
-func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
+func ConnectDB(modelsToInit []ModelRegistry) *mongo.Database {
 	err := godotenv.Load()
-
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -36,7 +46,6 @@ func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 	}
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,15 +61,13 @@ func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 	dbName := os.Getenv("JM_CTRD_MDB_NAME")
 
 	if dbName == "" {
-		dbName = "test" 
+		dbName = "test"
 	}
-
 
 	fmt.Println("Connection to DB", dbName)
 
-
 	database := client.Database(dbName)
-	
+
 	Database = database
 
 	for _, model := range modelsToInit {
@@ -72,9 +79,18 @@ func ConnectDB(modelsToInit []ModelRegistry ) *mongo.Database {
 	return database
 }
 
-func GetCollection(collectionName string) (*mongo.Collection) {
+func GetCollection(collectionName string) *mongo.Collection {
 	if collectionName == "" {
 		panic(fmt.Errorf("collection name can not be empty."))
 	}
 	return Database.Collection(collectionName)
+}
+
+func AppConfigConstructor(srv *http.Server, mongoDatabase *mongo.Database, mongoClient *mongo.Client, config interface{}) *AppConfigType {
+	return &AppConfigType{
+		Server:        srv,
+		MongoDatabase: mongoDatabase,
+		MongoClient:   mongoClient,
+		config:        config,
+	}
 }

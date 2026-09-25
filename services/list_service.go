@@ -106,7 +106,7 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 	}
 
 	// 2. Contar el total de documentos reales (sin limit ni skip) para el paginador del frontend
-	totalDocs, err := models.OpportunityModel.CountDocuments(ctx, filter)
+	totalDocs, err := models.OpportunitiesModel.CountDocuments(ctx, filter)
 	if err != nil {
 		return result, 0, cmm.NewErrorHandler(err, "Error contando documentos", cmm.LevelDatabase, "SLISE003")
 	}
@@ -131,7 +131,7 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 		})
 
 	// 4. Ejecutar el Query (Usar OpportunityModel en vez de TriggersModel)
-	cursor, err := models.OpportunityModel.Find(ctx, filter, opts)
+	cursor, err := models.OpportunitiesModel.Find(ctx, filter, opts)
 	if err != nil {
 		return result, 0, cmm.NewErrorHandler(err, "Error consultando listado", cmm.LevelDatabase, "SLISE004")
 	}
@@ -162,7 +162,7 @@ func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesMod
 	}
 
 	// 4. Ejecutar consulta FindOne y decodificar directamente en result
-	err := models.OpportunityModel.FindOne(ctx, filter).Decode(&result)
+	err := models.OpportunitiesModel.FindOne(ctx, filter).Decode(&result)
 	// Check error
 	if err != nil {
 		// Manejar el caso donde no existe ninguna oportunidad activa para ese trigger

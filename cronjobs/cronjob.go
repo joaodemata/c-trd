@@ -22,15 +22,13 @@ func InitCronjobs(ctx context.Context) {
 				fmt.Println("stopping cronjob...")
 				return // Esto saca a la goroutine del bucle y la termina
 
-			// Caso 2: El ticker hace "tick" (pasan los 10 minutos)
+			// Caso 2: El ticker hace "tick" (pasa 1 minuto)
 			case <-ticker.C:
-				fmt.Println("Corriendo tarea")	
+				fmt.Println("Corriendo tarea")
 
 				// _ ,err := services.FetchDataService("BTC", "USD")
-
-				// if(err != nil){
-				//   fmt.Println("error fetching data:", err)	
-				// }
+				// Llamamos con una go rutine el servicio de actualizar oportunidades expiradas
+				// Llamamos con una go rutine el servicio de actualizar condiciones y verificar si la oportunidad pasa a activa
 			}
 		}
 	}()

@@ -22,6 +22,7 @@ type ApisModelType struct {
 	URL          string      `bson:"url" json:"url" description:"url a Llamar"`
 	Headers      interface{} `bson:"headers" json:"headers" description:"cabeceras de la peticion"`
 	DataLocation string      `bson:"data_location" json:"dataLocation" description:"BODY, QUERY, ETC"`
+	Data         interface{} `bson:"data" json:"data" description:"data que siempre se envia por esta api (Ej: function, id, etc)"`
 	Timeout      string      `bson:"timeout" json:"timeout" description:"Timeout de la peticion"`
 
 	// Comunes

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"c_trd/providers"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -26,6 +27,10 @@ type ConditionsModelType struct {
 	LastExecutedAt  *time.Time `bson:"last_executed_at" json:"last_executed_at" description:"Última vez que se evaluó la condición"`
 
 	IsProcessing bool `bson:"is_processing" json:"is_processing" description:"Lock optimista para evitar que dos workers procesen el mismo registro"`
+	// Data que se pasa a la API (parametros dinamicos. Ej: symbol, pair, currency)
+	IDApi            primitive.ObjectID          `bson:"id_api" json:"idApi" description:"Id de la api"`
+	HttpRequest      providers.HTTPRequestConfig `bson:"http_request" json:"httpRequest" description:"Peticion."`
+	CallbackFunction string                      `bson:"callback_function" json:"callbackFunction" description:"Nombre de la función que procesará la respuesta"`
 
 	// Status
 	IDStatus  primitive.ObjectID `bson:"id_status" json:"id_status"`

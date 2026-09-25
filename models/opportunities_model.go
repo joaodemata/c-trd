@@ -85,7 +85,7 @@ type OpportunitiesModelType struct {
 }
 
 // Model pointer
-var OpportunityModel *mongo.Collection
+var OpportunitiesModel *mongo.Collection
 
 // CONSTRUCTORS
 

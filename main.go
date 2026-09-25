@@ -1,6 +1,9 @@
 package main
 
 import (
+	"c_trd/cronjobs"
+	"c_trd/models"
+	"c_trd/routers"
 	"context"
 	"fmt"
 	"log"
@@ -12,25 +15,20 @@ import (
 	"time"
 
 	cmm "c_trd/common"
-	"c_trd/cronjobs"
-	"c_trd/models"
-	"c_trd/routers"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	// Cargamos las variables de entorno solo si es windows 
+	// Cargamos las variables de entorno solo si es windows
 	if runtime.GOOS == "windows" {
-		
-		err := godotenv.Load()	
 
+		err := godotenv.Load()
 		// Validamos si hay  error
 		if err != nil {
 			log.Fatalf("Server error: %v", err)
 		}
 	}
-
 
 	// 1. Initialize MongoDB
 	fmt.Println("Connecting to MongoDB...")
@@ -39,7 +37,7 @@ func main() {
 
 	// 2. Setup context for cronjobs
 	ctxCronjob, cancelCronjob := context.WithCancel(context.Background())
-	defer cancelCronjob() 
+	defer cancelCronjob()
 
 	fmt.Println("Initializing cronjobs...")
 	cronjobs.InitCronjobs(ctxCronjob)
@@ -48,11 +46,10 @@ func main() {
 	fmt.Println("Initializing server...")
 	mux := http.NewServeMux()
 
-	// Start web socket  
+	// Start web socket
 	hub := cmm.NewHub()
 	routers.SetupRouter(mux, hub)
 
-	
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
@@ -66,18 +63,20 @@ func main() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
-		}()
-		
+	}()
+
 	// Start websocket
 	go hub.Run()
 
+	// Construimos la variable APP de uso global en la app
+	cmm.AppConfig = cmm.AppConfigConstructor(srv, db, mongoClient, nil)
 	// 5. Wait for system interrupt signals (Ctrl+C)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit 
+	<-quit
 
 	fmt.Println("\nShutting down server...")
-	
+
 	// 6. Stop cronjobs
 	cancelCronjob()
 
