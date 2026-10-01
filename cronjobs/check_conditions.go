@@ -103,7 +103,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 		// 4. Execute the dynamic callback
 		fmt.Printf("Invoking callback: %s\n", callbackName)
 		conditionAccepted, err := callback(responseBody)
-		if err != nil {
+		if !err.IsEmtpy() {
 			log.Printf("Error executing callback '%s' for condition %s: %v\n", callbackName, condition.ID.Hex(), err)
 		}
 

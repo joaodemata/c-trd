@@ -3,7 +3,6 @@ package providers
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -55,7 +54,7 @@ type RetryPolicy struct {
 }
 
 // ExecuteRequest processes the config and executes the HTTP request
-func ExecuteRequest(config *HTTPRequestConfig) ([]byte, error) {
+func ExecuteRequest(config *HTTPRequestConfig) ([]byte, *cmm.ErrorHandler) {
 	// 1. Parse Base URL directly from config
 	parsedURL, err := url.Parse(config.URL)
 	if err != nil {
@@ -104,7 +103,7 @@ func ExecuteRequest(config *HTTPRequestConfig) ([]byte, error) {
 
 	var finalResponse []byte
 	var finalStatusCode int
-	var reqErr error
+	var reqErr *cmm.ErrorHandler
 
 	// 7. Execution loop (with retries)
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -130,7 +129,7 @@ func ExecuteRequest(config *HTTPRequestConfig) ([]byte, error) {
 		resp, err := client.Do(req)
 		if err != nil {
 
-			reqErr = cmm.NewErrorHandler(err, "Request error", cmm.LevelFatal, "PRHTTPE00")
+			reqErr = cmm.NewErrorHandler(err, "Request error", cmm.LevelFatal, "PRHTTPE003")
 			time.Sleep(time.Duration(delayMs) * time.Millisecond)
 			continue
 		}
@@ -145,7 +144,8 @@ func ExecuteRequest(config *HTTPRequestConfig) ([]byte, error) {
 		}
 		// TODO: ESTO NO ME GUSTA NADA BOTTLENECK
 		// If it fails, save the error and try again (if attempts remain)
-		reqErr = fmt.Errorf("HTTP %d: %s", finalStatusCode, string(finalResponse))
+
+		reqErr = cmm.NewErrorHandler(err, "Request error", cmm.LevelFatal, "PRHTTPE004")
 		if attempt < maxRetries {
 			time.Sleep(time.Duration(delayMs) * time.Millisecond)
 		}
