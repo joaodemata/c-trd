@@ -11,6 +11,7 @@ import (
 	cmm "c_trd/common"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -80,7 +81,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 
 		// 2. Execute the HTTP request
 		responseBody, err := providers.ExecuteRequest(&condition.HttpRequest)
-		if err != nil {
+		if !err.IsEmtpy() {
 			log.Printf("Error executing HTTP request for condition %s: %v\n", condition.ID.Hex(), err)
 			// Decide if you want to continue to the next condition or stop
 			continue
@@ -89,7 +90,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 		// 3. Dynamic function execution
 		callbackName := condition.CallbackFunction
 		if callbackName == "" {
-			log.Printf("Condition %s executed successfully (HTTP %d), but no CallbackFunction was defined.\n", condition.ID.Hex())
+			log.Printf("Condition %s executed successfully (HTTP %d), but no CallbackFunction was defined.\n", condition.ID.Hex(), condition.HttpRequest.URL)
 			continue
 		}
 
@@ -110,6 +111,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 		// Si la condicion esta aceptada y tiene un status diferente
 		// TODO: descomentar y mejorar
 		if conditionAccepted && condition.TagStatus != "STATUS-ACTIVE" {
+			mongo.NewUpdateOneModel()
 			// 	// --- NUEVO: Crear un contexto con un timeout de seguridad (ej: 10 segundos) ---
 			// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			// 	defer cancel() // Libera los recursos del contexto al salir de la función
@@ -152,3 +154,72 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 	}
 	return
 }
+
+// TODO: referencia para bulkwrite en mongodb utilizando go functions (Mejor eficiencia)
+// func processLargeArray(ctx context.Context, data []MyDataType, coll1, coll2 *mongo.Collection) error {
+// 	batchSize := 500
+// 	maxWorkers := 20 // Límite de concurrencia basado en tu maxPoolSize de MongoDB, no en la CPU
+
+// 	// Semáforo para limitar la cantidad de goroutines simultáneas
+// 	sem := make(chan struct{}, maxWorkers)
+// 	var wg sync.WaitGroup
+// 	errChan := make(chan error, len(data)/batchSize+1)
+
+// 	for i := 0; i < len(data); i += batchSize {
+// 		end := i + batchSize
+// 		if end > len(data) {
+// 			end = len(data)
+// 		}
+
+// 		batch := data[i:end]
+// 		wg.Add(1)
+
+// 		go func(b []MyDataType) {
+// 			defer wg.Done()
+
+// 			sem <- struct{}{} // Adquirir token
+// 			defer func() { <-sem }() // Liberar token
+
+// 			// Preparar modelos para BulkWrite
+// 			var modelsColl1 []mongo.WriteModel
+// 			var modelsColl2 []mongo.WriteModel
+
+// 			for _, item := range b {
+// 				// Crear tus UpdateOneModel para ambas colecciones
+// 				update1 := mongo.NewUpdateOneModel().SetFilter(...).SetUpdate(...)
+// 				update2 := mongo.NewUpdateOneModel().SetFilter(...).SetUpdate(...)
+
+// 				modelsColl1 = append(modelsColl1, update1)
+// 				modelsColl2 = append(modelsColl2, update2)
+// 			}
+
+// 			// Ejecutar BulkWrite (unordered es más rápido si las operaciones son independientes)
+// 			bulkOpts := options.BulkWrite().SetOrdered(false)
+
+// 			_, err := coll1.BulkWrite(ctx, modelsColl1, bulkOpts)
+// 			if err != nil {
+// 				errChan <- fmt.Errorf("error coll1 batch: %w", err)
+// 				return
+// 			}
+
+// 			_, err = coll2.BulkWrite(ctx, modelsColl2, bulkOpts)
+// 			if err != nil {
+// 				errChan <- fmt.Errorf("error coll2 batch: %w", err)
+// 				return
+// 			}
+
+// 		}(batch)
+// 	}
+
+// 	wg.Wait()
+// 	close(errChan)
+
+// 	// Manejo de errores
+// 	for err := range errChan {
+// 		if err != nil {
+// 			return err // O hacer log y continuar, según tu lógica de negocio
+// 		}
+// 	}
+
+// 	return nil
+// }

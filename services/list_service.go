@@ -46,7 +46,7 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHa
 	err = models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return result, nil
+			return result, cmm.NewEmptyErrorHandler()
 		}
 
 		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE002")
