@@ -81,7 +81,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 
 		// 2. Execute the HTTP request
 		responseBody, err := providers.ExecuteRequest(&condition.HttpRequest)
-		if err != nil {
+		if !err.IsEmtpy() {
 			log.Printf("Error executing HTTP request for condition %s: %v\n", condition.ID.Hex(), err)
 			// Decide if you want to continue to the next condition or stop
 			continue
@@ -90,7 +90,7 @@ func ProcessConditions(conditions []models.ConditionsModelType) {
 		// 3. Dynamic function execution
 		callbackName := condition.CallbackFunction
 		if callbackName == "" {
-			log.Printf("Condition %s executed successfully (HTTP %d), but no CallbackFunction was defined.\n", condition.ID.Hex())
+			log.Printf("Condition %s executed successfully (HTTP %d), but no CallbackFunction was defined.\n", condition.ID.Hex(), condition.HttpRequest.URL)
 			continue
 		}
 
