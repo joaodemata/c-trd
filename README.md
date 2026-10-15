@@ -91,8 +91,24 @@ The server listens on `:8080` with 10 s read/write timeouts.
 | `JM_CTRD_MDB_HOST` | MongoDB connection URI, e.g. `mongodb://localhost:27017/?replicaSet=rs0` | `mongodb://localhost:27017` |
 | `JM_CTRD_MDB_NAME` | Database name | `test` |
 | `JM_CTRD_MDB_USER` | Database user, stored in audit fields | — |
+| `JM_CTRD_SECRET_<secret_ref>` | Secret of an external provider (API key, token or `user:password` for BASIC), e.g. `JM_CTRD_SECRET_ALPHAVANTAGE_APIKEY` | — |
 
 On Windows they are loaded from a `.env` file in the project root (required there). On other systems `.env` is not loaded by `main.go`, so the variables must be exported.
+
+**Provider secrets**
+
+Secrets are never stored in MongoDB. A condition's `http_request.auth` only says how to send the secret (`type`, `key`, `in`); `auth.value` is ignored. The value comes from the condition's provider document:
+
+| Field (`providers`) | Description |
+| --- | --- |
+| `secret_ref` | Name of the secret. It is read from `JM_CTRD_SECRET_<secret_ref>` and may only contain `A-Z`, `0-9` and `_` |
+| `allowed_hosts` | Hosts the provider's requests may be sent to, e.g. `["www.alphavantage.co"]` |
+
+```json
+{ "tag": "ALPHA_VANTAGE", "secret_ref": "ALPHAVANTAGE_APIKEY", "allowed_hosts": ["www.alphavantage.co"] }
+```
+
+If a request has `auth`, the provider must have `secret_ref` and `allowed_hosts`, the URL host must be in `allowed_hosts` and the URL must be `https`. Otherwise the request fails without being sent. Redirects to hosts outside `allowed_hosts` are not followed.
 
 **Run**
 
@@ -220,8 +236,24 @@ El servidor escucha en `:8080` con timeouts de lectura/escritura de 10 s.
 | `JM_CTRD_MDB_HOST` | URI de conexión a MongoDB, ej. `mongodb://localhost:27017/?replicaSet=rs0` | `mongodb://localhost:27017` |
 | `JM_CTRD_MDB_NAME` | Nombre de la base de datos | `test` |
 | `JM_CTRD_MDB_USER` | Usuario de base de datos, se guarda en los campos de auditoría | — |
+| `JM_CTRD_SECRET_<secret_ref>` | Secreto de un proveedor externo (API key, token o `usuario:password` para BASIC), ej. `JM_CTRD_SECRET_ALPHAVANTAGE_APIKEY` | — |
 
 En Windows se cargan desde un archivo `.env` en la raíz del proyecto (obligatorio ahí). En otros sistemas `main.go` no carga el `.env`, así que las variables deben exportarse.
+
+**Secretos de proveedores**
+
+Los secretos nunca se guardan en MongoDB. El `http_request.auth` de una condición solo indica cómo enviar el secreto (`type`, `key`, `in`); `auth.value` se ignora. El valor sale del documento del proveedor de la condición:
+
+| Campo (`providers`) | Descripción |
+| --- | --- |
+| `secret_ref` | Nombre del secreto. Se lee de `JM_CTRD_SECRET_<secret_ref>` y solo puede contener `A-Z`, `0-9` y `_` |
+| `allowed_hosts` | Hosts a los que se pueden enviar las peticiones del proveedor, ej. `["www.alphavantage.co"]` |
+
+```json
+{ "tag": "ALPHA_VANTAGE", "secret_ref": "ALPHAVANTAGE_APIKEY", "allowed_hosts": ["www.alphavantage.co"] }
+```
+
+Si una petición tiene `auth`, el proveedor debe tener `secret_ref` y `allowed_hosts`, el host de la URL debe estar en `allowed_hosts` y la URL debe ser `https`. Si no, la petición falla sin enviarse. No se siguen redirecciones a hosts fuera de `allowed_hosts`.
 
 **Ejecutar**
 
