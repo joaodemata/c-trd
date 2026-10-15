@@ -1,0 +1,30 @@
+{
+    "search_metadata": {
+        "status": "Success"
+    },
+    "interest_over_time": {
+        "timeline_data": [
+            {
+                "date": "Sep 7 - 13, 2026",
+                "values": [{"query": "bitcoin", "value": "20", "extracted_value": 20}]
+            },
+            {
+                "date": "Sep 14 - 20, 2026",
+                "values": [{"query": "bitcoin", "value": "60", "extracted_value": "60"}]
+            },
+            {
+                "date": "Sep 21 - 27, 2026",
+                "values": [{"query": "bitcoin", "value": "100", "extracted_value": 100}]
+            },
+            {
+                "date": "Sep 28 - Oct 4, 2026",
+                "values": [{"query": "bitcoin", "value": "97", "extracted_value": 97}]
+            },
+            {
+                "date": "Oct 5 - 11, 2026",
+                "partial_data": true,
+                "values": [{"query": "bitcoin", "value": "30", "extracted_value": 30}]
+            }
+        ]
+    }
+}
