@@ -13,6 +13,8 @@ CTRD is a core to raise market opportunities for medium-large term.
 ```bash
 go build ./...              # build
 go build ./... && go vet ./... && gofmt -l .                         # run the server developer
+go test ./...               # unit tests (no MongoDB or network needed)
+go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -func=cover.out   # coverage
 ```
 
 ## Project layout
@@ -27,6 +29,7 @@ go build ./... && go vet ./... && gofmt -l .                         # run the s
 - `controllers/`: Handlers of the routes they capture all the business logic using inside services
 - `providers/`: functions to check where a condition is met using external API data
 - `routers/`: route for each API and join all the middlewares and handlers
+- `tests/`: all unit tests, one folder per package (`tests/providers/`, `tests/common/`, ...) plus `tests/testutil/` with shared helpers. Tests only use the exported API. Testing conventions are in `TESTING.md`
 
 ## Domain notes
 
@@ -48,7 +51,8 @@ go build ./... && go vet ./... && gofmt -l .                         # run the s
 
 ## Rules for Claude
 
-- Run `go build ./... && go vet ./... && gofmt -l.` before saying a task is done.
+- Run `go build ./... && go vet ./... && gofmt -l.` and `go test ./...` before saying a task is done.
+- When adding or changing logic that does not need MongoDB (callbacks, parsers, validators, middlewares, cron decisions), add or update its unit tests under `tests/<package>/` following `TESTING.md`; never put `_test.go` files next to the code. Assert errors by tracking code with `testutil.RequireTrackingCode`.
 - Don't add dependencies without asking.
 - Don't edit generated files or `.env`/secrets.
 - Make small, focused changes; don't refactor unrelated code.

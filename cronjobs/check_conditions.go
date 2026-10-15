@@ -14,12 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// conditionResult resultado de evaluar una condicion
-type conditionResult struct {
-	condition  models.ConditionsModelType
-	executedAt time.Time
-	evaluated  bool // true si la API y el callback respondieron correctamente
-	accepted   bool
+// ConditionResult resultado de evaluar una condicion
+type ConditionResult struct {
+	Condition  models.ConditionsModelType
+	ExecutedAt time.Time
+	Evaluated  bool // true si la API y el callback respondieron correctamente
+	Accepted   bool
 }
 
 // ProcessConditions evalua las condiciones de tipo cronjob, actualiza su status, lo replica en las
@@ -59,7 +59,7 @@ func ProcessConditions() {
 
 		// 4. Evaluamos las condiciones con workers, con un tiempo maximo para todo el ciclo
 		ctx, cancel := context.WithTimeout(context.Background(), cmm.ConditionEvaluationTimeout)
-		results := evaluateConditions(ctx, conditions, providersByID)
+		results := EvaluateConditions(ctx, conditions, providersByID)
 		cancel()
 
 		// 5. Guardamos los resultados en lotes con BulkWrite
@@ -77,9 +77,9 @@ func ProcessConditions() {
 	log.Printf("Condiciones procesadas: %d, oportunidades activadas: %d", len(conditions), activated)
 }
 
-// evaluateConditions ejecuta las peticiones y callbacks de las condiciones con un pool de workers
-func evaluateConditions(ctx context.Context, conditions []models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) []conditionResult {
-	results := make([]conditionResult, len(conditions))
+// EvaluateConditions ejecuta las peticiones y callbacks de las condiciones con un pool de workers
+func EvaluateConditions(ctx context.Context, conditions []models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) []ConditionResult {
+	results := make([]ConditionResult, len(conditions))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 
@@ -90,7 +90,7 @@ func evaluateConditions(ctx context.Context, conditions []models.ConditionsModel
 			defer wg.Done()
 			// Cada worker escribe en un indice distinto, no hace falta mutex
 			for i := range jobs {
-				results[i] = evaluateCondition(ctx, conditions[i], providersByID)
+				results[i] = EvaluateCondition(ctx, conditions[i], providersByID)
 			}
 		}()
 	}
@@ -104,15 +104,15 @@ func evaluateConditions(ctx context.Context, conditions []models.ConditionsModel
 	return results
 }
 
-// evaluateCondition ejecuta la peticion HTTP de la condicion y su callback
-func evaluateCondition(ctx context.Context, condition models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) (result conditionResult) {
-	result = conditionResult{condition: condition, executedAt: time.Now().UTC()}
+// EvaluateCondition ejecuta la peticion HTTP de la condicion y su callback
+func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) (result ConditionResult) {
+	result = ConditionResult{Condition: condition, ExecutedAt: time.Now().UTC()}
 
 	// Un panic en un callback no debe tumbar el cronjob ni dejar la condicion bloqueada
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Panic evaluando la condicion %s: %v", condition.ID.Hex(), r)
-			result.evaluated = false
+			result.Evaluated = false
 		}
 	}()
 
@@ -148,13 +148,13 @@ func evaluateCondition(ctx context.Context, condition models.ConditionsModelType
 		return result
 	}
 
-	result.evaluated = true
-	result.accepted = accepted
+	result.Evaluated = true
+	result.Accepted = accepted
 	return result
 }
 
 // persistConditionResults guarda los resultados en lotes concurrentes limitados por un semaforo
-func persistConditionResults(results []conditionResult) {
+func persistConditionResults(results []ConditionResult) {
 	sem := make(chan struct{}, cmm.BulkWriteMaxWorkers)
 	var wg sync.WaitGroup
 
@@ -162,7 +162,7 @@ func persistConditionResults(results []conditionResult) {
 		end := min(i+cmm.BulkWriteBatchSize, len(results))
 
 		wg.Add(1)
-		go func(batch []conditionResult) {
+		go func(batch []ConditionResult) {
 			defer wg.Done()
 
 			sem <- struct{}{}        // Adquirir token
@@ -178,20 +178,20 @@ func persistConditionResults(results []conditionResult) {
 // persistConditionBatch guarda el lote en una transaccion (oportunidades y condiciones).
 // Si la transaccion falla se hace rollback y solo se libera el lock, sin tocar next_execution_at,
 // asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote
-func persistConditionBatch(batch []conditionResult) {
+func persistConditionBatch(batch []ConditionResult) {
 	changes := make([]services.ConditionStatusChange, 0)
 	updates := make([]services.ConditionExecutionUpdate, len(batch))
 
 	for i, r := range batch {
-		newStatus := newConditionStatus(r)
+		newStatus := NewConditionStatus(r)
 		if newStatus != nil {
-			changes = append(changes, services.ConditionStatusChange{IDCondition: r.condition.ID, NewStatus: *newStatus})
+			changes = append(changes, services.ConditionStatusChange{IDCondition: r.Condition.ID, NewStatus: *newStatus})
 		}
 
 		updates[i] = services.ConditionExecutionUpdate{
-			IDCondition:     r.condition.ID,
-			ExecutedAt:      r.executedAt,
-			NextExecutionAt: r.executedAt.Add(conditionInterval(r.condition)),
+			IDCondition:     r.Condition.ID,
+			ExecutedAt:      r.ExecutedAt,
+			NextExecutionAt: r.ExecutedAt.Add(ConditionInterval(r.Condition)),
 			NewStatus:       newStatus,
 		}
 	}
@@ -202,7 +202,7 @@ func persistConditionBatch(batch []conditionResult) {
 		// Liberamos el lock para que las condiciones no queden bloqueadas
 		ids := make([]primitive.ObjectID, len(batch))
 		for i, r := range batch {
-			ids[i] = r.condition.ID
+			ids[i] = r.Condition.ID
 		}
 		if err := services.UnlockConditionsService(ids); !err.IsEmtpy() {
 			log.Printf("Error liberando el lock de las condiciones: %v", err)
@@ -210,26 +210,26 @@ func persistConditionBatch(batch []conditionResult) {
 	}
 }
 
-// newConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar
-func newConditionStatus(r conditionResult) *cmm.CatalogStatus {
-	if !r.evaluated {
+// NewConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar
+func NewConditionStatus(r ConditionResult) *cmm.CatalogStatus {
+	if !r.Evaluated {
 		return nil
 	}
 
 	target := cmm.GenericStatusInactive
-	if r.accepted {
+	if r.Accepted {
 		target = cmm.GenericStatusActive
 	}
 
-	if r.condition.TagStatus == target.Tag {
+	if r.Condition.TagStatus == target.Tag {
 		return nil
 	}
 
 	return &target
 }
 
-// conditionInterval retorna el intervalo de ejecucion de la condicion
-func conditionInterval(condition models.ConditionsModelType) time.Duration {
+// ConditionInterval retorna el intervalo de ejecucion de la condicion
+func ConditionInterval(condition models.ConditionsModelType) time.Duration {
 	seconds := cmm.DefaultConditionIntervalSeconds
 	if condition.IntervalSeconds != nil && *condition.IntervalSeconds > 0 {
 		seconds = *condition.IntervalSeconds
