@@ -157,7 +157,7 @@ func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesMod
 	// 3. Crear filtro: idTrigger, status activo y que no esté borrado lógicamente
 	filter := bson.M{
 		"id_trigger":     idTrigger,
-		"tag_status":     "OPPORTUNITY-ONGOING",
+		"tag_status":     cmm.OpportunityStatusOngoing.Tag,
 		"logical_delete": false,
 	}
 

@@ -3,8 +3,13 @@ package cronjobs
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync/atomic"
 	"time"
 )
+
+// Evita que dos ejecuciones de ProcessConditions se solapen si una tarda mas de un tick
+var isCheckingConditions atomic.Bool
 
 // StartTicker ahora recibe un ctx (Context)
 func InitCronjobs(ctx context.Context) {
@@ -29,7 +34,19 @@ func InitCronjobs(ctx context.Context) {
 				// _ ,err := services.FetchDataService("BTC", "USD")
 				// Llamamos con una go rutine el servicio de actualizar oportunidades expiradas
 				// Llamamos con una go rutine el servicio de actualizar condiciones y verificar si la oportunidad pasa a activa
+				go runCheckConditions()
 			}
 		}
 	}()
+}
+
+// runCheckConditions ejecuta ProcessConditions si no hay otra ejecucion en curso
+func runCheckConditions() {
+	if !isCheckingConditions.CompareAndSwap(false, true) {
+		log.Println("ProcessConditions sigue en ejecucion, se omite este tick")
+		return
+	}
+	defer isCheckingConditions.Store(false)
+
+	ProcessConditions()
 }
