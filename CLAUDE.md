@@ -54,6 +54,7 @@ go build ./... && go vet ./... && gofmt -l .                         # run the s
 - Make small, focused changes; don't refactor unrelated code.
 - Ask before changing model schemas or DB indexes.
 - Never compare `*ErrorHandler` with `nil` (neither `err != nil` nor `return x, nil`); always check `!err.IsEmtpy()` and return `cmm.NewEmptyErrorHandler()`. The method name is spelled `IsEmtpy` on purpose: don't rename it.
+- Tracking codes can not be a parameter of any function, any function with error must have his own tracking code
 
 ## Gotchas
 

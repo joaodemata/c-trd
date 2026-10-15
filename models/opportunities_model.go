@@ -125,14 +125,6 @@ func NewOpportunityModel(
 	totalDuration := time.Duration(maxCandles) * candleDuration
 	calculatedExpiration := now.Add(totalDuration)
 
-	// Generamos el objectId //TODO:MEJORAR ESTO, capaz apenas inicialize el servidor hacer un query a catalogs y formatear todo y guardarlo en un map
-	idStatus, err := cmm.ParseHexToObjectId("6a84257d9687e916f29f234e")
-
-	// Validamos que no este vacio
-	if !err.IsEmtpy() {
-		return opp, cmm.NewErrorHandler(err, err.Error(), cmm.LevelFatal, "MODE001")
-	}
-
 	// 1. Instanciamos la oportunidad con todos los campos obligatorios
 	opp = OpportunitiesModelType{
 		IDTrigger:               idTrigger,
@@ -145,9 +137,9 @@ func NewOpportunityModel(
 		IDAction:                idAction,
 		TagAction:               tagAction,
 		Action:                  action,
-		IDStatus:                idStatus,
-		TagStatus:               "OPPORTUNITY-ONGOING",
-		Status:                  "En Curso",
+		IDStatus:                cmm.OpportunityStatusOngoing.ID,
+		TagStatus:               cmm.OpportunityStatusOngoing.Tag,
+		Status:                  cmm.OpportunityStatusOngoing.Name,
 		Conditions:              conditions,
 		MaxCandlestickQty:       maxCandles,
 		IDCandlestickTimeframe:  idTimeframe,

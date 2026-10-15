@@ -3,223 +3,217 @@ package cronjobs
 import (
 	"c_trd/models"
 	"c_trd/providers"
-	"context"
-	"fmt"
+	"c_trd/services"
 	"log"
+	"sync"
 	"time"
 
 	cmm "c_trd/common"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Validamos el status de las condiciones que son de tipo cronjob y actualizamos todas las oportunidades ligadas a las respectivas condiciones
-func GetCronjobConditionsService() ([]models.ConditionsModelType, *cmm.ErrorHandler) {
-	// Inicializamos el slice donde guardaremos los resultados (vacío por defecto, no nil)
-	result := make([]models.ConditionsModelType, 0)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Subimos un poco el timeout para listados
-	defer cancel()
-
-	// Tiempo actual (PC) UTC
-
-	currentTime := time.Now().UTC()
-
-	// Construir el Filtro (Query)
-	filter := bson.M{
-		"next_execution_at": bson.M{
-			"$lt": currentTime,
-		},
-		"is_webhook_only": false,
-		"is_processing":   false,
-		"logical_delete":  false,
-	}
-
-	//  Opciones del Query
-	opts := options.Find().
-		SetProjection(bson.M{
-			// "metadata": 0, // Descomenta si quieres excluir metadatos pesados en el listado
-			"logical_delete": 0,
-			"core_db":        0,
-			"core_version":   0,
-			"user_db":        0,
-			"schema_db":      0,
-		})
-
-	// 4. Ejecutar el Query (Usar OpportunityModel en vez de TriggersModel)
-	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)
-	if err != nil {
-		return result, cmm.NewErrorHandler(err, "Error consultando listado", cmm.LevelDatabase, "CRCCE001")
-	}
-	// Cerramos el cursor al terminar de procesar
-	defer cursor.Close(ctx)
-
-	// 5. Decodificar todos los resultados en el Slice
-	if err = cursor.All(ctx, &result); err != nil {
-		return result, cmm.NewErrorHandler(err, "Error decodificando cursor", cmm.LevelDatabase, "CRCCE002")
-	}
-
-	return result, cmm.NewEmptyErrorHandler()
+// conditionResult resultado de evaluar una condicion
+type conditionResult struct {
+	condition  models.ConditionsModelType
+	executedAt time.Time
+	evaluated  bool // true si la API y el callback respondieron correctamente
+	accepted   bool
 }
 
-// ProcessConditions iterates over a slice of conditions, executes their HTTP requests,
-// and dynamically calls the corresponding callback function.
-// TODO: Colocar workers/go functions etc
-func ProcessConditions(conditions []models.ConditionsModelType) {
-	// Iteramos
-	for _, condition := range conditions {
-
-		fmt.Printf("Processing condition: %s (ID: %s)\n", condition.NameCondition, condition.ID.Hex())
-
-		// 1. Validate if there is an HTTP config to execute
-		if condition.HttpRequest.URL == "" {
-			log.Printf("Condition %s has no RequestConfig, skipping...", condition.ID.Hex())
-			continue
-		}
-
-		// 2. Execute the HTTP request
-		responseBody, err := providers.ExecuteRequest(&condition.HttpRequest)
-		if !err.IsEmtpy() {
-			log.Printf("Error executing HTTP request for condition %s: %v\n", condition.ID.Hex(), err)
-			// Decide if you want to continue to the next condition or stop
-			continue
-		}
-
-		// 3. Dynamic function execution
-		callbackName := condition.CallbackFunction
-		if callbackName == "" {
-			log.Printf("Condition %s executed successfully (HTTP %d), but no CallbackFunction was defined.\n", condition.ID.Hex(), condition.HttpRequest.URL)
-			continue
-		}
-
-		// Look up the function in the registry
-		callback, exists := providers.FunctionRegistry[callbackName]
-		if !exists {
-			log.Printf("Warning: Callback function '%s' not found in FunctionRegistry for condition %s\n", callbackName, condition.ID.Hex())
-			continue
-		}
-
-		// 4. Execute the dynamic callback
-		fmt.Printf("Invoking callback: %s\n", callbackName)
-		conditionAccepted, err := callback(responseBody)
-		if !err.IsEmtpy() {
-			log.Printf("Error executing callback '%s' for condition %s: %v\n", callbackName, condition.ID.Hex(), err)
-		}
-
-		// Si la condicion esta aceptada y tiene un status diferente
-		// TODO: descomentar y mejorar
-		if conditionAccepted && condition.TagStatus != "STATUS-ACTIVE" {
-			mongo.NewUpdateOneModel()
-			// 	// --- NUEVO: Crear un contexto con un timeout de seguridad (ej: 10 segundos) ---
-			// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			// 	defer cancel() // Libera los recursos del contexto al salir de la función
-
-			// 	// 1. Iniciar la sesión de MongoDB
-			// 	session, err := cmm.AppConfig.MongoClient.StartSession()
-			// 	if err != nil {
-			// 		log.Printf("Error iniciando sesión de MongoDB: %v", err)
-			// 		continue
-			// 	}
-			// 	defer session.EndSession(ctx) // Ahora ctx ya existe
-
-			// 	// 2. Definir opciones (Write Concern "majority")
-			// 	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
-
-			// 	// 3. Ejecutar bloque transaccional
-			// 	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
-			// 		// A. Actualizamos la condicion
-			// 		errCond := services.UpdateCondition(sessCtx, condition.ID, )
-			// 		if errCond != nil {
-			// 			return nil, errCond // Dispara el ROLLBACK
-			// 		}
-
-			// 		// B. Actualizamos las oportunidades
-			// 		_, errOpp := services.UpdateOpportunitiesStatus(sessCtx /* tus parámetros */)
-			// 		if errOpp != nil {
-			// 			return nil, errOpp // Dispara el ROLLBACK
-			// 		}
-
-			// 		return nil, nil // Dispara el COMMIT
-			// 	}, txnOpts)
-			// 	// 4. Validar resultado
-			// 	if err != nil {
-			// 		log.Printf("Transacción abortada: %v", err)
-			// 		continue
-			// 	}
-
-			// 	log.Println("Transacción ejecutada correctamente.")
-		}
+// ProcessConditions evalua las condiciones de tipo cronjob, actualiza su status, lo replica en las
+// oportunidades en curso y pasa a ACTIVE las oportunidades con todas sus condiciones activas
+func ProcessConditions() {
+	// 1. Obtenemos las condiciones a evaluar
+	conditions, err := services.GetCronjobConditionsService()
+	if !err.IsEmtpy() {
+		log.Printf("Error obteniendo las condiciones: %v", err)
+		return
 	}
-	return
+
+	if len(conditions) > 0 {
+		// 2. Bloqueamos las condiciones para que no se procesen dos veces
+		ids := make([]primitive.ObjectID, len(conditions))
+		for i, condition := range conditions {
+			ids[i] = condition.ID
+		}
+
+		if err := services.LockConditionsService(ids); !err.IsEmtpy() {
+			log.Printf("Error bloqueando las condiciones: %v", err)
+			return
+		}
+
+		// 3. Evaluamos las condiciones con workers
+		results := evaluateConditions(conditions)
+
+		// 4. Guardamos los resultados en lotes con BulkWrite
+		persistConditionResults(results)
+	}
+
+	// 5. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
+	// recuperar oportunidades que quedaron pendientes por un fallo en una ejecucion anterior
+	activated, err := services.ActivateCompletedOpportunitiesService()
+	if !err.IsEmtpy() {
+		log.Printf("Error activando las oportunidades: %v", err)
+		return
+	}
+
+	log.Printf("Condiciones procesadas: %d, oportunidades activadas: %d", len(conditions), activated)
 }
 
-// TODO: referencia para bulkwrite en mongodb utilizando go functions (Mejor eficiencia)
-// func processLargeArray(ctx context.Context, data []MyDataType, coll1, coll2 *mongo.Collection) error {
-// 	batchSize := 500
-// 	maxWorkers := 20 // Límite de concurrencia basado en tu maxPoolSize de MongoDB, no en la CPU
+// evaluateConditions ejecuta las peticiones y callbacks de las condiciones con un pool de workers
+func evaluateConditions(conditions []models.ConditionsModelType) []conditionResult {
+	results := make([]conditionResult, len(conditions))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
 
-// 	// Semáforo para limitar la cantidad de goroutines simultáneas
-// 	sem := make(chan struct{}, maxWorkers)
-// 	var wg sync.WaitGroup
-// 	errChan := make(chan error, len(data)/batchSize+1)
+	workers := min(cmm.ConditionEvaluationWorkers, len(conditions))
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Cada worker escribe en un indice distinto, no hace falta mutex
+			for i := range jobs {
+				results[i] = evaluateCondition(conditions[i])
+			}
+		}()
+	}
 
-// 	for i := 0; i < len(data); i += batchSize {
-// 		end := i + batchSize
-// 		if end > len(data) {
-// 			end = len(data)
-// 		}
+	for i := range conditions {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
 
-// 		batch := data[i:end]
-// 		wg.Add(1)
+	return results
+}
 
-// 		go func(b []MyDataType) {
-// 			defer wg.Done()
+// evaluateCondition ejecuta la peticion HTTP de la condicion y su callback
+func evaluateCondition(condition models.ConditionsModelType) (result conditionResult) {
+	result = conditionResult{condition: condition, executedAt: time.Now().UTC()}
 
-// 			sem <- struct{}{} // Adquirir token
-// 			defer func() { <-sem }() // Liberar token
+	// Un panic en un callback no debe tumbar el cronjob ni dejar la condicion bloqueada
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic evaluando la condicion %s: %v", condition.ID.Hex(), r)
+			result.evaluated = false
+		}
+	}()
 
-// 			// Preparar modelos para BulkWrite
-// 			var modelsColl1 []mongo.WriteModel
-// 			var modelsColl2 []mongo.WriteModel
+	// 1. Validamos que exista la peticion
+	if condition.HttpRequest.URL == "" {
+		log.Printf("Condition %s has no RequestConfig, skipping...", condition.ID.Hex())
+		return result
+	}
 
-// 			for _, item := range b {
-// 				// Crear tus UpdateOneModel para ambas colecciones
-// 				update1 := mongo.NewUpdateOneModel().SetFilter(...).SetUpdate(...)
-// 				update2 := mongo.NewUpdateOneModel().SetFilter(...).SetUpdate(...)
+	// 2. Buscamos el callback en el registro
+	callbackName := condition.CallbackFunction
+	callback, exists := providers.FunctionRegistry[callbackName]
+	if !exists {
+		log.Printf("Warning: Callback function '%s' not found in FunctionRegistry for condition %s", callbackName, condition.ID.Hex())
+		return result
+	}
 
-// 				modelsColl1 = append(modelsColl1, update1)
-// 				modelsColl2 = append(modelsColl2, update2)
-// 			}
+	// 3. Ejecutamos la peticion HTTP
+	responseBody, err := providers.ExecuteRequest(&condition.HttpRequest)
+	if !err.IsEmtpy() {
+		log.Printf("Error executing HTTP request for condition %s: %v", condition.ID.Hex(), err)
+		return result
+	}
 
-// 			// Ejecutar BulkWrite (unordered es más rápido si las operaciones son independientes)
-// 			bulkOpts := options.BulkWrite().SetOrdered(false)
+	// 4. Ejecutamos el callback
+	accepted, err := callback(responseBody)
+	if !err.IsEmtpy() {
+		log.Printf("Error executing callback '%s' for condition %s: %v", callbackName, condition.ID.Hex(), err)
+		return result
+	}
 
-// 			_, err := coll1.BulkWrite(ctx, modelsColl1, bulkOpts)
-// 			if err != nil {
-// 				errChan <- fmt.Errorf("error coll1 batch: %w", err)
-// 				return
-// 			}
+	result.evaluated = true
+	result.accepted = accepted
+	return result
+}
 
-// 			_, err = coll2.BulkWrite(ctx, modelsColl2, bulkOpts)
-// 			if err != nil {
-// 				errChan <- fmt.Errorf("error coll2 batch: %w", err)
-// 				return
-// 			}
+// persistConditionResults guarda los resultados en lotes concurrentes limitados por un semaforo
+func persistConditionResults(results []conditionResult) {
+	sem := make(chan struct{}, cmm.BulkWriteMaxWorkers)
+	var wg sync.WaitGroup
 
-// 		}(batch)
-// 	}
+	for i := 0; i < len(results); i += cmm.BulkWriteBatchSize {
+		end := min(i+cmm.BulkWriteBatchSize, len(results))
 
-// 	wg.Wait()
-// 	close(errChan)
+		wg.Add(1)
+		go func(batch []conditionResult) {
+			defer wg.Done()
 
-// 	// Manejo de errores
-// 	for err := range errChan {
-// 		if err != nil {
-// 			return err // O hacer log y continuar, según tu lógica de negocio
-// 		}
-// 	}
+			sem <- struct{}{}        // Adquirir token
+			defer func() { <-sem }() // Liberar token
 
-// 	return nil
-// }
+			persistConditionBatch(batch)
+		}(results[i:end])
+	}
+
+	wg.Wait()
+}
+
+// persistConditionBatch guarda el lote en una transaccion (oportunidades y condiciones).
+// Si la transaccion falla se hace rollback y solo se libera el lock, sin tocar next_execution_at,
+// asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote
+func persistConditionBatch(batch []conditionResult) {
+	changes := make([]services.ConditionStatusChange, 0)
+	updates := make([]services.ConditionExecutionUpdate, len(batch))
+
+	for i, r := range batch {
+		newStatus := newConditionStatus(r)
+		if newStatus != nil {
+			changes = append(changes, services.ConditionStatusChange{IDCondition: r.condition.ID, NewStatus: *newStatus})
+		}
+
+		updates[i] = services.ConditionExecutionUpdate{
+			IDCondition:     r.condition.ID,
+			ExecutedAt:      r.executedAt,
+			NextExecutionAt: r.executedAt.Add(conditionInterval(r.condition)),
+			NewStatus:       newStatus,
+		}
+	}
+
+	if err := services.SaveConditionResultsService(changes, updates); !err.IsEmtpy() {
+		log.Printf("Error guardando el lote de condiciones, se reintentara en el siguiente ciclo: %v", err)
+
+		// Liberamos el lock para que las condiciones no queden bloqueadas
+		ids := make([]primitive.ObjectID, len(batch))
+		for i, r := range batch {
+			ids[i] = r.condition.ID
+		}
+		if err := services.UnlockConditionsService(ids); !err.IsEmtpy() {
+			log.Printf("Error liberando el lock de las condiciones: %v", err)
+		}
+	}
+}
+
+// newConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar
+func newConditionStatus(r conditionResult) *cmm.CatalogStatus {
+	if !r.evaluated {
+		return nil
+	}
+
+	target := cmm.GenericStatusInactive
+	if r.accepted {
+		target = cmm.GenericStatusActive
+	}
+
+	if r.condition.TagStatus == target.Tag {
+		return nil
+	}
+
+	return &target
+}
+
+// conditionInterval retorna el intervalo de ejecucion de la condicion
+func conditionInterval(condition models.ConditionsModelType) time.Duration {
+	seconds := cmm.DefaultConditionIntervalSeconds
+	if condition.IntervalSeconds != nil && *condition.IntervalSeconds > 0 {
+		seconds = *condition.IntervalSeconds
+	}
+
+	return time.Duration(seconds) * time.Second
+}
