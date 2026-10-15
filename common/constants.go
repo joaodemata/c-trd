@@ -66,6 +66,14 @@ const (
 	ProviderMaxResponseBytes = 10 << 20
 )
 
+// Archivos CSV de Google Trends subidos por asset
+const (
+	// Variable de entorno con la carpeta donde se guardan los CSV
+	GoogleTrendsDirEnv = "JM_CTRD_GOOGLE_TRENDS_DIR"
+	// Carpeta por defecto si la variable no existe (relativa al directorio de ejecucion)
+	GoogleTrendsDefaultDir = "data/google_trends"
+)
+
 // mustParseObjectId convierte un hexadecimal hardcodeado en ObjectID, detiene la app si es invalido
 func mustParseObjectId(hex string) primitive.ObjectID {
 	id, err := primitive.ObjectIDFromHex(hex)

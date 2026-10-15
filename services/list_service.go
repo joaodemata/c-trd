@@ -176,3 +176,25 @@ func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesMod
 
 	return result, cmm.NewEmptyErrorHandler()
 }
+
+// GetAssetService busca un asset no borrado por su ID. Si no existe retorna el asset vacio sin error
+func GetAssetService(idAsset primitive.ObjectID) (models.AssetsModelType, *cmm.ErrorHandler) {
+	var result models.AssetsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idAsset, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"_id": 1, "tag": 1, "name": 1})
+
+	err := models.AssetsModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SASSE001")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}

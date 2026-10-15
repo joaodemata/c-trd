@@ -12,4 +12,10 @@ type CallbackFunc func(responseBody []byte) (bool, *cmm.ErrorHandler)
 // FunctionRegistry maps a string (from the database) to an actual Go function.
 var FunctionRegistry = map[string]CallbackFunc{
 	"ProcessAlphaVantageData": RealtimePutCallRatioCallback,
+	"GoogleTrendsHigh":        GoogleTrendsHighCallback,
+	"GoogleTrendsLow":         GoogleTrendsLowCallback,
+	"GoogleTrendsFileHigh":    GoogleTrendsFileHighCallback,
+	"GoogleTrendsFileLow":     GoogleTrendsFileLowCallback,
+	"GoogleTrendsFileNewMax":  GoogleTrendsFileNewMaxCallback,
+	"GoogleTrendsFileNewMin":  GoogleTrendsFileNewMinCallback,
 }
