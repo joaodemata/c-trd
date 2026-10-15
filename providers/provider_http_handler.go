@@ -16,6 +16,8 @@ import (
 	"time"
 
 	cmm "c_trd/common"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // HTTPRequestConfig engloba toda la configuración de la petición a ejecutar
@@ -116,7 +118,7 @@ func ExecuteRequest(ctx context.Context, config *HTTPRequestConfig, credentials 
 	// crear un reader nuevo en cada intento
 	var jsonBody []byte
 	if config.BodyData != nil && method != http.MethodGet {
-		jsonBody, err = json.Marshal(config.BodyData)
+		jsonBody, err = json.Marshal(bsonToJSONValue(config.BodyData))
 		if err != nil {
 			return nil, cmm.NewErrorHandler(err, "error marshaling body.", cmm.LevelFatal, "PRHTTPE002")
 		}
@@ -339,4 +341,31 @@ func redactURLError(err error) error {
 	}
 
 	return &url.Error{Op: urlErr.Op, URL: redacted, Err: urlErr.Err}
+}
+
+// bsonToJSONValue convierte los documentos que decodifica Mongo en un interface{} (primitive.D y primitive.A)
+// a map y slice, porque json.Marshal serializa un primitive.D como [{"Key":..,"Value":..}] y no como un objeto
+func bsonToJSONValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case primitive.D:
+		object := make(map[string]interface{}, len(v))
+		for _, element := range v {
+			object[element.Key] = bsonToJSONValue(element.Value)
+		}
+		return object
+	case primitive.M:
+		object := make(map[string]interface{}, len(v))
+		for key, element := range v {
+			object[key] = bsonToJSONValue(element)
+		}
+		return object
+	case primitive.A:
+		list := make([]interface{}, len(v))
+		for i, element := range v {
+			list[i] = bsonToJSONValue(element)
+		}
+		return list
+	default:
+		return value
+	}
 }
