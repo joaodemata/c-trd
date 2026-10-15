@@ -73,6 +73,8 @@ Request pipeline: **router → format validate → data validate → controller*
 | `POST` | `/hook/trading_view` | Receives a TradingView alert and creates (or returns) the ONGOING opportunity of the trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
 | `GET` | `/list/opportunities` | Paginated list of opportunities. JSON body (optional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Placeholder, not implemented yet |
+| `POST` | `/operation/google_trends/upload` | Uploads the Google Trends CSV of an asset and replaces the previous one. `multipart/form-data` with the fields `idAsset` and `file` (`.csv`, max 1 MB) |
+| `POST` | `/operation/google_trends/series` | Series of the asset's CSV. Body: `{ "idAsset": "<ObjectID>" }`. Only answers requests from the server itself (used by conditions) |
 | `GET` | `/ws` | Websocket hub |
 
 The server listens on `:8080` with 10 s read/write timeouts.
@@ -92,6 +94,7 @@ The server listens on `:8080` with 10 s read/write timeouts.
 | `JM_CTRD_MDB_NAME` | Database name | `test` |
 | `JM_CTRD_MDB_USER` | Database user, stored in audit fields | — |
 | `JM_CTRD_SECRET_<secret_ref>` | Secret of an external provider (API key, token or `user:password` for BASIC), e.g. `JM_CTRD_SECRET_ALPHAVANTAGE_APIKEY` | — |
+| `JM_CTRD_GOOGLE_TRENDS_DIR` | Folder for the uploaded Google Trends CSV files | `data/google_trends` |
 
 On Windows they are loaded from a `.env` file in the project root (required there). On other systems `.env` is not loaded by `main.go`, so the variables must be exported.
 
@@ -133,6 +136,37 @@ go build ./... && go vet ./... && gofmt -l .
 1. Write a function with the signature `func(responseBody []byte) (bool, *cmm.ErrorHandler)` in `providers/`.
 2. Register it in `FunctionRegistry` in `providers/callbacks.go`.
 3. Store the registered name in the condition's `callback_function` field in the database.
+
+### File upload routes
+
+Routes that receive a file use `common.FileFormatValidateMiddleware[T](common.FileUploadConfig{Field, MaxBytes, Extensions})` instead of `FormatValidateMiddleware`. It limits the body size before reading it, validates the file and the text fields of `T` (exported `string` fields with a `form` tag, checked with the usual `validate` tags), and injects `*T` in `payload` and `*common.UploadedFile` in `file`.
+
+### Google Trends CSV conditions
+
+Google Trends has no public API, so the data is exported by hand: in Google Trends, open the chart and download it as CSV. The CSV must contain a single search (no comparisons).
+
+1. Upload it for the asset: `curl -F idAsset=<idAsset> -F file=@multiTimeline.csv http://localhost:8080/operation/google_trends/upload`. Each asset has one file, saved as `<idAsset>.csv` in `JM_CTRD_GOOGLE_TRENDS_DIR` (default `data/google_trends`). A new upload replaces it.
+2. Create a provider with `"allowed_hosts": ["127.0.0.1"]` and no `secret_ref`, and a condition that reads the local route:
+
+```json
+{
+  "http_request": { "url": "http://127.0.0.1:8080/operation/google_trends/series", "method": "POST", "body_data": { "idAsset": "<idAsset>" }, "timeout_seconds": 5 },
+  "callback_function": "GoogleTrendsFileNewMax",
+  "interval_seconds": 86400
+}
+```
+
+| Callback | True when the last complete period... |
+| --- | --- |
+| `GoogleTrendsFileHigh` | is in the top 10% of the series range |
+| `GoogleTrendsFileLow` | is in the bottom 10% of the series range |
+| `GoogleTrendsFileNewMax` | is higher than every previous period |
+| `GoogleTrendsFileNewMin` | is lower than every previous period |
+
+- The last row of the CSV is dropped if its period had not ended when the file was uploaded (Google shows it incomplete).
+- Google rescales every export (the peak is 100), so values are only compared inside the same file.
+- If the file is older than one period plus one day (8 days for weekly data), the callbacks return an error and the condition keeps its last status until a new CSV is uploaded.
+- The upload route has no authentication yet, like the rest of the API. If the server sits behind a reverse proxy, the local route rejects requests carrying `X-Forwarded-For`, `X-Real-IP` or `Forwarded`.
 
 ### Conventions
 
@@ -218,6 +252,8 @@ Pipeline de una petición: **router → format validate → data validate → co
 | `POST` | `/hook/trading_view` | Recibe una alerta de TradingView y crea (o retorna) la oportunidad ONGOING del trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
 | `GET` | `/list/opportunities` | Listado paginado de oportunidades. Body JSON (opcional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Pendiente, aún no implementado |
+| `POST` | `/operation/google_trends/upload` | Sube el CSV de Google Trends de un asset y reemplaza el anterior. `multipart/form-data` con los campos `idAsset` y `file` (`.csv`, máx. 1 MB) |
+| `POST` | `/operation/google_trends/series` | Serie del CSV del asset. Body: `{ "idAsset": "<ObjectID>" }`. Solo responde peticiones del mismo servidor (la usan las condiciones) |
 | `GET` | `/ws` | Hub de websocket |
 
 El servidor escucha en `:8080` con timeouts de lectura/escritura de 10 s.
@@ -237,6 +273,7 @@ El servidor escucha en `:8080` con timeouts de lectura/escritura de 10 s.
 | `JM_CTRD_MDB_NAME` | Nombre de la base de datos | `test` |
 | `JM_CTRD_MDB_USER` | Usuario de base de datos, se guarda en los campos de auditoría | — |
 | `JM_CTRD_SECRET_<secret_ref>` | Secreto de un proveedor externo (API key, token o `usuario:password` para BASIC), ej. `JM_CTRD_SECRET_ALPHAVANTAGE_APIKEY` | — |
+| `JM_CTRD_GOOGLE_TRENDS_DIR` | Carpeta de los CSV de Google Trends subidos | `data/google_trends` |
 
 En Windows se cargan desde un archivo `.env` en la raíz del proyecto (obligatorio ahí). En otros sistemas `main.go` no carga el `.env`, así que las variables deben exportarse.
 
@@ -278,6 +315,37 @@ go build ./... && go vet ./... && gofmt -l .
 1. Escribe una función con la firma `func(responseBody []byte) (bool, *cmm.ErrorHandler)` en `providers/`.
 2. Regístrala en `FunctionRegistry` en `providers/callbacks.go`.
 3. Guarda el nombre registrado en el campo `callback_function` de la condición en la base de datos.
+
+### Rutas de subida de archivos
+
+Las rutas que reciben un archivo usan `common.FileFormatValidateMiddleware[T](common.FileUploadConfig{Field, MaxBytes, Extensions})` en lugar de `FormatValidateMiddleware`. Limita el tamaño del body antes de leerlo, valida el archivo y los campos de texto de `T` (campos `string` exportados con tag `form`, validados con los tags `validate` de siempre) e inyecta `*T` en `payload` y `*common.UploadedFile` en `file`.
+
+### Condiciones con CSV de Google Trends
+
+Google Trends no tiene una API pública, así que los datos se exportan a mano: en Google Trends abre el gráfico y descárgalo como CSV. El CSV debe tener una sola búsqueda (sin comparaciones).
+
+1. Súbelo para el asset: `curl -F idAsset=<idAsset> -F file=@multiTimeline.csv http://localhost:8080/operation/google_trends/upload`. Cada asset tiene un solo archivo, guardado como `<idAsset>.csv` en `JM_CTRD_GOOGLE_TRENDS_DIR` (por defecto `data/google_trends`). Una nueva subida lo reemplaza.
+2. Crea un proveedor con `"allowed_hosts": ["127.0.0.1"]` y sin `secret_ref`, y una condición que lea la ruta local:
+
+```json
+{
+  "http_request": { "url": "http://127.0.0.1:8080/operation/google_trends/series", "method": "POST", "body_data": { "idAsset": "<idAsset>" }, "timeout_seconds": 5 },
+  "callback_function": "GoogleTrendsFileNewMax",
+  "interval_seconds": 86400
+}
+```
+
+| Callback | Verdadero cuando el último periodo completo... |
+| --- | --- |
+| `GoogleTrendsFileHigh` | está en el 10% superior del rango de la serie |
+| `GoogleTrendsFileLow` | está en el 10% inferior del rango de la serie |
+| `GoogleTrendsFileNewMax` | es mayor que todos los periodos anteriores |
+| `GoogleTrendsFileNewMin` | es menor que todos los periodos anteriores |
+
+- La última fila del CSV se descarta si su periodo no había terminado al subir el archivo (Google la muestra incompleta).
+- Google reescala cada exportación (el pico es 100), así que los valores solo se comparan dentro del mismo archivo.
+- Si el archivo tiene más de un periodo más un día (8 días para datos semanales), los callbacks retornan error y la condición conserva su último status hasta que se suba un CSV nuevo.
+- La ruta de subida aún no tiene autenticación, igual que el resto de la API. Si el servidor está detrás de un reverse proxy, la ruta local rechaza peticiones con `X-Forwarded-For`, `X-Real-IP` o `Forwarded`.
 
 ### Convenciones
 
