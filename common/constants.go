@@ -48,6 +48,22 @@ const (
 	ConditionEvaluationWorkers = 10
 	// Intervalo por defecto si la condicion no tiene interval_seconds
 	DefaultConditionIntervalSeconds = 60
+	// Tiempo maximo para evaluar todas las condiciones de un ciclo (el ticker corre cada minuto)
+	ConditionEvaluationTimeout = 50 * time.Second
+)
+
+// Peticiones HTTP a proveedores externos
+const (
+	// Prefijo de las variables de entorno con secretos de proveedores, ej: JM_CTRD_SECRET_ALPHAVANTAGE_APIKEY
+	ProviderSecretEnvPrefix = "JM_CTRD_SECRET_"
+	// Timeout por defecto si la peticion no tiene timeout_seconds
+	ProviderDefaultTimeout = 10 * time.Second
+	// Maximo de reintentos permitidos por peticion
+	ProviderMaxRetries = 5
+	// Maxima espera entre reintentos
+	ProviderMaxRetryDelay = 30 * time.Second
+	// Tamaño maximo de la respuesta de un proveedor (10 MB)
+	ProviderMaxResponseBytes = 10 << 20
 )
 
 // mustParseObjectId convierte un hexadecimal hardcodeado en ObjectID, detiene la app si es invalido

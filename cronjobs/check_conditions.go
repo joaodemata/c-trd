@@ -4,6 +4,7 @@ import (
 	"c_trd/models"
 	"c_trd/providers"
 	"c_trd/services"
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -32,7 +33,20 @@ func ProcessConditions() {
 	}
 
 	if len(conditions) > 0 {
-		// 2. Bloqueamos las condiciones para que no se procesen dos veces
+		// 2. Obtenemos los proveedores de las condiciones (secreto y hosts permitidos) antes de bloquear,
+		// asi un fallo aqui no deja condiciones bloqueadas
+		providerIDs := make([]primitive.ObjectID, len(conditions))
+		for i, condition := range conditions {
+			providerIDs[i] = condition.IDProvider
+		}
+
+		providersByID, err := services.GetProvidersByIDsService(providerIDs)
+		if !err.IsEmtpy() {
+			log.Printf("Error obteniendo los proveedores: %v", err)
+			return
+		}
+
+		// 3. Bloqueamos las condiciones para que no se procesen dos veces
 		ids := make([]primitive.ObjectID, len(conditions))
 		for i, condition := range conditions {
 			ids[i] = condition.ID
@@ -43,14 +57,16 @@ func ProcessConditions() {
 			return
 		}
 
-		// 3. Evaluamos las condiciones con workers
-		results := evaluateConditions(conditions)
+		// 4. Evaluamos las condiciones con workers, con un tiempo maximo para todo el ciclo
+		ctx, cancel := context.WithTimeout(context.Background(), cmm.ConditionEvaluationTimeout)
+		results := evaluateConditions(ctx, conditions, providersByID)
+		cancel()
 
-		// 4. Guardamos los resultados en lotes con BulkWrite
+		// 5. Guardamos los resultados en lotes con BulkWrite
 		persistConditionResults(results)
 	}
 
-	// 5. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
+	// 6. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
 	// recuperar oportunidades que quedaron pendientes por un fallo en una ejecucion anterior
 	activated, err := services.ActivateCompletedOpportunitiesService()
 	if !err.IsEmtpy() {
@@ -62,7 +78,7 @@ func ProcessConditions() {
 }
 
 // evaluateConditions ejecuta las peticiones y callbacks de las condiciones con un pool de workers
-func evaluateConditions(conditions []models.ConditionsModelType) []conditionResult {
+func evaluateConditions(ctx context.Context, conditions []models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) []conditionResult {
 	results := make([]conditionResult, len(conditions))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
@@ -74,7 +90,7 @@ func evaluateConditions(conditions []models.ConditionsModelType) []conditionResu
 			defer wg.Done()
 			// Cada worker escribe en un indice distinto, no hace falta mutex
 			for i := range jobs {
-				results[i] = evaluateCondition(conditions[i])
+				results[i] = evaluateCondition(ctx, conditions[i], providersByID)
 			}
 		}()
 	}
@@ -89,7 +105,7 @@ func evaluateConditions(conditions []models.ConditionsModelType) []conditionResu
 }
 
 // evaluateCondition ejecuta la peticion HTTP de la condicion y su callback
-func evaluateCondition(condition models.ConditionsModelType) (result conditionResult) {
+func evaluateCondition(ctx context.Context, condition models.ConditionsModelType, providersByID map[primitive.ObjectID]models.ProvidersModelType) (result conditionResult) {
 	result = conditionResult{condition: condition, executedAt: time.Now().UTC()}
 
 	// Un panic en un callback no debe tumbar el cronjob ni dejar la condicion bloqueada
@@ -114,8 +130,12 @@ func evaluateCondition(condition models.ConditionsModelType) (result conditionRe
 		return result
 	}
 
-	// 3. Ejecutamos la peticion HTTP
-	responseBody, err := providers.ExecuteRequest(&condition.HttpRequest)
+	// 3. Ejecutamos la peticion HTTP con las credenciales del proveedor. Si el proveedor no existe
+	// las credenciales quedan vacias y una peticion con auth falla sin enviar nada
+	provider := providersByID[condition.IDProvider]
+	credentials := providers.RequestCredentials{SecretRef: provider.SecretRef, AllowedHosts: provider.AllowedHosts}
+
+	responseBody, err := providers.ExecuteRequest(ctx, &condition.HttpRequest, credentials)
 	if !err.IsEmtpy() {
 		log.Printf("Error executing HTTP request for condition %s: %v", condition.ID.Hex(), err)
 		return result

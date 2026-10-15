@@ -3,6 +3,7 @@ package providers
 import (
 	cmm "c_trd/common"
 	"encoding/json"
+	"errors"
 	"strconv"
 )
 
@@ -12,12 +13,24 @@ func RealtimePutCallRatioCallback(responseData []byte) (bool, *cmm.ErrorHandler)
 	type PCRResponse struct {
 		Symbol                string `json:"symbol"`
 		PutCallRatioFullChain string `json:"put_call_ratio_full_chain"`
+
+		// Alpha Vantage responde 200 con alguno de estos campos cuando hay limite de peticiones o un error
+		Information  string `json:"Information"`
+		Note         string `json:"Note"`
+		ErrorMessage string `json:"Error Message"`
 	}
 
 	// 2. Deserializar el JSON desde el []byte
 	var data PCRResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
 		return false, cmm.NewErrorHandler(err, "Error parsing response data", cmm.LevelFatal, "PCALVE001")
+	}
+
+	// Validamos que la respuesta no sea un mensaje de error del proveedor
+	for _, message := range []string{data.ErrorMessage, data.Information, data.Note} {
+		if message != "" {
+			return false, cmm.NewErrorHandler(errors.New(message), "Alpha Vantage returned an error message", cmm.LevelError, "PCALVE003")
+		}
 	}
 
 	// 3. Convertir el ratio de string a float64
