@@ -41,6 +41,35 @@ const (
 	CatalogTypeCandleStick       = "TYPE_CANDLE_STICK"
 )
 
+// Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara
+// el formato que sabe leer, asi solo se ofrecen los callbacks compatibles con la API
+const (
+	ResponseFormatAlphaVantagePutCallRatio = "ALPHA_VANTAGE_PUT_CALL_RATIO"
+	ResponseFormatGoogleTrendsSeries       = "GOOGLE_TRENDS_SERIES"
+	ResponseFormatGoogleTrendsFile         = "GOOGLE_TRENDS_FILE"
+)
+
+// Tipos de dato de los parametros de una API (data_type). El valor se guarda como string y se valida con este tipo
+const (
+	ApiParameterTypeString  = "STRING"
+	ApiParameterTypeInteger = "INTEGER"
+	ApiParameterTypeFloat   = "FLOAT"
+	ApiParameterTypeBoolean = "BOOLEAN"
+	ApiParameterTypeDate    = "DATE" // formato YYYY-MM-DD
+)
+
+// Donde envia una API sus parametros (data_location). Una API solo envia datos por un lugar
+const (
+	ApiDataLocationQuery = "QUERY"
+	ApiDataLocationBody  = "BODY"
+)
+
+// Origen de las opciones permitidas de un parametro (options.source)
+const (
+	ApiParameterOptionsStatic = "STATIC" // las opciones se guardan en options.values
+	ApiParameterOptionsApi    = "API"    // las opciones se obtienen llamando a otra API de la coleccion apis
+)
+
 // Base de datos
 const (
 	// Timeout de cada llamada a la base de datos
