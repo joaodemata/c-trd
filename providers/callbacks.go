@@ -62,6 +62,16 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Description:    "El ultimo periodo del CSV es un nuevo minimo de la serie",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsFile,
 	},
+	"FredSeriesRising": {
+		Fn:             FredSeriesRisingCallback,
+		Description:    "La regresion lineal de la ventana de la serie de FRED tiene pendiente positiva",
+		ResponseFormat: cmm.ResponseFormatFredSeriesObservations,
+	},
+	"FredSeriesFalling": {
+		Fn:             FredSeriesFallingCallback,
+		Description:    "La regresion lineal de la ventana de la serie de FRED tiene pendiente negativa",
+		ResponseFormat: cmm.ResponseFormatFredSeriesObservations,
+	},
 }
 
 // ListCallbacksByResponseFormat retorna los callbacks que leen el formato de respuesta indicado, ordenados por nombre.
