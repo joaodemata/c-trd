@@ -70,6 +70,38 @@ func GetCronjobConditionsService() ([]models.ConditionsModelType, *cmm.ErrorHand
 	return result, cmm.NewEmptyErrorHandler()
 }
 
+// GetConditionsByIDsService obtiene las condiciones no borradas de los ids enviados. Las que no existen no se retornan
+func GetConditionsByIDsService(ids []primitive.ObjectID) ([]models.ConditionsModelType, *cmm.ErrorHandler) {
+	result := make([]models.ConditionsModelType, 0)
+	if len(ids) == 0 {
+		return result, cmm.NewEmptyErrorHandler()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": bson.M{"$in": ids}, "logical_delete": false}
+	opts := options.Find().SetProjection(bson.M{
+		"_id":                   1,
+		"id_provider":           1,
+		"name_provider":         1,
+		"name_condition":        1,
+		"description_condition": 1,
+	})
+
+	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las condiciones", cmm.LevelDatabase, "SCONE008")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando cursor", cmm.LevelDatabase, "SCONE009")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
 // LockConditionsService coloca el lock is_processing a las condiciones
 func LockConditionsService(ids []primitive.ObjectID) *cmm.ErrorHandler {
 	if len(ids) == 0 {

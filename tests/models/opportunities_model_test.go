@@ -35,8 +35,8 @@ func TestNewOpportunityModel_ExpirationDate(t *testing.T) {
 		tagTimeframe string
 		want         time.Duration
 	}{
-		{"6 velas de 4 horas", 6, "4H", 24 * time.Hour},
-		{"10 velas de 15 minutos", 10, "15m", 150 * time.Minute},
+		{"6 velas de 4 horas", 6, "4-HOURS", 24 * time.Hour},
+		{"10 velas de 15 minutos", 10, "15-MINUTES", 150 * time.Minute},
 		{"timeframe desconocido usa 1 hora", 3, "??", 3 * time.Hour},
 	}
 
@@ -59,7 +59,7 @@ func TestNewOpportunityModel_ExpirationDate(t *testing.T) {
 func TestNewOpportunityModel_Defaults(t *testing.T) {
 	t.Parallel()
 
-	opp := newTestOpportunity(t, 6, "4H", nil)
+	opp := newTestOpportunity(t, 6, "4-HOURS", nil)
 
 	if opp.ID.IsZero() {
 		t.Error("el ID debe generarse en el constructor")
@@ -85,7 +85,7 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 		id := primitive.NewObjectID()
 		conditions := []models.Condition{{IDCondition: primitive.NewObjectID(), TagStatus: cmm.GenericStatusInactive.Tag}}
 
-		opp := newTestOpportunity(t, 6, "4H", &models.OpportunityOptionalData{ID: id, Conditions: conditions})
+		opp := newTestOpportunity(t, 6, "4-HOURS", &models.OpportunityOptionalData{ID: id, Conditions: conditions})
 
 		if opp.ID != id {
 			t.Errorf("ID = %v, se esperaba %v", opp.ID, id)
@@ -98,7 +98,7 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 	t.Run("genera el ID si no se envia", func(t *testing.T) {
 		t.Parallel()
 
-		opp := newTestOpportunity(t, 6, "4H", &models.OpportunityOptionalData{})
+		opp := newTestOpportunity(t, 6, "4-HOURS", &models.OpportunityOptionalData{})
 
 		if opp.ID.IsZero() {
 			t.Error("el ID debe generarse cuando opts no trae uno")

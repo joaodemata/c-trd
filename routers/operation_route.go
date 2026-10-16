@@ -14,6 +14,7 @@ func operationRoutes(server *http.ServeMux) *http.ServeMux  {
 	api := cmm.NewRouter(server)
 	// Routes
 	api.Post("/operation/create/oportunity", controllers.CreateOportunityController())
+	api.Post("/operation/create/trigger", controllers.CreateTriggerController(), fv.CreateTriggerFormatValidate, dv.CreateTriggerDataValidate)
 
 	// CSV de Google Trends por asset: se sube manualmente y las condiciones lo leen desde el mismo servidor
 	api.Post("/operation/google_trends/upload", controllers.GoogleTrendsUploadController(), fv.GoogleTrendsUploadFormatValidate, dv.GoogleTrendsUploadDataValidate)

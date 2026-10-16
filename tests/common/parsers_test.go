@@ -17,15 +17,18 @@ func TestParseTimeframeTag(t *testing.T) {
 		tag  string
 		want time.Duration
 	}{
-		{"1m", time.Minute},
-		{"5M", 5 * time.Minute},
-		{"15m", 15 * time.Minute},
-		{"30M", 30 * time.Minute},
-		{"1H", time.Hour},
-		{"4h", 4 * time.Hour},
-		{"1D", 24 * time.Hour},
-		{"1w", 7 * 24 * time.Hour},
+		{"1-MINUTE", time.Minute},
+		{"5-MINUTES", 5 * time.Minute},
+		{"15-MINUTES", 15 * time.Minute},
+		{"30-MINUTES", 30 * time.Minute},
+		{"1-HOUR", time.Hour},
+		{"2-HOURS", 2 * time.Hour},
+		{"4-HOURS", 4 * time.Hour},
+		{"1-DAY", 24 * time.Hour},
+		{"1-WEEK", 7 * 24 * time.Hour},
+		{"1-MONTH", 30 * 24 * time.Hour},
 		// Un tag desconocido usa 1 hora por defecto
+		{"4H", time.Hour},
 		{"3Y", time.Hour},
 		{"", time.Hour},
 	}
@@ -36,6 +39,35 @@ func TestParseTimeframeTag(t *testing.T) {
 
 			if got := cmm.ParseTimeframeTag(tt.tag); got != tt.want {
 				t.Errorf("ParseTimeframeTag(%q) = %v, se esperaba %v", tt.tag, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsKnownTimeframeTag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"1-MINUTE", true},
+		{"15-MINUTES", true},
+		{"2-HOURS", true},
+		{"1-DAY", true},
+		{"1-MONTH", true},
+		// Un tag desconocido no es valido aunque ParseTimeframeTag le asigne 1 hora
+		{"4H", false},
+		{"1-hour", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			t.Parallel()
+
+			if got := cmm.IsKnownTimeframeTag(tt.tag); got != tt.want {
+				t.Errorf("IsKnownTimeframeTag(%q) = %v, se esperaba %v", tt.tag, got, tt.want)
 			}
 		})
 	}

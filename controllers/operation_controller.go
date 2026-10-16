@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	fv "c_trd/format_validates"
+	"c_trd/models"
 	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
@@ -13,6 +15,67 @@ import (
 func CreateOportunityController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Solo peticiones POST entran aquí"))
+	}
+}
+
+// CreateTriggerController registra un trigger nuevo con los datos ya validados en el data validate
+func CreateTriggerController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		action, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "action")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		timeframe, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "timeframe")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		conditions, err := cmm.GetFromRequestContext[[]models.ConditionsModelType](r, "conditions")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		trigger, err := models.NewTriggerModel(
+			payload.Tag, payload.Name, payload.Description,
+			asset.ID, asset.Tag, asset.Name,
+			action.ID, action.Tag, action.Name,
+			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
+			&models.TriggerOptionalData{Conditions: conditions},
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idTrigger, err := services.CreateTriggerService(trigger)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"idTrigger": idTrigger,
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Trigger creado exitosamente", "COPR003", data)
 	}
 }
 
