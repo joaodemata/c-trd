@@ -30,6 +30,22 @@ type CreateTriggerFormat struct {
 
 var CreateTriggerFormatValidate = common.FormatValidateMiddleware[CreateTriggerFormat]
 
+// CreateConditionFormat datos para registrar una condicion sobre una API. Los valores de los parametros se envian
+// como texto y se validan contra el tipo de dato de la API en el data validate. Solo se crean condiciones que evalua
+// el cronjob: isWebhookOnly es opcional y si se envia debe ser false. El intervalo minimo es el del ticker (60s)
+type CreateConditionFormat struct {
+	IdApi                string            `json:"idApi" validate:"required,mongodb"`
+	NameCondition        string            `json:"nameCondition" validate:"required"`
+	DescriptionCondition string            `json:"descriptionCondition" validate:"required"`
+	IsWebhookOnly        bool              `json:"isWebhookOnly" validate:"isdefault"`
+	Parameters           map[string]string `json:"parameters"`
+	CallbackFunction     string            `json:"callbackFunction" validate:"required"`
+	IntervalSeconds      int               `json:"intervalSeconds" validate:"required,min=60"`
+	Metadata             map[string]any    `json:"metadata"`
+}
+
+var CreateConditionFormatValidate = common.FormatValidateMiddleware[CreateConditionFormat]
+
 // El CSV llega en el campo "file" (maximo 1 MB)
 var GoogleTrendsUploadFormatValidate = common.FileFormatValidateMiddleware[GoogleTrendsUploadFormat](common.FileUploadConfig{
 	Field:      "file",

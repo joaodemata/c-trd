@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-
-	"github.com/go-playground/validator/v10"
 )
 
 // Margen para los campos de texto y separadores del multipart ademas del archivo
@@ -77,15 +75,7 @@ func FileFormatValidateMiddleware[T any](cfg FileUploadConfig) func(http.Handler
 			}
 
 			if err := validate.Struct(payloadFormat); err != nil {
-				var errors []string
-				for _, err := range err.(validator.ValidationErrors) {
-					errors = append(errors, fmt.Sprintf("El campo '%s' falló en la regla: '%s'", err.Field(), err.Tag()))
-				}
-
-				res.Error("FAIL", "Los campos del formulario son invalidos", "CMMFUE006", map[string]interface{}{
-					"error":   "Datos de entrada inválidos",
-					"details": errors,
-				}, NewEmptyErrorHandler())
+				res.Error("FAIL", "Los campos del formulario son invalidos", "CMMFUE006", formatErrorData(validationMessages(err)), NewEmptyErrorHandler())
 				return
 			}
 

@@ -191,7 +191,7 @@ func registerCallback(t *testing.T, name string, callback providers.CallbackFunc
 	if _, exists := providers.FunctionRegistry[name]; exists {
 		t.Fatalf("el callback %s ya existe en FunctionRegistry", name)
 	}
-	providers.FunctionRegistry[name] = callback
+	providers.FunctionRegistry[name] = providers.CallbackDefinition{Fn: callback}
 	t.Cleanup(func() { delete(providers.FunctionRegistry, name) })
 }
 

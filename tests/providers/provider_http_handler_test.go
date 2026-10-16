@@ -405,3 +405,43 @@ func TestExecuteRequest_CanceledContext(t *testing.T) {
 		t.Errorf("el servidor recibio %d peticiones, se esperaban 0", hits.Load())
 	}
 }
+
+func TestValidateRequestTarget(t *testing.T) {
+	t.Parallel()
+
+	apiKey := &providers.HTTPAuth{Type: "API_KEY", Key: "apikey", In: "QUERY"}
+	hosts := []string{"www.alphavantage.co"}
+	valid := providers.RequestCredentials{SecretRef: "ALPHAVANTAGE_APIKEY", AllowedHosts: hosts}
+
+	tests := []struct {
+		name         string
+		url          string
+		auth         *providers.HTTPAuth
+		credentials  providers.RequestCredentials
+		wantTracking string // vacio si es valida
+	}{
+		{name: "con auth valida", url: "https://www.alphavantage.co/query", auth: apiKey, credentials: valid},
+		{name: "sin auth ni hosts", url: "http://localhost:8080/series"},
+		{name: "url invalida", url: "https://www.alpha vantage.co/%zz", wantTracking: "PRHTTPE019"},
+		{name: "auth sin hosts", url: "https://www.alphavantage.co/query", auth: apiKey, credentials: providers.RequestCredentials{SecretRef: "X"}, wantTracking: "PRHTTPE011"},
+		{name: "auth sin https", url: "http://www.alphavantage.co/query", auth: apiKey, credentials: valid, wantTracking: "PRHTTPE012"},
+		{name: "host no permitido", url: "https://evil.com/query", credentials: valid, wantTracking: "PRHTTPE013"},
+		{name: "auth sin secret_ref", url: "https://www.alphavantage.co/query", auth: apiKey, credentials: providers.RequestCredentials{AllowedHosts: hosts}, wantTracking: "PRHTTPE020"},
+		{name: "secret_ref invalido", url: "https://www.alphavantage.co/query", auth: apiKey, credentials: providers.RequestCredentials{SecretRef: "../path", AllowedHosts: hosts}, wantTracking: "PRHTTPE020"},
+		{name: "api key sin in", url: "https://www.alphavantage.co/query", auth: &providers.HTTPAuth{Type: "API_KEY", Key: "apikey"}, credentials: valid, wantTracking: "PRHTTPE015"},
+		{name: "tipo de auth desconocido", url: "https://www.alphavantage.co/query", auth: &providers.HTTPAuth{Type: "OAUTH"}, credentials: valid, wantTracking: "PRHTTPE017"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := providers.ValidateRequestTarget(&providers.HTTPRequestConfig{URL: tt.url, Auth: tt.auth}, tt.credentials)
+			if tt.wantTracking == "" {
+				testutil.RequireEmptyError(t, err)
+				return
+			}
+			testutil.RequireTrackingCode(t, err, tt.wantTracking)
+		})
+	}
+}

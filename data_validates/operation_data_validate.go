@@ -4,6 +4,7 @@ import (
 	cmm "c_trd/common"
 	fv "c_trd/format_validates"
 	"c_trd/models"
+	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
 	"time"
@@ -213,4 +214,76 @@ func validateAssetExists(res *cmm.ResponseHandler, idAssetHex string) (models.As
 	}
 
 	return asset, true
+}
+
+// CreateConditionDataValidate valida que la API este activa, que su proveedor exista y que el callback lea el formato
+// de respuesta de la API. Construye la peticion con los parametros enviados y valida que pueda enviarse al proveedor.
+// Deja en el contexto la API, el proveedor y la peticion
+func CreateConditionDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateConditionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR011", nil, err)
+			return
+		}
+
+		idApi, err := cmm.ParseHexToObjectId(payload.IdApi)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		api, err := services.GetActiveApiService(idApi)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if api.ID.IsZero() {
+			res.Error("FAIL", "La API enviada no existe o no esta activa", "DVOPR012", payload.IdApi, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		providersByID, err := services.GetProvidersByIDsService([]primitive.ObjectID{api.IDProvider})
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		provider, exists := providersByID[api.IDProvider]
+		if !exists {
+			res.Error("FAIL", "El proveedor de la API no existe", "DVOPR013", api.IDProvider.Hex(), cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		callback, exists := providers.FunctionRegistry[payload.CallbackFunction]
+		if !exists {
+			res.Error("FAIL", "El callback enviado no existe", "DVOPR015", payload.CallbackFunction, cmm.NewEmptyErrorHandler())
+			return
+		}
+		if callback.ResponseFormat != api.ResponseFormat {
+			res.Error("FAIL", "El callback enviado no procesa el formato de respuesta de la API", "DVOPR016", map[string]string{
+				"callbackFormat": callback.ResponseFormat,
+				"apiFormat":      api.ResponseFormat,
+			}, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		httpRequest, err := services.BuildConditionHTTPRequestService(api, payload.Parameters)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		credentials := providers.RequestCredentials{SecretRef: provider.SecretRef, AllowedHosts: provider.AllowedHosts}
+		if err := providers.ValidateRequestTarget(&httpRequest, credentials); !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "api", &api)
+		r = cmm.SetInRequestContext(r, "provider", &provider)
+		r = cmm.SetInRequestContext(r, "httpRequest", &httpRequest)
+		next.ServeHTTP(w, r)
+	})
 }

@@ -34,6 +34,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 ## Domain notes
 
 - Request pipeline: router → format validate → data validate → controller. Data passes between them with SetInRequestContext and GetFromRequestContext, using the keys payload for the format validate and for controller could be any descriptive name.
+- Format validates: `common.FormatValidateMiddleware[T]` reads each field of `T` from where its `in` tag says: no tag or `in:"body"` is the JSON body, `in:"query"` is the query params (named by the `json` tag; slices are repeated params, `time.Time` accepts YYYY-MM-DD or RFC3339). Use it for every route instead of custom middlewares. Errors respond with `data.<field>.details`, `data.details` and `data.error`.
 - Tracking codes: they follow <layer><file>E<nnn>, for example SLISE001, PRHTTPE003 and DVHOOK002. Each should be unique.
 - Adding a condition callback: write the function in providers/, then register it in FunctionRegistry in callbacks.go. The DB stores its name in callback_function
 - Condition scheduling fields: is_processing is a lock, next_execution_at and interval_seconds drive the cron, and is_webhook_only conditions are skipped
@@ -59,6 +60,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Ask before changing model schemas or DB indexes.
 - Never compare `*ErrorHandler` with `nil` (neither `err != nil` nor `return x, nil`); always check `!err.IsEmtpy()` and return `cmm.NewEmptyErrorHandler()`. The method name is spelled `IsEmtpy` on purpose: don't rename it.
 - Tracking codes can not be a parameter of any function, any function with error must have his own tracking code
+- Don't create new files in `services/`. Put new services in `list_service.go` (reads/GETs from the database, tracking codes `SLISE<nnn>`) or `operation_service.go` (inserts, updates and the logic that prepares them, tracking codes `SOPRE<nnn>`). Only use another existing service file when it clearly fits better (e.g. a client of an external API like `alpha_vantage_service.go`)
 
 ## Gotchas
 

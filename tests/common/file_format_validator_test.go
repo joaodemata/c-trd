@@ -140,8 +140,15 @@ func TestFileFormatValidateMiddleware(t *testing.T) {
 			}
 
 			if !tt.wantNext {
-				if res := testutil.DecodeResponse(t, rec); res.Tracking != tt.wantTracking {
+				res := testutil.DecodeResponse(t, rec)
+				if res.Tracking != tt.wantTracking {
 					t.Errorf("tracking = %s, se esperaba %s", res.Tracking, tt.wantTracking)
+				}
+				// Los campos invalidos usan el nombre del formulario y la misma estructura que los errores JSON
+				if tt.wantTracking == "CMMFUE006" {
+					requireFieldErrors(t, res.Data, map[string]string{
+						"idAsset": "El campo 'idAsset' debe ser un ObjectID válido (24 caracteres hexadecimales)",
+					})
 				}
 				return
 			}
