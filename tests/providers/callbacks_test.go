@@ -13,7 +13,7 @@ import (
 func TestFunctionRegistry_Definitions(t *testing.T) {
 	t.Parallel()
 
-	known := []string{cmm.ResponseFormatAlphaVantagePutCallRatio, cmm.ResponseFormatGoogleTrendsSeries, cmm.ResponseFormatGoogleTrendsFile, cmm.ResponseFormatFredSeriesObservations}
+	known := []string{cmm.ResponseFormatAlphaVantagePutCallRatio, cmm.ResponseFormatGoogleTrendsSeries, cmm.ResponseFormatGoogleTrendsFile, cmm.ResponseFormatFredSeriesObservations, cmm.ResponseFormatPolymarketFedDecisions}
 	for name, definition := range providers.FunctionRegistry {
 		if definition.Fn == nil || definition.Description == "" {
 			t.Errorf("%s: funcion o descripcion vacia", name)
@@ -36,6 +36,7 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 		{"google trends", cmm.ResponseFormatGoogleTrendsSeries, []string{"GoogleTrendsHigh", "GoogleTrendsLow"}},
 		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin"}},
 		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesFalling", "FredSeriesRising"}},
+		{"polymarket fed", cmm.ResponseFormatPolymarketFedDecisions, []string{"FedNextMeetingCutLikely", "FedNextMeetingHikeLikely", "FedNextMeetingHoldLikely"}},
 		{"formato desconocido", "UNKNOWN", []string{}},
 		{"formato vacio", "", []string{}},
 	}

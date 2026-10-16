@@ -72,6 +72,21 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Description:    "La regresion lineal de la ventana de la serie de FRED tiene pendiente negativa",
 		ResponseFormat: cmm.ResponseFormatFredSeriesObservations,
 	},
+	"FedNextMeetingCutLikely": {
+		Fn:             FedNextMeetingCutLikely,
+		Description:    "Polymarket da 60% o mas de probabilidad a una bajada de tasa en la proxima reunion de la FED",
+		ResponseFormat: cmm.ResponseFormatPolymarketFedDecisions,
+	},
+	"FedNextMeetingHoldLikely": {
+		Fn:             FedNextMeetingHoldLikely,
+		Description:    "Polymarket da 60% o mas de probabilidad a mantener la tasa en la proxima reunion de la FED",
+		ResponseFormat: cmm.ResponseFormatPolymarketFedDecisions,
+	},
+	"FedNextMeetingHikeLikely": {
+		Fn:             FedNextMeetingHikeLikely,
+		Description:    "Polymarket da 60% o mas de probabilidad a una subida de tasa en la proxima reunion de la FED",
+		ResponseFormat: cmm.ResponseFormatPolymarketFedDecisions,
+	},
 }
 
 // ListCallbacksByResponseFormat retorna los callbacks que leen el formato de respuesta indicado, ordenados por nombre.
