@@ -1,0 +1,146 @@
+[
+  {
+    "slug": "fed-decision-in-october-20260617190323537",
+    "title": "Fed Decision in October?",
+    "endDate": "2026-10-29T03:59:00Z",
+    "closed": false,
+    "markets": [
+      {
+        "question": "Will the Fed decrease interest rates by 50+ bps after the October 2026 meeting?",
+        "groupItemTitle": "50+ bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0015\", \"0.9985\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed decrease interest rates by 25 bps after the October 2026 meeting?",
+        "groupItemTitle": "25 bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0035\", \"0.9965\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will there be no change in Fed interest rates after the October 2026 meeting?",
+        "groupItemTitle": "No change",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.865\", \"0.135\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 25 bps after the October 2026 meeting?",
+        "groupItemTitle": "25 bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.135\", \"0.865\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 50+ bps after the October 2026 meeting?",
+        "groupItemTitle": "50+ bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0035\", \"0.9965\"]",
+        "closed": false,
+        "acceptingOrders": true
+      }
+    ]
+  },
+  {
+    "slug": "fed-decision-in-december-20260729232808632",
+    "title": "Fed Decision in December?",
+    "endDate": "2026-12-10T04:59:00Z",
+    "closed": false,
+    "markets": [
+      {
+        "question": "Will the Fed decrease interest rates by 50+ bps after the December 2026 meeting?",
+        "groupItemTitle": "50+ bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0045\", \"0.9955\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed decrease interest rates by 25 bps after the December 2026 meeting?",
+        "groupItemTitle": "25 bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0065\", \"0.9935\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will there be no change in Fed interest rates after the December 2026 meeting?",
+        "groupItemTitle": "No change",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.215\", \"0.785\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 25 bps after the December 2026 meeting?",
+        "groupItemTitle": "25 bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.765\", \"0.235\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 50+ bps after the December 2026 meeting?",
+        "groupItemTitle": "50+ bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.03\", \"0.97\"]",
+        "closed": false,
+        "acceptingOrders": true
+      }
+    ]
+  },
+  {
+    "slug": "fed-decision-in-january-20260729233815502",
+    "title": "Fed Decision in January?",
+    "endDate": "2027-01-28T04:59:00Z",
+    "closed": false,
+    "markets": [
+      {
+        "question": "Will the Fed decrease interest rates by 50+ bps after the January 2027 meeting?",
+        "groupItemTitle": "50+ bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0055\", \"0.9945\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed decrease interest rates by 25 bps after the January 2027 meeting?",
+        "groupItemTitle": "25 bps decrease",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0155\", \"0.9845\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will there be no change in Fed interest rates after the January 2027 meeting?",
+        "groupItemTitle": "No change",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.655\", \"0.345\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 25 bps after the January 2027 meeting?",
+        "groupItemTitle": "25 bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.305\", \"0.695\"]",
+        "closed": false,
+        "acceptingOrders": true
+      },
+      {
+        "question": "Will the Fed increase interest rates by 50+ bps after the January 2027 meeting?",
+        "groupItemTitle": "50+ bps increase",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "outcomePrices": "[\"0.0125\", \"0.9875\"]",
+        "closed": false,
+        "acceptingOrders": true
+      }
+    ]
+  }
+]
