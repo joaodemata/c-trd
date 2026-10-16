@@ -3,6 +3,7 @@ package data_validates
 import (
 	cmm "c_trd/common"
 	fv "c_trd/format_validates"
+	"c_trd/models"
 	"c_trd/services"
 	"net/http"
 	"time"
@@ -27,7 +28,7 @@ func GoogleTrendsUploadDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		idAsset, ok := validateAssetExists(res, payload.IdAsset)
+		asset, ok := validateAssetExists(res, payload.IdAsset)
 		if !ok {
 			return
 		}
@@ -39,7 +40,7 @@ func GoogleTrendsUploadDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		r = cmm.SetInRequestContext(r, "idAsset", idAsset)
+		r = cmm.SetInRequestContext(r, "idAsset", asset.ID)
 		r = cmm.SetInRequestContext(r, "trendsSeries", &series)
 		next.ServeHTTP(w, r)
 	})
@@ -56,34 +57,160 @@ func GoogleTrendsSeriesDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		idAsset, ok := validateAssetExists(res, payload.IdAsset)
+		asset, ok := validateAssetExists(res, payload.IdAsset)
 		if !ok {
 			return
 		}
 
-		r = cmm.SetInRequestContext(r, "idAsset", idAsset)
+		r = cmm.SetInRequestContext(r, "idAsset", asset.ID)
 		next.ServeHTTP(w, r)
 	})
 }
 
+// CreateTriggerDataValidate valida que el tag no este en uso y que el asset, la accion, la temporalidad
+// y las condiciones existan. Deja en el contexto los documentos que el controller copia al trigger
+func CreateTriggerDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR005", nil, err)
+			return
+		}
+
+		// El tag es unico entre los triggers no borrados
+		existing, err := services.GetTriggerByTagService(payload.Tag)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if !existing.ID.IsZero() {
+			res.Error("FAIL", "Ya existe un trigger con el tag enviado", "DVOPR006", payload.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		asset, ok := validateAssetExists(res, payload.IdAsset)
+		if !ok {
+			return
+		}
+
+		action, ok := findCatalog(res, payload.IdAction, cmm.CatalogTypeAction)
+		if !ok {
+			return
+		}
+		if action.ID.IsZero() {
+			res.Error("FAIL", "La accion enviada no existe", "DVOPR007", payload.IdAction, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		timeframe, ok := findCatalog(res, payload.IdCandlestickTimeframe, cmm.CatalogTypeCandleStick)
+		if !ok {
+			return
+		}
+		if timeframe.ID.IsZero() {
+			res.Error("FAIL", "La temporalidad enviada no existe", "DVOPR008", payload.IdCandlestickTimeframe, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		// Sin una duracion conocida no se puede calcular la expiracion de las oportunidades
+		if !cmm.IsKnownTimeframeTag(timeframe.Tag) {
+			res.Error("FAIL", "La temporalidad enviada no tiene una duracion de vela valida", "DVOPR009", timeframe.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		conditions, ok := validateConditionsExist(res, payload.Conditions)
+		if !ok {
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "asset", &asset)
+		r = cmm.SetInRequestContext(r, "action", &action)
+		r = cmm.SetInRequestContext(r, "timeframe", &timeframe)
+		r = cmm.SetInRequestContext(r, "conditions", conditions)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// findCatalog busca el catalogo del tipo indicado y responde los errores de parseo o de base de datos. Si no existe retorna
+// el catalogo vacio sin responder, cada llamador responde con su propio tracking code. Retorna false si ya se respondio
+func findCatalog(res *cmm.ResponseHandler, idCatalogHex string, typeCatalog string) (models.CatalogsModelType, bool) {
+	idCatalog, err := cmm.ParseHexToObjectId(idCatalogHex)
+	if !err.IsEmtpy() {
+		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+		return models.CatalogsModelType{}, false
+	}
+
+	catalog, err := services.GetCatalogService(idCatalog, typeCatalog)
+	if !err.IsEmtpy() {
+		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+		return catalog, false
+	}
+
+	return catalog, true
+}
+
+// validateConditionsExist busca las condiciones y responde el error si alguna no existe. Se retornan en el
+// mismo orden en que fueron enviadas. Retorna false si ya se respondio
+func validateConditionsExist(res *cmm.ResponseHandler, idConditionsHex []string) ([]models.ConditionsModelType, bool) {
+	ids := make([]primitive.ObjectID, 0, len(idConditionsHex))
+	for _, idHex := range idConditionsHex {
+		id, err := cmm.ParseHexToObjectId(idHex)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+
+	found, err := services.GetConditionsByIDsService(ids)
+	if !err.IsEmtpy() {
+		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+		return nil, false
+	}
+
+	byID := make(map[primitive.ObjectID]models.ConditionsModelType, len(found))
+	for _, condition := range found {
+		byID[condition.ID] = condition
+	}
+
+	conditions := make([]models.ConditionsModelType, 0, len(ids))
+	missing := []string{}
+	for _, id := range ids {
+		condition, exists := byID[id]
+		if !exists {
+			missing = append(missing, id.Hex())
+			continue
+		}
+		conditions = append(conditions, condition)
+	}
+
+	if len(missing) > 0 {
+		res.Error("FAIL", "Las condiciones enviadas no existen", "DVOPR010", missing, cmm.NewEmptyErrorHandler())
+		return nil, false
+	}
+
+	return conditions, true
+}
+
 // validateAssetExists busca el asset y responde el error si no existe. Retorna false si ya se respondio
-func validateAssetExists(res *cmm.ResponseHandler, idAssetHex string) (primitive.ObjectID, bool) {
+func validateAssetExists(res *cmm.ResponseHandler, idAssetHex string) (models.AssetsModelType, bool) {
 	idAsset, err := cmm.ParseHexToObjectId(idAssetHex)
 	if !err.IsEmtpy() {
 		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return idAsset, false
+		return models.AssetsModelType{}, false
 	}
 
 	asset, err := services.GetAssetService(idAsset)
 	if !err.IsEmtpy() {
 		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return idAsset, false
+		return asset, false
 	}
 
 	if asset.ID.IsZero() {
 		res.Error("FAIL", "El asset enviado no existe", "DVOPR003", idAssetHex, cmm.NewEmptyErrorHandler())
-		return idAsset, false
+		return asset, false
 	}
 
-	return idAsset, true
+	return asset, true
 }

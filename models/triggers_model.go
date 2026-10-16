@@ -1,7 +1,10 @@
 package models
 
 import (
+	"os"
 	"time"
+
+	cmm "c_trd/common"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -41,8 +44,9 @@ type TriggersModelType struct {
 	TagCandlestickTimeframe string             `bson:"tag_candlestick_timeframe" json:"tagCandlestickTimeframe"`
 	CandlestickTimeframe    string             `bson:"candlestick_timeframe" json:"candlestickTimeframe"`
 	// Extra
-	IdReference primitive.ObjectID `bson:"id_reference" json:"idReference" description:"Trigger generado a partir de otro trigger"`
-	PineCode    string             `bson:"pine_code" json:"pineCode" description:"Codigo de pine utilizado en trading view para el trigger"`
+	// Opcionales: se guardan como null si no vienen
+	IdReference *primitive.ObjectID `bson:"id_reference" json:"idReference" description:"Trigger generado a partir de otro trigger"`
+	PineCode    *string             `bson:"pine_code" json:"pineCode" description:"Codigo de pine utilizado en trading view para el trigger"`
 
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
@@ -58,3 +62,75 @@ type TriggersModelType struct {
 var TriggersModel *mongo.Collection
 
 // Helpers
+
+// CONSTRUCTORS
+
+type TriggerOptionalData struct {
+	Conditions  []ConditionsModelType // Se copian los datos de cada condicion al trigger
+	IdReference *primitive.ObjectID
+	PineCode    *string
+}
+
+// NewTriggerModel crea un trigger nuevo con status activo. Los arreglos opcionales se guardan como []
+// y los demas campos opcionales como null para mantener la integridad de la data
+func NewTriggerModel(
+	// --- Trigger ---
+	tag, name, description string,
+	// --- Asset ---
+	idAsset primitive.ObjectID, tagAsset, asset string,
+	// --- Action ---
+	idAction primitive.ObjectID, tagAction, action string,
+	// --- Candles ---
+	maxCandles int, idTimeframe primitive.ObjectID, tagTimeframe, timeframe string,
+	// --- Opcionales ---
+	opts *TriggerOptionalData,
+) (TriggersModelType, *cmm.ErrorHandler) {
+	now := time.Now().UTC()
+
+	trigger := TriggersModelType{
+		ID:                      primitive.NewObjectID(),
+		Tag:                     tag,
+		Name:                    name,
+		Description:             description,
+		IDAsset:                 idAsset,
+		TagAsset:                tagAsset,
+		Asset:                   asset,
+		IDAction:                idAction,
+		TagAction:               tagAction,
+		Action:                  action,
+		IDStatus:                cmm.GenericStatusActive.ID,
+		TagStatus:               cmm.GenericStatusActive.Tag,
+		Status:                  cmm.GenericStatusActive.Name,
+		Conditions:              []conditionTriggers{},
+		MaxCandlestickQty:       maxCandles,
+		IDCandlestickTimeframe:  idTimeframe,
+		TagCandlestickTimeframe: tagTimeframe,
+		CandlestickTimeframe:    timeframe,
+
+		// Auditoría
+		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),
+		CoreVersion: "1.0.0", // TODO: poner version
+		UserDB:      os.Getenv("JM_CTRD_MDB_USER"),
+		SchemaDB:    "1.0.0", // TODO: mejorar estructura
+
+		CreatedDate:   now,
+		LastUpdatedAt: now,
+		LogicalDelete: false,
+	}
+
+	if opts != nil {
+		for _, condition := range opts.Conditions {
+			trigger.Conditions = append(trigger.Conditions, conditionTriggers{
+				IDCondition:          condition.ID,
+				IDProvider:           condition.IDProvider,
+				NameProvider:         condition.NameProvider,
+				NameCondition:        condition.NameCondition,
+				DescriptionCondition: condition.DescriptionCondition,
+			})
+		}
+		trigger.IdReference = opts.IdReference
+		trigger.PineCode = opts.PineCode
+	}
+
+	return trigger, cmm.NewEmptyErrorHandler()
+}

@@ -73,6 +73,7 @@ Request pipeline: **router → format validate → data validate → controller*
 | `POST` | `/hook/trading_view` | Receives a TradingView alert and creates (or returns) the ONGOING opportunity of the trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
 | `GET` | `/list/opportunities` | Paginated list of opportunities. JSON body (optional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Placeholder, not implemented yet |
+| `POST` | `/operation/create/trigger` | Creates a trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (optional) }`. The tag must be unique; asset, action, timeframe and conditions must exist |
 | `POST` | `/operation/google_trends/upload` | Uploads the Google Trends CSV of an asset and replaces the previous one. `multipart/form-data` with the fields `idAsset` and `file` (`.csv`, max 1 MB) |
 | `POST` | `/operation/google_trends/series` | Series of the asset's CSV. Body: `{ "idAsset": "<ObjectID>" }`. Only answers requests from the server itself (used by conditions) |
 | `GET` | `/ws` | Websocket hub |
@@ -252,6 +253,7 @@ Pipeline de una petición: **router → format validate → data validate → co
 | `POST` | `/hook/trading_view` | Recibe una alerta de TradingView y crea (o retorna) la oportunidad ONGOING del trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
 | `GET` | `/list/opportunities` | Listado paginado de oportunidades. Body JSON (opcional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Pendiente, aún no implementado |
+| `POST` | `/operation/create/trigger` | Crea un trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (opcional) }`. El tag debe ser único; el asset, la acción, la temporalidad y las condiciones deben existir |
 | `POST` | `/operation/google_trends/upload` | Sube el CSV de Google Trends de un asset y reemplaza el anterior. `multipart/form-data` con los campos `idAsset` y `file` (`.csv`, máx. 1 MB) |
 | `POST` | `/operation/google_trends/series` | Serie del CSV del asset. Body: `{ "idAsset": "<ObjectID>" }`. Solo responde peticiones del mismo servidor (la usan las condiciones) |
 | `GET` | `/ws` | Hub de websocket |

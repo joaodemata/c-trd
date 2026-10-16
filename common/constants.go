@@ -32,6 +32,15 @@ var (
 	OpportunityStatusCanceled = CatalogStatus{ID: mustParseObjectId("6a84257d9687e916f29f234c"), Tag: "OPPORTUNITY-CANCELED", Name: "Cancelada"}
 )
 
+// Valores de type_catalog en la coleccion catalogs
+const (
+	CatalogTypeGenericStatus     = "GENERIC_STATUS"
+	CatalogTypeOpportunityStatus = "OPPORTUNITY_STATUS"
+	CatalogTypeAction            = "TYPE_ACTION"
+	CatalogTypeAsset             = "TYPE_ASSET"
+	CatalogTypeCandleStick       = "TYPE_CANDLE_STICK"
+)
+
 // Base de datos
 const (
 	// Timeout de cada llamada a la base de datos

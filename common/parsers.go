@@ -8,29 +8,35 @@ import (
 
 // TODO: MEJORAR NOMBRE Y PROPOSITO DE ESTE ARCHIVO
 
-// parseTimeframeTag convierte el tag de la vela (ej: "1H", "15M", "1D") a un time.Duration
+// Duracion de cada vela segun su tag. Son los tags de type_catalog TYPE_CANDLE_STICK en la coleccion catalogs,
+// si cambian en base de datos deben actualizarse aqui
+var timeframeDurations = map[string]time.Duration{
+	"1-MINUTE":   1 * time.Minute,
+	"5-MINUTES":  5 * time.Minute,
+	"15-MINUTES": 15 * time.Minute,
+	"30-MINUTES": 30 * time.Minute,
+	"1-HOUR":     1 * time.Hour,
+	"2-HOURS":    2 * time.Hour,
+	"4-HOURS":    4 * time.Hour,
+	"1-DAY":      24 * time.Hour,
+	"1-WEEK":     7 * 24 * time.Hour,
+	// Un mes no tiene duracion fija, se aproxima a 30 dias
+	"1-MONTH": 30 * 24 * time.Hour,
+}
+
+// parseTimeframeTag convierte el tag de la vela (ej: "1-HOUR", "15-MINUTES", "1-DAY") a un time.Duration
 func ParseTimeframeTag(tag string) time.Duration {
-	switch tag {
-	case "1m", "1M":
-		return 1 * time.Minute
-	case "5m", "5M":
-		return 5 * time.Minute
-	case "15m", "15M":
-		return 15 * time.Minute
-	case "30m", "30M":
-		return 30 * time.Minute
-	case "1h", "1H":
-		return 1 * time.Hour
-	case "4h", "4H":
-		return 4 * time.Hour
-	case "1d", "1D":
-		return 24 * time.Hour
-	case "1w", "1W":
-		return 7 * 24 * time.Hour
-	default:
-		// Valor por defecto en caso de un tag desconocido (puedes ajustarlo o retornar error)
-		return 1 * time.Hour
+	if duration, ok := timeframeDurations[tag]; ok {
+		return duration
 	}
+	// Valor por defecto en caso de un tag desconocido (puedes ajustarlo o retornar error)
+	return 1 * time.Hour
+}
+
+// IsKnownTimeframeTag indica si el tag de la vela tiene una duracion conocida
+func IsKnownTimeframeTag(tag string) bool {
+	_, ok := timeframeDurations[tag]
+	return ok
 }
 
 // Convierte un hexadecimal en un objectId
