@@ -146,7 +146,7 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 	return result, totalDocs, cmm.NewEmptyErrorHandler()
 }
 
-// GetActiveOpportunity busca si hay una oportunidad activa de algun idTrigger
+// GetActiveOpportunity busca si hay una oportunidad en curso o activa de algun idTrigger
 func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesModelType, *cmm.ErrorHandler) {
 	var result models.OpportunitiesModelType
 
@@ -154,10 +154,13 @@ func GetActiveOpportunity(idTrigger primitive.ObjectID) (models.OpportunitiesMod
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 3. Crear filtro: idTrigger, status activo y que no esté borrado lógicamente
+	// 3. Crear filtro: idTrigger, status en curso o activo y que no esté borrado lógicamente
 	filter := bson.M{
-		"id_trigger":     idTrigger,
-		"tag_status":     cmm.OpportunityStatusOngoing.Tag,
+		"id_trigger": idTrigger,
+		"tag_status": bson.M{"$in": []string{
+			cmm.OpportunityStatusOngoing.Tag,
+			cmm.OpportunityStatusActive.Tag,
+		}},
 		"logical_delete": false,
 	}
 
