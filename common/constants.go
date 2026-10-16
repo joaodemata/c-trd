@@ -86,6 +86,8 @@ const (
 	ConditionEvaluationWorkers = 10
 	// Intervalo por defecto si la condicion no tiene interval_seconds
 	DefaultConditionIntervalSeconds = 60
+	// Intervalo minimo al crear una condicion, el ticker del cronjob corre cada minuto
+	ConditionMinIntervalSeconds = 60
 	// Tiempo maximo para evaluar todas las condiciones de un ciclo (el ticker corre cada minuto)
 	ConditionEvaluationTimeout = 50 * time.Second
 )

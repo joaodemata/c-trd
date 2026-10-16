@@ -225,3 +225,21 @@ func SaveConditionResultsService(changes []ConditionStatusChange, updates []Cond
 
 	return cmm.NewEmptyErrorHandler()
 }
+
+// CreateConditionService inserta una condicion nueva y retorna su id
+func CreateConditionService(condition models.ConditionsModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	result, err := models.ConditionsModel.InsertOne(ctx, condition)
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SCONE010")
+	}
+
+	insertedID, ok := result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return "", cmm.NewErrorHandler(nil, "Error parseando el object ID.", cmm.LevelFatal, "SCONE011")
+	}
+
+	return insertedID.Hex(), cmm.NewEmptyErrorHandler()
+}

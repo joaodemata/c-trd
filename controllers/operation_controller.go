@@ -141,3 +141,62 @@ func GoogleTrendsSeriesController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "Serie de Google Trends", "COPR002", series)
 	}
 }
+
+// CreateConditionController registra una condicion nueva con la API, el proveedor y la peticion validados en el data validate
+func CreateConditionController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateConditionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		api, err := cmm.GetFromRequestContext[*models.ApisModelType](r, "api")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		provider, err := cmm.GetFromRequestContext[*models.ProvidersModelType](r, "provider")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		httpRequest, err := cmm.GetFromRequestContext[*providers.HTTPRequestConfig](r, "httpRequest")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		condition, err := models.NewConditionModel(
+			provider.ID, provider.Name,
+			payload.NameCondition, payload.DescriptionCondition,
+			api.ID,
+			payload.Metadata,
+			models.ConditionCronjobData{
+				HttpRequest:      *httpRequest,
+				CallbackFunction: payload.CallbackFunction,
+				IntervalSeconds:  payload.IntervalSeconds,
+			},
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idCondition, err := services.CreateConditionService(condition)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"idCondition": idCondition,
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Condicion creada exitosamente", "COPR004", data)
+	}
+}

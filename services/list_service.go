@@ -1,11 +1,13 @@
 package services
 
 import (
-	"c_trd/models"
 	"context"
+	"regexp"
 	"time"
 
 	cmm "c_trd/common"
+	"c_trd/models"
+	"c_trd/providers"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -197,6 +199,213 @@ func GetAssetService(idAsset primitive.ObjectID) (models.AssetsModelType, *cmm.E
 		}
 
 		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SASSE001")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetActiveApisService lista paginadas las APIs activas con lo que el frontend necesita para crear una condicion:
+// sus parametros y su formato de respuesta. No retorna la configuracion de la peticion (url, auth, data fija).
+// La busqueda es literal (sin regex) sobre el nombre, tag, descripcion y proveedor; las fechas filtran created_date.
+// Retorna: las APIs de la pagina, el total de documentos encontrados (para paginación) y el error handler
+func GetActiveApisService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time) ([]models.ApisModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.ApisModelType, 0)
+
+	// Validaciones de seguridad para la paginación
+	if Limit <= 0 {
+		Limit = 10 // Valor por defecto
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"is_active": true, "logical_delete": false}
+
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+
+	if Search != "" {
+		// Se escapa el texto para que la busqueda no se interprete como regex
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"name": regexPattern},
+			{"tag": regexPattern},
+			{"description": regexPattern},
+			{"name_provider": regexPattern},
+		}
+	}
+
+	// Total de documentos sin limit ni skip para el paginador del frontend
+	totalDocs, err := models.ApisModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las APIs", cmm.LevelDatabase, "SLISE014")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.M{"name": 1}).
+		SetProjection(bson.M{
+			"_id":             1,
+			"id_provider":     1,
+			"tag_provider":    1,
+			"name_provider":   1,
+			"tag":             1,
+			"name":            1,
+			"description":     1,
+			"is_active":       1,
+			"response_format": 1,
+			"parameters":      1,
+		})
+
+	cursor, err := models.ApisModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las APIs", cmm.LevelDatabase, "SLISE007")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las APIs", cmm.LevelDatabase, "SLISE008")
+	}
+
+	// Una API sin parametros en base de datos se retorna con [] para el frontend
+	for i := range result {
+		if result[i].Parameters == nil {
+			result[i].Parameters = []models.ApiParameter{}
+		}
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetActiveApiService busca una API activa y no borrada por su ID. Si no existe retorna la API vacia sin error
+func GetActiveApiService(idApi primitive.ObjectID) (models.ApisModelType, *cmm.ErrorHandler) {
+	var result models.ApisModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idApi, "is_active": true, "logical_delete": false}
+
+	err := models.ApisModel.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE009")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// ListCallbacksService lista los callbacks compatibles con el formato de respuesta de una API
+func ListCallbacksService(responseFormat string) []providers.CallbackInfo {
+	return providers.ListCallbacksByResponseFormat(responseFormat)
+}
+
+// GetCatalogService busca un catalogo no borrado por su ID y su type_catalog. Si no existe o es de otro tipo
+// retorna el catalogo vacio sin error
+func GetCatalogService(idCatalog primitive.ObjectID, typeCatalog string) (models.CatalogsModelType, *cmm.ErrorHandler) {
+	var result models.CatalogsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idCatalog, "type_catalog": typeCatalog, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"_id": 1, "type_catalog": 1, "tag": 1, "name": 1})
+
+	err := models.CatalogsModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE010")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetTriggerByTagService busca un trigger no borrado por su tag. Si no existe retorna el trigger vacio sin error
+func GetTriggerByTagService(tag string) (models.TriggersModelType, *cmm.ErrorHandler) {
+	var result models.TriggersModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"tag": tag, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"_id": 1, "tag": 1})
+
+	err := models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE011")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetProvidersByIDsService obtiene los proveedores activos con los ids indicados, indexados por id
+func GetProvidersByIDsService(ids []primitive.ObjectID) (map[primitive.ObjectID]models.ProvidersModelType, *cmm.ErrorHandler) {
+	result := make(map[primitive.ObjectID]models.ProvidersModelType)
+	if len(ids) == 0 {
+		return result, cmm.NewEmptyErrorHandler()
+	}
+
+	// Muchas condiciones comparten proveedor, eliminamos los ids repetidos antes de consultar
+	seen := make(map[primitive.ObjectID]struct{}, len(ids))
+	uniqueIDs := make([]primitive.ObjectID, 0)
+	for _, id := range ids {
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			uniqueIDs = append(uniqueIDs, id)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"_id":            bson.M{"$in": uniqueIDs},
+		"logical_delete": false,
+	}
+
+	// Solo necesitamos los datos de autenticacion del proveedor
+	opts := options.Find().SetProjection(bson.M{
+		"tag":           1,
+		"name":          1,
+		"secret_ref":    1,
+		"allowed_hosts": 1,
+	})
+
+	cursor, err := models.ProvidersModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando los proveedores", cmm.LevelDatabase, "SLISE012")
+	}
+	defer cursor.Close(ctx)
+
+	found := make([]models.ProvidersModelType, 0)
+	if err = cursor.All(ctx, &found); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando los proveedores", cmm.LevelDatabase, "SLISE013")
+	}
+
+	for _, provider := range found {
+		result[provider.ID] = provider
 	}
 
 	return result, cmm.NewEmptyErrorHandler()

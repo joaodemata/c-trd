@@ -221,6 +221,35 @@ func doRequest(ctx context.Context, client *http.Client, method string, target *
 	return nil, retryable, cmm.NewErrorHandler(statusErr, "Request returned a non-2xx status", cmm.LevelError, "PRHTTPE004")
 }
 
+// ValidateRequestTarget valida al crear una condicion que la peticion cumpla las mismas reglas que ExecuteRequest
+// aplica antes de enviarla: host permitido por el proveedor, https y secret_ref si lleva auth, y auth bien configurado.
+// No lee el secreto, la variable de entorno puede no existir en la maquina que crea la condicion
+func ValidateRequestTarget(config *HTTPRequestConfig, credentials RequestCredentials) *cmm.ErrorHandler {
+	parsedURL, err := url.Parse(config.URL)
+	if err != nil {
+		return cmm.NewErrorHandler(redactURLError(err), "error parsing the URL.", cmm.LevelError, "PRHTTPE019")
+	}
+
+	if err := validateHost(parsedURL, credentials.AllowedHosts, config.Auth != nil); !err.IsEmtpy() {
+		return err
+	}
+
+	if config.Auth == nil {
+		return cmm.NewEmptyErrorHandler()
+	}
+
+	if !secretRefPattern.MatchString(credentials.SecretRef) {
+		return cmm.NewErrorHandler(fmt.Errorf("secret_ref %q", credentials.SecretRef), "the request requires auth but the provider has no valid secret_ref", cmm.LevelError, "PRHTTPE020")
+	}
+
+	// Se usa un secreto de ejemplo solo para validar el tipo, key e in del auth (BASIC exige usuario:password)
+	if _, _, err := authParams(config.Auth, "user:password"); !err.IsEmtpy() {
+		return err
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
 // resolveSecret obtiene el secreto del proveedor desde la variable de entorno JM_CTRD_SECRET_<secretRef>
 func resolveSecret(secretRef string) (string, *cmm.ErrorHandler) {
 	if secretRef == "" {

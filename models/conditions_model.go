@@ -1,7 +1,10 @@
 package models
 
 import (
+	cmm "c_trd/common"
 	"c_trd/providers"
+	"fmt"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -49,3 +52,68 @@ type ConditionsModelType struct {
 
 // Model pointer
 var ConditionsModel *mongo.Collection
+
+// CONSTRUCTORS
+
+// ConditionCronjobData datos con los que el cronjob evalua la condicion
+type ConditionCronjobData struct {
+	HttpRequest      providers.HTTPRequestConfig
+	CallbackFunction string
+	IntervalSeconds  int
+}
+
+// NewConditionModel crea una condicion de cronjob (is_webhook_only false) con status inactivo hasta que se cumpla.
+// Se programa para evaluarse en la siguiente ejecucion del cronjob. Metadata siempre se guarda como objeto
+func NewConditionModel(
+	// --- Proveedor ---
+	idProvider primitive.ObjectID, nameProvider string,
+	// --- Condicion ---
+	nameCondition, descriptionCondition string,
+	idApi primitive.ObjectID,
+	metadata map[string]any,
+	// --- Cronjob ---
+	cronjob ConditionCronjobData,
+) (ConditionsModelType, *cmm.ErrorHandler) {
+	now := time.Now().UTC()
+
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+
+	condition := ConditionsModelType{
+		ID:                   primitive.NewObjectID(),
+		IDProvider:           idProvider,
+		NameProvider:         nameProvider,
+		NameCondition:        nameCondition,
+		DescriptionCondition: descriptionCondition,
+		Metadata:             metadata,
+		IsWebhookOnly:        false,
+		IsProcessing:         false,
+		IDApi:                idApi,
+		IDStatus:             cmm.GenericStatusInactive.ID,
+		TagStatus:            cmm.GenericStatusInactive.Tag,
+		Status:               cmm.GenericStatusInactive.Name,
+
+		// Auditoría
+		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),
+		CoreVersion: "1.0.0", // TODO: poner version
+		UserDB:      os.Getenv("JM_CTRD_MDB_USER"),
+		SchemaDB:    "1.0.0", // TODO: mejorar estructura
+
+		CreatedDate:   now,
+		LastUpdatedAt: now,
+		LogicalDelete: false,
+	}
+
+	if cronjob.IntervalSeconds < cmm.ConditionMinIntervalSeconds {
+		return condition, cmm.NewErrorHandler(fmt.Errorf("interval_seconds %d", cronjob.IntervalSeconds), fmt.Sprintf("El intervalo minimo es de %d segundos", cmm.ConditionMinIntervalSeconds), cmm.LevelError, "MCONE001")
+	}
+
+	interval := cronjob.IntervalSeconds
+	condition.HttpRequest = cronjob.HttpRequest
+	condition.CallbackFunction = cronjob.CallbackFunction
+	condition.IntervalSeconds = &interval
+	condition.NextExecutionAt = &now
+
+	return condition, cmm.NewEmptyErrorHandler()
+}
