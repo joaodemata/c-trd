@@ -18,6 +18,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // CreateOpportunityService inserts a new document into the opportunities collection
@@ -34,6 +35,11 @@ func CreateOpportunityService(opportunity models.OpportunitiesModelType) (string
 	// 3. Execute query
 	result, err := models.OpportunitiesModel.InsertOne(ctx, opportunity)
 	if err != nil {
+		// El indice unico uniq_opp_trigger_open rechazo el insert: ya hay una oportunidad en curso o activa del trigger
+		if mongo.IsDuplicateKeyError(err) {
+			return "", cmm.NewErrorHandler(err, "Ya existe una oportunidad en curso o activa para este trigger.", cmm.LevelError, "SOPRE021")
+		}
+
 		return "", cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SOPRE001")
 	}
 
@@ -73,6 +79,34 @@ func UpdateOpportunitiesStatus(ctx context.Context, idCondition primitive.Object
 	}
 
 	return cmm.NewEmptyErrorHandler()
+}
+
+// ExpireOpportunitiesService cambia a EXPIRED las oportunidades en curso cuya fecha de expiracion ya paso.
+// Cada documento se actualiza de forma atomica, asi no se pisa una oportunidad que cambio de status
+func ExpireOpportunitiesService(now time.Time) (int64, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"tag_status":      cmm.OpportunityStatusOngoing.Tag,
+		"logical_delete":  false,
+		"expiration_date": bson.M{"$lte": now},
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"id_status":       cmm.OpportunityStatusExpired.ID,
+			"tag_status":      cmm.OpportunityStatusExpired.Tag,
+			"status":          cmm.OpportunityStatusExpired.Name,
+			"last_updated_at": now,
+		},
+	}
+
+	result, err := models.OpportunitiesModel.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, cmm.NewErrorHandler(err, "Error expirando las oportunidades.", cmm.LevelDatabase, "SOPRE020")
+	}
+
+	return result.ModifiedCount, cmm.NewEmptyErrorHandler()
 }
 
 // UpdateCondition actualiza la condición

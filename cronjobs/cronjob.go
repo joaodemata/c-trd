@@ -11,6 +11,9 @@ import (
 // Evita que dos ejecuciones de ProcessConditions se solapen si una tarda mas de un tick
 var isCheckingConditions atomic.Bool
 
+// Evita que dos ejecuciones de ProcessExpiredOpportunities se solapen
+var isCheckingOpportunities atomic.Bool
+
 // StartTicker ahora recibe un ctx (Context)
 func InitCronjobs(ctx context.Context) {
 	go func() {
@@ -33,6 +36,7 @@ func InitCronjobs(ctx context.Context) {
 
 				// _ ,err := services.FetchDataService("BTC", "USD")
 				// Llamamos con una go rutine el servicio de actualizar oportunidades expiradas
+				go runCheckOpportunities()
 				// Llamamos con una go rutine el servicio de actualizar condiciones y verificar si la oportunidad pasa a activa
 				go runCheckConditions()
 			}
@@ -49,4 +53,15 @@ func runCheckConditions() {
 	defer isCheckingConditions.Store(false)
 
 	ProcessConditions()
+}
+
+// runCheckOpportunities ejecuta ProcessExpiredOpportunities si no hay otra ejecucion en curso
+func runCheckOpportunities() {
+	if !isCheckingOpportunities.CompareAndSwap(false, true) {
+		log.Println("ProcessExpiredOpportunities sigue en ejecucion, se omite este tick")
+		return
+	}
+	defer isCheckingOpportunities.Store(false)
+
+	ProcessExpiredOpportunities()
 }
