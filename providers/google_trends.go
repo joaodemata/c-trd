@@ -40,7 +40,16 @@ func GoogleTrendsHighCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return isTrendInHighZone(series), cmm.NewEmptyErrorHandler()
+	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
+	// Una serie plana no tiene zona alta
+	low, high := seriesRange(series)
+	highZone := rangeLevel(low, high, googleTrendsHighThreshold)
+	lastValue := series[len(series)-1]
+	isFlat := low == high
+
+	isHigh := !isFlat && lastValue >= highZone
+
+	return isHigh, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsLowCallback retorna true si el ultimo valor de interes esta en la zona baja del rango de la serie
@@ -50,7 +59,16 @@ func GoogleTrendsLowCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return isTrendInLowZone(series), cmm.NewEmptyErrorHandler()
+	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
+	// Una serie plana no tiene zona baja
+	low, high := seriesRange(series)
+	lowZone := rangeLevel(low, high, googleTrendsLowThreshold)
+	lastValue := series[len(series)-1]
+	isFlat := low == high
+
+	isLow := !isFlat && lastValue <= lowZone
+
+	return isLow, cmm.NewEmptyErrorHandler()
 }
 
 // parseGoogleTrendsSeries extrae la serie del primer query con los puntos completos.
@@ -103,47 +121,4 @@ func parseTrendValue(raw json.RawMessage, date string) (float64, *cmm.ErrorHandl
 	}
 
 	return number, cmm.NewEmptyErrorHandler()
-}
-
-// Las siguientes funciones reciben una serie con al menos googleTrendsMinPoints puntos,
-// los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta
-
-// trendRange retorna el minimo y el maximo de la serie
-func trendRange(series []float64) (float64, float64) {
-	low, high := series[0], series[0]
-	for _, value := range series {
-		low = min(low, value)
-		high = max(high, value)
-	}
-	return low, high
-}
-
-// isTrendInHighZone el ultimo valor esta en el 10% superior del rango. Una serie plana no tiene zona alta
-func isTrendInHighZone(series []float64) bool {
-	low, high := trendRange(series)
-	if high == low {
-		return false
-	}
-	return series[len(series)-1] >= low+(high-low)*googleTrendsHighThreshold
-}
-
-// isTrendInLowZone el ultimo valor esta en el 10% inferior del rango. Una serie plana no tiene zona baja
-func isTrendInLowZone(series []float64) bool {
-	low, high := trendRange(series)
-	if high == low {
-		return false
-	}
-	return series[len(series)-1] <= low+(high-low)*googleTrendsLowThreshold
-}
-
-// isTrendNewMaximum el ultimo valor supera a todos los anteriores
-func isTrendNewMaximum(series []float64) bool {
-	_, previousHigh := trendRange(series[:len(series)-1])
-	return series[len(series)-1] > previousHigh
-}
-
-// isTrendNewMinimum el ultimo valor es menor que todos los anteriores
-func isTrendNewMinimum(series []float64) bool {
-	previousLow, _ := trendRange(series[:len(series)-1])
-	return series[len(series)-1] < previousLow
 }

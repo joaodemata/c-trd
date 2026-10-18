@@ -42,6 +42,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Timeouts: every DB call uses a context.WithTimeout (5s).
 - An opportunity can have zero or multiple conditions, when all the conditions are met the opportunity changes to status ACTIVE. The life flow of the opportunities are OPPORTUNITY-ONGOING -> OPPORTUNITY-ACTIVE -> OPPORTUNITY-FINISHED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-EXPIRED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-CANCELED
 - An opportunity can only be created with a trigger
+- Callbacks functions have to be explicit, do not return function evaluations or compare directly values returned from a function. Also all the functions call have to be in the same level of the function master. Like the controllers logic
 
 ## Conventions
 
