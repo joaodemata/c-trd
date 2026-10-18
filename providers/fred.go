@@ -42,7 +42,10 @@ func FredSeriesRisingCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return fredTrendSlope(points) > 0, cmm.NewEmptyErrorHandler()
+	slope := trendSlope(points)
+	isRising := slope > 0
+
+	return isRising, cmm.NewEmptyErrorHandler()
 }
 
 // FredSeriesFallingCallback retorna true si la pendiente de la regresion lineal de la ventana es negativa
@@ -52,12 +55,16 @@ func FredSeriesFallingCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return fredTrendSlope(points) < 0, cmm.NewEmptyErrorHandler()
+	slope := trendSlope(points)
+	isFalling := slope < 0
+
+	return isFalling, cmm.NewEmptyErrorHandler()
 }
 
 // parseFredSeries retorna las observaciones con valor ordenadas por fecha, sin depender del sort_order de la peticion.
-// Las observaciones sin valor se ignoran
-func parseFredSeries(responseData []byte) ([]fredPoint, *cmm.ErrorHandler) {
+// Las observaciones sin valor se ignoran. El eje x son los dias desde la primera observacion, asi los meses de distinta
+// duracion o los valores faltantes no deforman la tendencia
+func parseFredSeries(responseData []byte) ([]seriesPoint, *cmm.ErrorHandler) {
 	var data fredObservationsResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
 		return nil, cmm.NewErrorHandler(err, "Error parsing FRED response data", cmm.LevelFatal, "PCFREDE001")
@@ -91,31 +98,11 @@ func parseFredSeries(responseData []byte) ([]fredPoint, *cmm.ErrorHandler) {
 	}
 
 	sort.Slice(points, func(i, j int) bool { return points[i].Date.Before(points[j].Date) })
-	return points, cmm.NewEmptyErrorHandler()
-}
 
-// fredTrendSlope pendiente (por dia) de la regresion lineal por minimos cuadrados de la serie. El eje x son los dias
-// desde la primera observacion, asi los meses de distinta duracion o los valores faltantes no deforman la tendencia.
-// Recibe al menos fredMinPoints puntos; si todas las fechas son iguales retorna 0
-func fredTrendSlope(points []fredPoint) float64 {
-	n := float64(len(points))
-	var meanX, meanY float64
-	xs := make([]float64, len(points))
+	series := make([]seriesPoint, len(points))
 	for i, point := range points {
-		xs[i] = point.Date.Sub(points[0].Date).Hours() / 24
-		meanX += xs[i] / n
-		meanY += point.Value / n
+		series[i] = seriesPoint{X: point.Date.Sub(points[0].Date).Hours() / 24, Y: point.Value}
 	}
 
-	var covariance, variance float64
-	for i, point := range points {
-		dx := xs[i] - meanX
-		covariance += dx * (point.Value - meanY)
-		variance += dx * dx
-	}
-
-	if variance == 0 {
-		return 0
-	}
-	return covariance / variance
+	return series, cmm.NewEmptyErrorHandler()
 }

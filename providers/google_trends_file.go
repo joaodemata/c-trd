@@ -38,7 +38,16 @@ func GoogleTrendsFileHighCallback(responseData []byte) (bool, *cmm.ErrorHandler)
 		return false, err
 	}
 
-	return isTrendInHighZone(series), cmm.NewEmptyErrorHandler()
+	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
+	// Una serie plana no tiene zona alta
+	low, high := seriesRange(series)
+	highZone := rangeLevel(low, high, googleTrendsHighThreshold)
+	lastValue := series[len(series)-1]
+	isFlat := low == high
+
+	isHigh := !isFlat && lastValue >= highZone
+
+	return isHigh, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileLowCallback el ultimo periodo del CSV esta en la zona baja del rango
@@ -48,7 +57,16 @@ func GoogleTrendsFileLowCallback(responseData []byte) (bool, *cmm.ErrorHandler) 
 		return false, err
 	}
 
-	return isTrendInLowZone(series), cmm.NewEmptyErrorHandler()
+	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
+	// Una serie plana no tiene zona baja
+	low, high := seriesRange(series)
+	lowZone := rangeLevel(low, high, googleTrendsLowThreshold)
+	lastValue := series[len(series)-1]
+	isFlat := low == high
+
+	isLow := !isFlat && lastValue <= lowZone
+
+	return isLow, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileNewMaxCallback el ultimo periodo del CSV es un nuevo maximo de la serie
@@ -58,7 +76,13 @@ func GoogleTrendsFileNewMaxCallback(responseData []byte) (bool, *cmm.ErrorHandle
 		return false, err
 	}
 
-	return isTrendNewMaximum(series), cmm.NewEmptyErrorHandler()
+	previousValues := series[:len(series)-1]
+	lastValue := series[len(series)-1]
+	_, previousHigh := seriesRange(previousValues)
+
+	isNewMax := lastValue > previousHigh
+
+	return isNewMax, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileNewMinCallback el ultimo periodo del CSV es un nuevo minimo de la serie
@@ -68,7 +92,13 @@ func GoogleTrendsFileNewMinCallback(responseData []byte) (bool, *cmm.ErrorHandle
 		return false, err
 	}
 
-	return isTrendNewMinimum(series), cmm.NewEmptyErrorHandler()
+	previousValues := series[:len(series)-1]
+	lastValue := series[len(series)-1]
+	previousLow, _ := seriesRange(previousValues)
+
+	isNewMin := lastValue < previousLow
+
+	return isNewMin, cmm.NewEmptyErrorHandler()
 }
 
 // parseGoogleTrendsFile extrae los valores de la serie y valida que el archivo no este desactualizado.

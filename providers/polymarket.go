@@ -54,7 +54,10 @@ func FedNextMeetingCutLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return probabilities[fedDecisionCut]+polymarketEpsilon >= polymarketLikelyThreshold, cmm.NewEmptyErrorHandler()
+	cutProbability := probabilities[fedDecisionCut]
+	isCutLikely := cutProbability+polymarketEpsilon >= polymarketLikelyThreshold
+
+	return isCutLikely, cmm.NewEmptyErrorHandler()
 }
 
 // FedNextMeetingHoldLikely retorna true si en la proxima reunion de la FED la probabilidad de mantener la tasa
@@ -65,7 +68,10 @@ func FedNextMeetingHoldLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return probabilities[fedDecisionHold]+polymarketEpsilon >= polymarketLikelyThreshold, cmm.NewEmptyErrorHandler()
+	holdProbability := probabilities[fedDecisionHold]
+	isHoldLikely := holdProbability+polymarketEpsilon >= polymarketLikelyThreshold
+
+	return isHoldLikely, cmm.NewEmptyErrorHandler()
 }
 
 // FedNextMeetingHikeLikely retorna true si en la proxima reunion de la FED la probabilidad de subir la tasa
@@ -76,7 +82,10 @@ func FedNextMeetingHikeLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
 		return false, err
 	}
 
-	return probabilities[fedDecisionHike]+polymarketEpsilon >= polymarketLikelyThreshold, cmm.NewEmptyErrorHandler()
+	hikeProbability := probabilities[fedDecisionHike]
+	isHikeLikely := hikeProbability+polymarketEpsilon >= polymarketLikelyThreshold
+
+	return isHikeLikely, cmm.NewEmptyErrorHandler()
 }
 
 // parseFedNextMeeting busca la reunion abierta mas cercana (por endDate, sin depender del orden de la peticion) y
