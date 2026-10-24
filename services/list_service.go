@@ -14,7 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// GetTriggerService busca un trigger no borrado por su ID. Si no existe retorna el trigger vacio sin error
+// GetTriggerService busca un trigger no borrado por su ID. Si no existe retorna el trigger vacio sin error.
+// Retorna el pine_code para copiarlo al trigger que lo reemplaza
 func GetTriggerService(idTrigger primitive.ObjectID) (models.TriggersModelType, *cmm.ErrorHandler) {
 	var result models.TriggersModelType
 
@@ -28,7 +29,6 @@ func GetTriggerService(idTrigger primitive.ObjectID) (models.TriggersModelType, 
 
 	// Extraemos la data que nos importa
 	opts := options.FindOne().SetProjection(bson.M{
-		"pine_code":       0,
 		"last_updated_at": 0,
 		"created_date":    0,
 		"logical_delete":  0,
@@ -586,6 +586,77 @@ func GetOngoingOpportunitiesConditionsService() ([]models.OpportunitiesModelType
 
 	if err = cursor.All(ctx, &result); err != nil {
 		return result, cmm.NewErrorHandler(err, "Error decodificando las oportunidades en curso", cmm.LevelDatabase, "SLISE024")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetAssetPriceConfigService retorna la configuracion del precio de mercado del asset no borrado (configs.price_provider
+// y configs.price_symbol). Si el asset no existe o no la tiene retorna la configuracion vacia sin error
+func GetAssetPriceConfigService(idAsset primitive.ObjectID) (models.AssetPriceConfig, *cmm.ErrorHandler) {
+	var result struct {
+		Configs models.AssetPriceConfig `bson:"configs"`
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idAsset, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"configs.price_provider": 1, "configs.price_symbol": 1})
+
+	err := models.AssetsModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result.Configs, cmm.NewEmptyErrorHandler()
+		}
+
+		return result.Configs, cmm.NewErrorHandler(err, "Error consultando la configuracion de precio del asset", cmm.LevelDatabase, "SLISE025")
+	}
+
+	return result.Configs, cmm.NewEmptyErrorHandler()
+}
+
+// GetProviderByTagService busca un proveedor no borrado por su tag con sus datos de autenticacion.
+// Si no existe retorna el proveedor vacio sin error
+func GetProviderByTagService(tag string) (models.ProvidersModelType, *cmm.ErrorHandler) {
+	var result models.ProvidersModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"tag": tag, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"tag": 1, "name": 1, "secret_ref": 1, "allowed_hosts": 1})
+
+	err := models.ProvidersModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, "Error consultando el proveedor", cmm.LevelDatabase, "SLISE026")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetCompletedOpportunitiesService lista las oportunidades listas para pasar a ACTIVE (ver completedOpportunitiesFilter).
+// Solo retorna el id y el asset para consultar el precio de mercado antes de activarlas
+func GetCompletedOpportunitiesService(now time.Time) ([]models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	result := make([]models.OpportunitiesModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	opts := options.Find().SetProjection(bson.M{"_id": 1, "id_asset": 1})
+
+	cursor, err := models.OpportunitiesModel.Find(ctx, completedOpportunitiesFilter(now), opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las oportunidades por activar", cmm.LevelDatabase, "SLISE027")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las oportunidades por activar", cmm.LevelDatabase, "SLISE028")
 	}
 
 	return result, cmm.NewEmptyErrorHandler()

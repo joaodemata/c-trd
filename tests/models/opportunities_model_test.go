@@ -146,3 +146,50 @@ func TestNewOpportunityModel_Status(t *testing.T) {
 		})
 	}
 }
+
+// TestNewOpportunityModel_Prices el precio de TradingView siempre se guarda; el precio de activacion solo si nace activa
+func TestNewOpportunityModel_Prices(t *testing.T) {
+	t.Parallel()
+
+	priceTriggered := 100.5
+	priceActive := 101.25
+	conditions := []models.ConditionsModelType{{ID: primitive.NewObjectID()}}
+
+	tests := []struct {
+		name            string
+		opts            *models.OpportunityOptionalData
+		wantTriggered   *float64
+		wantActivePrice *float64
+	}{
+		{"sin opts", nil, nil, nil},
+		{"nace activa", &models.OpportunityOptionalData{PriceTriggered: &priceTriggered, PriceActiveOpportunity: &priceActive}, &priceTriggered, &priceActive},
+		{"nace activa sin precio de mercado", &models.OpportunityOptionalData{PriceTriggered: &priceTriggered}, &priceTriggered, nil},
+		{"en curso ignora el precio de activacion", &models.OpportunityOptionalData{Conditions: conditions, PriceTriggered: &priceTriggered, PriceActiveOpportunity: &priceActive}, &priceTriggered, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			opp := newTestOpportunity(t, 6, "4-HOURS", tt.opts)
+
+			if !equalPrice(opp.PriceTriggered, tt.wantTriggered) {
+				t.Errorf("priceTriggered = %v, se esperaba %v", opp.PriceTriggered, tt.wantTriggered)
+			}
+			if !equalPrice(opp.PriceActiveOportunity, tt.wantActivePrice) {
+				t.Errorf("priceActiveOpportunity = %v, se esperaba %v", opp.PriceActiveOportunity, tt.wantActivePrice)
+			}
+			if opp.PriceAchieved != nil {
+				t.Errorf("priceAchieved = %v, una oportunidad nueva no tiene precio alcanzado", *opp.PriceAchieved)
+			}
+		})
+	}
+}
+
+// equalPrice compara dos precios opcionales por valor
+func equalPrice(got, want *float64) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	return *got == *want
+}

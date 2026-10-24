@@ -20,17 +20,22 @@ type AssetsModelType struct {
 	Comment         string             `bson:"comment,omitempty" json:"comment,omitempty" description:"Comentario"`
 	TagStatus       string             `bson:"tag_status" json:"tag_status" description:"Tag estatus del catalogo"`
 	Status          string             `bson:"status" json:"status" description:"Estatus del catalogo"`
-	
-	// Common
-	LastUpdatedAt   time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
-	CreatedDate     time.Time          `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
-	LogicalDelete   bool               `bson:"logical_delete" json:"logical_delete" description:"Borrado Logico"`
-	CoreDB          string             `bson:"core_db" json:"core_db" description:"Nombre del Core de Base de datos que hizo el registro"`
-	CoreVersion     string             `bson:"core_version" json:"core_version" description:"Version del Core"`
-	UserDB          string             `bson:"user_db" json:"user_db" description:"Usuario de Base de datos que hizo el registro"`
-	SchemaDB        string             `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
-}
 
+	// Common
+	LastUpdatedAt time.Time `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
+	CreatedDate   time.Time `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
+	LogicalDelete bool      `bson:"logical_delete" json:"logical_delete" description:"Borrado Logico"`
+	CoreDB        string    `bson:"core_db" json:"core_db" description:"Nombre del Core de Base de datos que hizo el registro"`
+	CoreVersion   string    `bson:"core_version" json:"core_version" description:"Version del Core"`
+	UserDB        string    `bson:"user_db" json:"user_db" description:"Usuario de Base de datos que hizo el registro"`
+	SchemaDB      string    `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
+}
 
 // Model pointer
 var AssetsModel *mongo.Collection
+
+// AssetPriceConfig datos de configs para consultar el precio de mercado del asset
+type AssetPriceConfig struct {
+	PriceProvider string `bson:"price_provider" json:"priceProvider" description:"Tag del proveedor del precio (ej: PROVIDER-COINMARKETCAP o PROVIDER-FINNHUB)"`
+	PriceSymbol   string `bson:"price_symbol" json:"priceSymbol" description:"Simbolo del asset en el proveedor (ej: BTC o AAPL)"`
+}

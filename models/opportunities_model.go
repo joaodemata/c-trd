@@ -95,6 +95,10 @@ type OpportunityOptionalData struct {
 	TakeProfit []RiskManagement
 	Metadata   interface{}
 	Conditions []ConditionsModelType // Se copian los datos y el status actual de cada condicion a la oportunidad
+	// Precio enviado por TradingView al disparar el trigger
+	PriceTriggered *float64
+	// Precio de mercado del asset, solo se guarda si la oportunidad nace activa (sin condiciones)
+	PriceActiveOpportunity *float64
 }
 
 // NewOpportunity es el método/constructor que crea una nueva instancia de OpportunitiesModelType.
@@ -179,6 +183,7 @@ func NewOpportunityModel(
 			opp.TakeProfit = opts.TakeProfit
 		}
 		opp.Metadata = opts.Metadata
+		opp.PriceTriggered = opts.PriceTriggered
 
 		for _, condition := range opts.Conditions {
 			opp.Conditions = append(opp.Conditions, Condition{
@@ -202,6 +207,10 @@ func NewOpportunityModel(
 		opp.IDStatus = cmm.OpportunityStatusActive.ID
 		opp.TagStatus = cmm.OpportunityStatusActive.Tag
 		opp.Status = cmm.OpportunityStatusActive.Name
+
+		if opts != nil {
+			opp.PriceActiveOportunity = opts.PriceActiveOpportunity
+		}
 	}
 
 	return opp, cmm.NewEmptyErrorHandler()

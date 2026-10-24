@@ -79,6 +79,85 @@ func CreateTriggerController() http.HandlerFunc {
 	}
 }
 
+// UpdateTriggerController reemplaza un trigger: el anterior queda borrado e inactivo y el nuevo apunta a el con
+// id_reference y a la raiz de la cadena con id_reference_root. Los datos ya fueron validados en el data validate
+func UpdateTriggerController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdateTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		previousTrigger, err := cmm.GetFromRequestContext[*models.TriggersModelType](r, "previousTrigger")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		action, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "action")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		timeframe, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "timeframe")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		conditions, err := cmm.GetFromRequestContext[[]models.ConditionsModelType](r, "conditions")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idReference := previousTrigger.ID
+		idReferenceRoot := models.TriggerReferenceRoot(*previousTrigger)
+
+		// El pine_code no se envia en la peticion, se conserva el del trigger anterior
+		trigger, err := models.NewTriggerModel(
+			payload.Tag, payload.Name, payload.Description,
+			asset.ID, asset.Tag, asset.Name,
+			action.ID, action.Tag, action.Name,
+			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
+			&models.TriggerOptionalData{
+				Conditions:      conditions,
+				IdReference:     &idReference,
+				IdReferenceRoot: &idReferenceRoot,
+				PineCode:        previousTrigger.PineCode,
+			},
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idTrigger, err := services.ReplaceTriggerService(previousTrigger.ID, trigger)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"idTrigger":         idTrigger,
+			"idPreviousTrigger": previousTrigger.ID.Hex(),
+			"idReferenceRoot":   idReferenceRoot.Hex(),
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Trigger actualizado exitosamente", "COPR005", data)
+	}
+}
+
 // GoogleTrendsUploadController reemplaza el CSV de Google Trends del asset (ya validado en el data validate)
 func GoogleTrendsUploadController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

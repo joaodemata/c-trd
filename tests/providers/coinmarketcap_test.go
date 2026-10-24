@@ -225,3 +225,52 @@ func TestDominanceCallbacks_Errors(t *testing.T) {
 		})
 	}
 }
+
+// coinMarketCapQuotesBody respuesta de /v2/cryptocurrency/quotes/latest?symbol=BTC con dos monedas que comparten
+// simbolo: la de mejor rank y una inactiva sin rank
+const coinMarketCapQuotesBody = `{"data":{"BTC":[` +
+	`{"id":31469,"symbol":"BTC","is_active":0,"cmc_rank":null,"quote":{"USD":{"price":null}}},` +
+	`{"id":1,"symbol":"BTC","is_active":1,"cmc_rank":1,"quote":{"USD":{"price":67012.34}}}` +
+	`]},"status":{"error_code":0,"error_message":null}}`
+
+func TestCoinMarketCapQuotePrice(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		symbol       string
+		body         string
+		want         float64
+		wantTracking string
+	}{
+		{"ignora la moneda sin rank", "BTC", coinMarketCapQuotesBody, 67012.34, ""},
+		{"simbolo en minusculas", "btc", coinMarketCapQuotesBody, 67012.34, ""},
+		{"usa el mejor rank", "ETH", `{"data":{"ETH":[` +
+			`{"cmc_rank":3500,"quote":{"USD":{"price":0.01}}},` +
+			`{"cmc_rank":2,"quote":{"USD":{"price":2450.5}}}` +
+			`]},"status":{"error_code":"0"}}`, 2450.5, ""},
+		{"simbolo no encontrado", "XYZ", `{"data":{},"status":{"error_code":0}}`, 0, "PCCMCE010"},
+		{"solo monedas sin rank", "BTC", `{"data":{"BTC":[{"cmc_rank":null,"quote":{}}]},"status":{"error_code":0}}`, 0, "PCCMCE010"},
+		{"sin cotizacion USD", "BTC", `{"data":{"BTC":[{"cmc_rank":1,"quote":{"EUR":{"price":60000}}}]},"status":{"error_code":0}}`, 0, "PCCMCE011"},
+		{"precio cero", "BTC", `{"data":{"BTC":[{"cmc_rank":1,"quote":{"USD":{"price":0}}}]},"status":{"error_code":0}}`, 0, "PCCMCE011"},
+		{"error de la API", "BTC", `{"status":{"error_code":1002,"error_message":"API key missing."}}`, 0, "PCCMCE002"},
+		{"no es JSON", "BTC", `<html></html>`, 0, "PCCMCE009"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := providers.CoinMarketCapQuotePrice([]byte(tt.body), tt.symbol)
+
+			if tt.wantTracking != "" {
+				testutil.RequireTrackingCode(t, err, tt.wantTracking)
+				return
+			}
+			testutil.RequireEmptyError(t, err)
+			if got != tt.want {
+				t.Errorf("price = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

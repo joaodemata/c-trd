@@ -45,8 +45,9 @@ type TriggersModelType struct {
 	CandlestickTimeframe    string             `bson:"candlestick_timeframe" json:"candlestickTimeframe"`
 	// Extra
 	// Opcionales: se guardan como null si no vienen
-	IdReference *primitive.ObjectID `bson:"id_reference" json:"idReference" description:"Trigger generado a partir de otro trigger"`
-	PineCode    *string             `bson:"pine_code" json:"pineCode" description:"Codigo de pine utilizado en trading view para el trigger"`
+	IdReference     *primitive.ObjectID `bson:"id_reference" json:"idReference" description:"Trigger generado a partir de otro trigger"`
+	IdReferenceRoot *primitive.ObjectID `bson:"id_reference_root" json:"idReferenceRoot" description:"Raiz inicial del trigger generado a partir de otro trigger"`
+	PineCode        *string             `bson:"pine_code" json:"pineCode" description:"Codigo de pine utilizado en trading view para el trigger"`
 
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
@@ -63,12 +64,23 @@ var TriggersModel *mongo.Collection
 
 // Helpers
 
+// TriggerReferenceRoot retorna la raiz de la cadena de versiones para el trigger que reemplaza a previous:
+// si previous ya viene de otro trigger se reutiliza su raiz, si no previous es la raiz
+func TriggerReferenceRoot(previous TriggersModelType) primitive.ObjectID {
+	if previous.IdReferenceRoot != nil {
+		return *previous.IdReferenceRoot
+	}
+
+	return previous.ID
+}
+
 // CONSTRUCTORS
 
 type TriggerOptionalData struct {
-	Conditions  []ConditionsModelType // Se copian los datos de cada condicion al trigger
-	IdReference *primitive.ObjectID
-	PineCode    *string
+	Conditions      []ConditionsModelType // Se copian los datos de cada condicion al trigger
+	IdReference     *primitive.ObjectID
+	IdReferenceRoot *primitive.ObjectID
+	PineCode        *string
 }
 
 // NewTriggerModel crea un trigger nuevo con status activo. Los arreglos opcionales se guardan como []
@@ -129,6 +141,7 @@ func NewTriggerModel(
 			})
 		}
 		trigger.IdReference = opts.IdReference
+		trigger.IdReferenceRoot = opts.IdReferenceRoot
 		trigger.PineCode = opts.PineCode
 	}
 

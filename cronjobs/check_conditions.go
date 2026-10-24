@@ -72,13 +72,59 @@ func ProcessConditions() {
 
 	// 7. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
 	// recuperar oportunidades que quedaron pendientes por un fallo en una ejecucion anterior
-	activated, err := services.ActivateCompletedOpportunitiesService()
-	if !err.IsEmtpy() {
-		log.Printf("Error activando las oportunidades: %v", err)
-		return
-	}
+	activated := activateCompletedOpportunities()
 
 	log.Printf("Condiciones procesadas: %d, oportunidades activadas: %d", len(conditions), activated)
+}
+
+// activateCompletedOpportunities pasa a ACTIVE las oportunidades con todas sus condiciones activas y guarda el precio
+// de mercado de su asset. El precio se consulta una vez por asset; si falla la oportunidad se activa igual sin precio
+func activateCompletedOpportunities() int64 {
+	now := time.Now().UTC()
+
+	opportunities, err := services.GetCompletedOpportunitiesService(now)
+	if !err.IsEmtpy() {
+		log.Printf("Error obteniendo las oportunidades por activar: %v", err)
+		return 0
+	}
+
+	if len(opportunities) == 0 {
+		return 0
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.ActivationPricesTimeout)
+	defer cancel()
+
+	prices := make(map[primitive.ObjectID]*float64)
+	activations := make([]services.OpportunityActivation, 0, len(opportunities))
+	for _, opportunity := range opportunities {
+		price, fetched := prices[opportunity.IDAsset]
+		if !fetched {
+			price = assetMarketPrice(ctx, opportunity.IDAsset)
+			prices[opportunity.IDAsset] = price
+		}
+
+		activations = append(activations, services.OpportunityActivation{IDOpportunity: opportunity.ID, PriceActiveOpportunity: price})
+	}
+
+	activated, err := services.ActivateOpportunitiesService(activations, time.Now().UTC())
+	if !err.IsEmtpy() {
+		log.Printf("Error activando las oportunidades: %v", err)
+		return 0
+	}
+
+	return activated
+}
+
+// assetMarketPrice retorna el precio de mercado del asset o nil si no se pudo obtener
+func assetMarketPrice(ctx context.Context, idAsset primitive.ObjectID) *float64 {
+	price, err := services.GetAssetMarketPriceService(ctx, idAsset)
+	if !err.IsEmtpy() {
+		log.Printf("No se obtuvo el precio del asset %s, la oportunidad se activa sin precio: %v", idAsset.Hex(), err)
+		return nil
+	}
+
+	return &price
 }
 
 // EvaluateConditions ejecuta las peticiones y callbacks de las condiciones con un pool de workers

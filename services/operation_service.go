@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
 // CreateOpportunityService inserts a new document into the opportunities collection
@@ -371,15 +372,10 @@ func UpdateOpportunitiesConditionsStatusService(ctx context.Context, changes []C
 	return cmm.NewEmptyErrorHandler()
 }
 
-// ActivateCompletedOpportunitiesService cambia a ACTIVE las oportunidades en curso, no expiradas,
-// que tengan al menos una condicion y todas sus condiciones activas
-func ActivateCompletedOpportunitiesService() (int64, *cmm.ErrorHandler) {
-	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
-	defer cancel()
-
-	now := time.Now().UTC()
-
-	filter := bson.M{
+// completedOpportunitiesFilter oportunidades en curso, no expiradas, que tengan al menos una condicion
+// y todas sus condiciones activas
+func completedOpportunitiesFilter(now time.Time) bson.M {
+	return bson.M{
 		"tag_status":      cmm.OpportunityStatusOngoing.Tag,
 		"logical_delete":  false,
 		"expiration_date": bson.M{"$gt": now},
@@ -390,21 +386,110 @@ func ActivateCompletedOpportunitiesService() (int64, *cmm.ErrorHandler) {
 			},
 		},
 	}
-	update := bson.M{
-		"$set": bson.M{
-			"id_status":       cmm.OpportunityStatusActive.ID,
-			"tag_status":      cmm.OpportunityStatusActive.Tag,
-			"status":          cmm.OpportunityStatusActive.Name,
-			"last_updated_at": now,
-		},
+}
+
+// OpportunityActivation oportunidad que pasa a ACTIVE con el precio de mercado de su asset (nil si no se obtuvo)
+type OpportunityActivation struct {
+	IDOpportunity          primitive.ObjectID
+	PriceActiveOpportunity *float64
+}
+
+// ActivateOpportunitiesService cambia a ACTIVE las oportunidades y guarda su precio de activacion. Cada oportunidad
+// se vuelve a filtrar con completedOpportunitiesFilter, asi no se activa una que cambio desde que se listo
+func ActivateOpportunitiesService(activations []OpportunityActivation, now time.Time) (int64, *cmm.ErrorHandler) {
+	if len(activations) == 0 {
+		return 0, cmm.NewEmptyErrorHandler()
 	}
 
-	result, err := models.OpportunitiesModel.UpdateMany(ctx, filter, update)
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	writes := make([]mongo.WriteModel, 0, len(activations))
+	for _, activation := range activations {
+		filter := completedOpportunitiesFilter(now)
+		filter["_id"] = activation.IDOpportunity
+
+		update := bson.M{
+			"$set": bson.M{
+				"id_status":                cmm.OpportunityStatusActive.ID,
+				"tag_status":               cmm.OpportunityStatusActive.Tag,
+				"status":                   cmm.OpportunityStatusActive.Name,
+				"price_active_opportunity": activation.PriceActiveOpportunity,
+				"last_updated_at":          now,
+			},
+		}
+
+		writes = append(writes, mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update))
+	}
+
+	result, err := models.OpportunitiesModel.BulkWrite(ctx, writes, options.BulkWrite().SetOrdered(false))
 	if err != nil {
 		return 0, cmm.NewErrorHandler(err, "Error activando las oportunidades.", cmm.LevelDatabase, "SOPRE026")
 	}
 
 	return result.ModifiedCount, cmm.NewEmptyErrorHandler()
+}
+
+// ReplaceTriggerService reemplaza un trigger en una transaccion: borra logicamente el anterior (STATUS-INACTIVE) e
+// inserta el nuevo, que ya trae id_reference e id_reference_root. Retorna el id del trigger nuevo.
+// Requiere que MongoDB sea un replica set
+func ReplaceTriggerService(idPrevious primitive.ObjectID, trigger models.TriggersModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	// Usamos cmm.Database porque cmm.AppConfig puede ser nil al iniciar
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE042")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+
+	// El callback del driver debe retornar error nil para hacer COMMIT, cualquier otro valor hace ROLLBACK
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// A. Borramos el anterior. Si ya estaba borrado otra peticion lo reemplazo primero
+		filter := bson.M{"_id": idPrevious, "logical_delete": false}
+		update := bson.M{
+			"$set": bson.M{
+				"logical_delete":  true,
+				"id_status":       cmm.GenericStatusInactive.ID,
+				"tag_status":      cmm.GenericStatusInactive.Tag,
+				"status":          cmm.GenericStatusInactive.Name,
+				"last_updated_at": time.Now().UTC(),
+			},
+		}
+
+		result, errUpdate := models.TriggersModel.UpdateOne(sessCtx, filter, update)
+		if errUpdate != nil {
+			return nil, cmm.NewErrorHandler(errUpdate, "Error borrando el trigger anterior.", cmm.LevelDatabase, "SOPRE043")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("trigger %s", idPrevious.Hex()), "El trigger ya fue actualizado o borrado.", cmm.LevelError, "SOPRE044")
+		}
+
+		// B. Insertamos el nuevo
+		if _, errInsert := models.TriggersModel.InsertOne(sessCtx, trigger); errInsert != nil {
+			if mongo.IsDuplicateKeyError(errInsert) {
+				return nil, cmm.NewErrorHandler(errInsert, "Ya existe un trigger con el tag enviado.", cmm.LevelError, "SOPRE045")
+			}
+
+			return nil, cmm.NewErrorHandler(errInsert, errInsert.Error(), cmm.LevelDatabase, "SOPRE046")
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		// Conservamos el tracking code del paso que fallo dentro de la transaccion
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return "", handler
+		}
+
+		return "", cmm.NewErrorHandler(err, "Transaccion abortada reemplazando el trigger.", cmm.LevelDatabase, "SOPRE047")
+	}
+
+	return trigger.ID.Hex(), cmm.NewEmptyErrorHandler()
 }
 
 // Metodos HTTP permitidos para las APIs de las condiciones

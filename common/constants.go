@@ -110,6 +110,18 @@ const (
 	ProviderMaxResponseBytes = 10 << 20
 )
 
+// Precio de mercado de un asset cuando su oportunidad pasa a ACTIVE. El asset guarda en configs.price_provider
+// el tag del proveedor (coleccion providers, de donde salen el secret_ref y los allowed_hosts) y en
+// configs.price_symbol el simbolo en ese proveedor
+const (
+	PriceProviderCoinMarketCap = "PROVIDER-COINMARKETCAP"
+	PriceProviderFinnhub       = "PROVIDER-FINNHUB"
+	// Tiempo maximo para consultar el precio desde el hook (el servidor HTTP responde en maximo 10s)
+	HookAssetPriceTimeout = 5 * time.Second
+	// Tiempo maximo para consultar los precios de las oportunidades que se activan en un ciclo del cronjob
+	ActivationPricesTimeout = 20 * time.Second
+)
+
 // Archivos CSV de Google Trends subidos por asset
 const (
 	// Variable de entorno con la carpeta donde se guardan los CSV
