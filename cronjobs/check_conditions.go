@@ -120,7 +120,7 @@ func activateCompletedOpportunities() int64 {
 func assetMarketPrice(ctx context.Context, idAsset primitive.ObjectID) *float64 {
 	price, err := services.GetAssetMarketPriceService(ctx, idAsset)
 	if !err.IsEmtpy() {
-		log.Printf("No se obtuvo el precio del asset %s, la oportunidad se activa sin precio: %v", idAsset.Hex(), err)
+		log.Printf("No se obtuvo el precio del asset %s, la oportunidad se actualiza sin precio: %v", idAsset.Hex(), err)
 		return nil
 	}
 

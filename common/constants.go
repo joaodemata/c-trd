@@ -39,6 +39,7 @@ const (
 	CatalogTypeAction            = "TYPE_ACTION"
 	CatalogTypeAsset             = "TYPE_ASSET"
 	CatalogTypeCandleStick       = "TYPE_CANDLE_STICK"
+	CatalogTypeCancelReason      = "CANCEL_REASON"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara
