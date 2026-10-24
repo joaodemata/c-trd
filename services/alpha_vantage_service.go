@@ -2,7 +2,6 @@ package services
 
 import (
 	cmm "c_trd/common"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -32,7 +31,6 @@ func GetCurrencyExchangeService(fromCurrency string, toCurrency string) (string,
 	urlParsed.RawQuery = q.Encode()
 
 	urlFinal := urlParsed.String()
-	fmt.Println("Doing request to:", urlFinal)
 
 	// 4. Ejecutar la petición GET
 	resp, err := http.Get(urlFinal)
@@ -45,8 +43,6 @@ func GetCurrencyExchangeService(fromCurrency string, toCurrency string) (string,
 
 	// 5. Leer el cuerpo de la respuesta
 	bodyBytes, err := io.ReadAll(resp.Body)
-
-	fmt.Println(string(bodyBytes))
 
 	if err != nil {
 		return "", cmm.NewErrorHandler(err, "error reading response.", cmm.LevelFatal, "SALPE003")
@@ -79,7 +75,6 @@ func GetRealtimePutCallRatioService(symbol string) (string, *cmm.ErrorHandler) {
 	urlParsed.RawQuery = q.Encode()
 
 	urlFinal := urlParsed.String()
-	fmt.Println("Doing request to:", urlFinal)
 
 	// 4. Ejecutar la petición GET
 	resp, err := http.Get(urlFinal)
@@ -92,8 +87,6 @@ func GetRealtimePutCallRatioService(symbol string) (string, *cmm.ErrorHandler) {
 
 	// 5. Leer el cuerpo de la respuesta
 	bodyBytes, err := io.ReadAll(resp.Body)
-
-	fmt.Println(string(bodyBytes))
 
 	if err != nil {
 		return "", cmm.NewErrorHandler(err, "error reading response.", cmm.LevelFatal, "SALPE006")

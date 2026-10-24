@@ -5,7 +5,6 @@ import (
 	fv "c_trd/format_validates"
 	"c_trd/providers"
 	"c_trd/services"
-	"fmt"
 	"net/http"
 )
 
@@ -19,7 +18,6 @@ func ListOportunitiesController() http.HandlerFunc {
 		// payload, ok := r.Context().Value("payload").(*fv.TradingViewTriggerFormat)
 		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
 
-		fmt.Println(err)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, "CLISE001", nil, err)
 			return
@@ -27,7 +25,6 @@ func ListOportunitiesController() http.HandlerFunc {
 
 		// Buscamos el trigger en mongoDB para validar si existe
 		opportunities, page, err := services.GetOpportunitiesService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate)
-		fmt.Println(err)
 		// Verificamos si hay error de parseo
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)

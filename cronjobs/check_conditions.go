@@ -66,7 +66,11 @@ func ProcessConditions() {
 		persistConditionResults(results)
 	}
 
-	// 6. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
+	// 6. Corregimos las copias de las condiciones en las oportunidades en curso. Una oportunidad creada por el
+	// hook mientras se guardaba un lote puede nacer con un status viejo que el paso 5 ya no le replica
+	syncOpportunitiesConditions()
+
+	// 7. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
 	// recuperar oportunidades que quedaron pendientes por un fallo en una ejecucion anterior
 	activated, err := services.ActivateCompletedOpportunitiesService()
 	if !err.IsEmtpy() {
@@ -226,6 +230,73 @@ func NewConditionStatus(r ConditionResult) *cmm.CatalogStatus {
 	}
 
 	return &target
+}
+
+// syncOpportunitiesConditions replica el status real de las condiciones en las oportunidades en curso que tengan
+// una copia distinta. Solo el cronjob cambia el status de las condiciones y sus ejecuciones no se solapan, asi
+// que el status leido aqui no cambia antes de escribirlo. Si falla se reintenta en el siguiente ciclo
+func syncOpportunitiesConditions() {
+	opportunities, err := services.GetOngoingOpportunitiesConditionsService()
+	if !err.IsEmtpy() {
+		log.Printf("Error obteniendo las oportunidades en curso: %v", err)
+		return
+	}
+
+	idConditions := make([]primitive.ObjectID, 0)
+	for _, opportunity := range opportunities {
+		for _, condition := range opportunity.Conditions {
+			idConditions = append(idConditions, condition.IDCondition)
+		}
+	}
+
+	conditions, err := services.GetConditionsByIDsService(idConditions)
+	if !err.IsEmtpy() {
+		log.Printf("Error obteniendo las condiciones de las oportunidades en curso: %v", err)
+		return
+	}
+
+	changes := OutOfSyncConditions(opportunities, conditions)
+	if len(changes) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	if err := services.UpdateOpportunitiesConditionsStatusService(ctx, changes); !err.IsEmtpy() {
+		log.Printf("Error sincronizando las condiciones de las oportunidades: %v", err)
+		return
+	}
+
+	log.Printf("Condiciones sincronizadas en oportunidades en curso: %d", len(changes))
+}
+
+// OutOfSyncConditions retorna el status real de cada condicion que tiene una copia distinta en alguna oportunidad.
+// Las condiciones que ya no existen (borradas) se ignoran. Cada condicion aparece una sola vez
+func OutOfSyncConditions(opportunities []models.OpportunitiesModelType, conditions []models.ConditionsModelType) []services.ConditionStatusChange {
+	current := make(map[primitive.ObjectID]models.ConditionsModelType, len(conditions))
+	for _, condition := range conditions {
+		current[condition.ID] = condition
+	}
+
+	changes := make([]services.ConditionStatusChange, 0)
+	added := make(map[primitive.ObjectID]bool)
+	for _, opportunity := range opportunities {
+		for _, copied := range opportunity.Conditions {
+			condition, exists := current[copied.IDCondition]
+			if !exists || added[condition.ID] || copied.TagStatus == condition.TagStatus {
+				continue
+			}
+
+			added[condition.ID] = true
+			changes = append(changes, services.ConditionStatusChange{
+				IDCondition: condition.ID,
+				NewStatus:   cmm.CatalogStatus{ID: condition.IDStatus, Tag: condition.TagStatus, Name: condition.Status},
+			})
+		}
+	}
+
+	return changes
 }
 
 // ConditionInterval retorna el intervalo de ejecucion de la condicion
