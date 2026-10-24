@@ -157,3 +157,36 @@ func ListConditionsController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "Listado de condiciones.", "CLIS006", data)
 	}
 }
+
+// ListTriggersController lista paginados los triggers con su asset, accion, condiciones y temporalidad. Los inactivos
+// y reemplazados solo se listan con showReferences
+func ListTriggersController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE007", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListTriggersFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE008", nil, err)
+			return
+		}
+
+		triggers, total, err := services.GetTriggersService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, filters.TagStatus, filters.ShowReferences)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"triggers": triggers,
+			"page":     total,
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de triggers.", "CLIS007", data)
+	}
+}
