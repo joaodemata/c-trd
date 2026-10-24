@@ -163,7 +163,7 @@ func TestNewOpportunityModel_Prices(t *testing.T) {
 	}{
 		{"sin opts", nil, nil, nil},
 		{"nace activa", &models.OpportunityOptionalData{PriceTriggered: &priceTriggered, PriceActiveOpportunity: &priceActive}, &priceTriggered, &priceActive},
-		{"nace activa sin precio de mercado", &models.OpportunityOptionalData{PriceTriggered: &priceTriggered}, &priceTriggered, nil},
+		{"nace activa sin precio de activacion", &models.OpportunityOptionalData{PriceTriggered: &priceTriggered}, &priceTriggered, nil},
 		{"en curso ignora el precio de activacion", &models.OpportunityOptionalData{Conditions: conditions, PriceTriggered: &priceTriggered, PriceActiveOpportunity: &priceActive}, &priceTriggered, nil},
 	}
 

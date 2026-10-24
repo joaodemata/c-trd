@@ -97,7 +97,7 @@ type OpportunityOptionalData struct {
 	Conditions []ConditionsModelType // Se copian los datos y el status actual de cada condicion a la oportunidad
 	// Precio enviado por TradingView al disparar el trigger
 	PriceTriggered *float64
-	// Precio de mercado del asset, solo se guarda si la oportunidad nace activa (sin condiciones)
+	// Precio de activacion, solo se guarda si la oportunidad nace activa (sin condiciones)
 	PriceActiveOpportunity *float64
 }
 

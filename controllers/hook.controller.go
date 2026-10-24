@@ -4,8 +4,6 @@ import (
 	fv "c_trd/format_validates"
 	"c_trd/models"
 	"c_trd/services"
-	"context"
-	"log"
 	"net/http"
 
 	cmm "c_trd/common"
@@ -50,21 +48,6 @@ func TradingViewHookController() http.HandlerFunc {
 		// Si no existe lo creamos
 		if existOpportunity.ID.IsZero() {
 
-			// Sin condiciones la oportunidad nace activa y se guarda el precio de mercado del asset. Si la consulta
-			// falla se crea igual sin ese precio para no perder la señal de TradingView
-			var priceActive *float64
-			if len(conditions) == 0 {
-				ctx, cancel := context.WithTimeout(r.Context(), cmm.HookAssetPriceTimeout)
-				price, errPrice := services.GetAssetMarketPriceService(ctx, triggerData.IDAsset)
-				cancel()
-
-				if errPrice.IsEmtpy() {
-					priceActive = &price
-				} else {
-					log.Printf("No se obtuvo el precio del asset %s, la oportunidad se crea activa sin precio: %v", triggerData.IDAsset.Hex(), errPrice)
-				}
-			}
-
 			opportunity, err := models.NewOpportunityModel(triggerData.ID,
 				triggerData.Tag,
 				triggerData.Name,
@@ -80,10 +63,11 @@ func TradingViewHookController() http.HandlerFunc {
 				triggerData.TagCandlestickTimeframe,
 				triggerData.CandlestickTimeframe,
 				&models.OpportunityOptionalData{
-					Conditions:             conditions,
-					Metadata:               payload.Metadata,
-					PriceTriggered:         &payload.Price,
-					PriceActiveOpportunity: priceActive,
+					Conditions:     conditions,
+					Metadata:       payload.Metadata,
+					PriceTriggered: &payload.Price,
+					// Sin condiciones nace activa con el mismo precio de TradingView, el modelo lo ignora si nace en curso
+					PriceActiveOpportunity: &payload.Price,
 				})
 
 			// Validamos que no haya errores
