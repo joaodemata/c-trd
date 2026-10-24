@@ -31,10 +31,12 @@ type ListCatalogsFormat struct {
 var ListCatalogsFormatValidate = common.FormatValidateMiddleware[ListCatalogsFormat]
 
 // ListTriggersFormat filtros propios del listado de triggers, se concatena con cmm.PaginationFormatValidate.
-// Sin showReferences solo se listan los triggers activos; con showReferences tambien los inactivos y los reemplazados
+// Sin showReferences solo se listan los triggers activos; con showReferences tambien los inactivos y los reemplazados.
+// idReferenceRoot limita el listado a las versiones de un trigger: la raiz y los que la tienen como id_reference_root
 type ListTriggersFormat struct {
-	TagStatus      string `json:"tagStatus" in:"query" validate:"omitempty,max=64"`
-	ShowReferences bool   `json:"showReferences" in:"query"`
+	TagStatus       string `json:"tagStatus" in:"query" validate:"omitempty,max=64"`
+	ShowReferences  bool   `json:"showReferences" in:"query"`
+	IdReferenceRoot string `json:"idReferenceRoot" in:"query" validate:"omitempty,mongodb"`
 }
 
 // Se inyecta en "filters" porque "payload" lo ocupa la paginacion

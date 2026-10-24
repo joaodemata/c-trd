@@ -6,6 +6,8 @@ import (
 	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Listado de oportunidades
@@ -176,7 +178,17 @@ func ListTriggersController() http.HandlerFunc {
 			return
 		}
 
-		triggers, total, err := services.GetTriggersService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, filters.TagStatus, filters.ShowReferences)
+		// Sin idReferenceRoot se listan todos los triggers (ObjectID cero)
+		var idReferenceRoot primitive.ObjectID
+		if filters.IdReferenceRoot != "" {
+			idReferenceRoot, err = cmm.ParseHexToObjectId(filters.IdReferenceRoot)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+
+		triggers, total, err := services.GetTriggersService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, filters.TagStatus, filters.ShowReferences, idReferenceRoot)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
