@@ -666,9 +666,9 @@ func GetCompletedOpportunitiesService(now time.Time) ([]models.OpportunitiesMode
 // Sin ShowReferences solo lista los triggers activos y no borrados; con ShowReferences tambien los inactivos y los
 // reemplazados (borrados logicamente al crear su nueva version). TagStatus filtra por tag_status si viene.
 // La busqueda es literal (sin regex) sobre el nombre, tag, descripcion, asset, accion y status; las fechas filtran
-// created_date.
+// created_date. IdReferenceRoot (si no es cero) limita a las versiones de un trigger: la raiz y sus reemplazos.
 // Retorna: los triggers de la pagina, el total de documentos encontrados (para paginación) y el error handler
-func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, TagStatus string, ShowReferences bool) ([]models.TriggersModelType, int64, *cmm.ErrorHandler) {
+func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, TagStatus string, ShowReferences bool, IdReferenceRoot primitive.ObjectID) ([]models.TriggersModelType, int64, *cmm.ErrorHandler) {
 	result := make([]models.TriggersModelType, 0)
 
 	// Validaciones de seguridad para la paginación
@@ -696,6 +696,14 @@ func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time,
 		filter["created_date"] = bson.M{"$gte": StartDate}
 	} else if !EndDate.IsZero() {
 		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+
+	// Va en $and porque el $or de primer nivel lo usa la busqueda
+	if !IdReferenceRoot.IsZero() {
+		filter["$and"] = []bson.M{{"$or": []bson.M{
+			{"_id": IdReferenceRoot},
+			{"id_reference_root": IdReferenceRoot},
+		}}}
 	}
 
 	if Search != "" {

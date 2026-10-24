@@ -105,3 +105,52 @@ func TestListCatalogsFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestListTriggersFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	const root = "6adcd1882c3b99e2480bc973"
+
+	tests := []struct {
+		name     string
+		query    string
+		wantNext bool
+		want     fv.ListTriggersFormat
+	}{
+		{"sin filtros", "", true, fv.ListTriggersFormat{}},
+		{"versiones de un trigger", "?showReferences=true&idReferenceRoot=" + root, true, fv.ListTriggersFormat{ShowReferences: true, IdReferenceRoot: root}},
+		{"idReferenceRoot vacio", "?idReferenceRoot=", true, fv.ListTriggersFormat{}},
+		{"idReferenceRoot invalido", "?idReferenceRoot=no-es-un-id", false, fv.ListTriggersFormat{}},
+		{"idReferenceRoot corto", "?idReferenceRoot=6adcd188", false, fv.ListTriggersFormat{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/list/triggers"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.ListTriggersFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != "CC003" {
+					t.Errorf("tracking = %s, se esperaba CC003", res.Tracking)
+				}
+				return
+			}
+
+			// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+			filters, errCtx := cmm.GetFromRequestContext[*fv.ListTriggersFormat](spy.Request, "filters")
+			testutil.RequireEmptyError(t, errCtx)
+			if *filters != tt.want {
+				t.Errorf("filters = %+v, want %+v", *filters, tt.want)
+			}
+		})
+	}
+}
