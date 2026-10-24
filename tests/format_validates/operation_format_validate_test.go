@@ -121,7 +121,6 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 		{name: "valido", edit: func(map[string]any) {}, wantNext: true},
 		{name: "sin parametros", edit: func(b map[string]any) { delete(b, "parameters") }, wantNext: true},
 		{name: "intervalo minimo", edit: func(b map[string]any) { b["intervalSeconds"] = 60 }, wantNext: true},
-		{name: "con metadata", edit: func(b map[string]any) { b["metadata"] = map[string]any{"source": "manual"} }, wantNext: true},
 		{name: "isWebhookOnly false", edit: func(b map[string]any) { b["isWebhookOnly"] = false }, wantNext: true},
 		{name: "isWebhookOnly true", edit: func(b map[string]any) { b["isWebhookOnly"] = true }, wantTracking: "CC003"},
 		{name: "isWebhookOnly como texto", edit: func(b map[string]any) { b["isWebhookOnly"] = "false" }, wantTracking: "CC001"},

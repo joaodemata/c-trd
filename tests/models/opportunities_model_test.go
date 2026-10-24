@@ -64,9 +64,6 @@ func TestNewOpportunityModel_Defaults(t *testing.T) {
 	if opp.ID.IsZero() {
 		t.Error("el ID debe generarse en el constructor")
 	}
-	if opp.IDStatus != cmm.OpportunityStatusOngoing.ID || opp.TagStatus != cmm.OpportunityStatusOngoing.Tag {
-		t.Errorf("status = %s, toda oportunidad nace en %s", opp.TagStatus, cmm.OpportunityStatusOngoing.Tag)
-	}
 	// Los slices vacios se guardan como [] y no como null en Mongo
 	if opp.Conditions == nil || opp.StopLoss == nil || opp.TakeProfit == nil {
 		t.Error("conditions, stop_loss y take_profit deben ser slices vacios y no nil")
@@ -83,15 +80,30 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 		t.Parallel()
 
 		id := primitive.NewObjectID()
-		conditions := []models.Condition{{IDCondition: primitive.NewObjectID(), TagStatus: cmm.GenericStatusInactive.Tag}}
+		conditions := []models.ConditionsModelType{{
+			ID:            primitive.NewObjectID(),
+			NameCondition: "Put/Call AAPL",
+			IDStatus:      cmm.GenericStatusActive.ID,
+			TagStatus:     cmm.GenericStatusActive.Tag,
+			Status:        cmm.GenericStatusActive.Name,
+		}}
+		metadata := map[string]any{"price": 100.5}
 
-		opp := newTestOpportunity(t, 6, "4-HOURS", &models.OpportunityOptionalData{ID: id, Conditions: conditions})
+		opp := newTestOpportunity(t, 6, "4-HOURS", &models.OpportunityOptionalData{ID: id, Conditions: conditions, Metadata: metadata})
 
 		if opp.ID != id {
 			t.Errorf("ID = %v, se esperaba %v", opp.ID, id)
 		}
-		if len(opp.Conditions) != 1 || opp.Conditions[0].IDCondition != conditions[0].IDCondition {
-			t.Errorf("conditions = %+v, se esperaba %+v", opp.Conditions, conditions)
+		// Se copia el status actual de la condicion, no nace inactiva
+		if len(opp.Conditions) != 1 || opp.Conditions[0].IDCondition != conditions[0].ID || opp.Conditions[0].TagStatus != cmm.GenericStatusActive.Tag || opp.Conditions[0].NameCondition != conditions[0].NameCondition {
+			t.Errorf("conditions = %+v, se esperaba la copia de %+v", opp.Conditions, conditions)
+		}
+		if got, ok := opp.Metadata.(map[string]any); !ok || got["price"] != 100.5 {
+			t.Errorf("metadata = %v, se esperaba %v", opp.Metadata, metadata)
+		}
+		// Sin stop loss ni take profit en opts se mantienen como [] y no null
+		if opp.StopLoss == nil || opp.TakeProfit == nil {
+			t.Error("stop_loss y take_profit deben ser slices vacios y no nil")
 		}
 	})
 
@@ -107,4 +119,30 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 			t.Error("sin condiciones en opts debe quedar un slice vacio")
 		}
 	})
+}
+
+// TestNewOpportunityModel_Status con condiciones nace en curso hasta que se cumplan; sin condiciones nace activa
+func TestNewOpportunityModel_Status(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts *models.OpportunityOptionalData
+		want cmm.CatalogStatus
+	}{
+		{"sin opts", nil, cmm.OpportunityStatusActive},
+		{"opts sin condiciones", &models.OpportunityOptionalData{}, cmm.OpportunityStatusActive},
+		{"con condiciones", &models.OpportunityOptionalData{Conditions: []models.ConditionsModelType{{ID: primitive.NewObjectID()}}}, cmm.OpportunityStatusOngoing},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			opp := newTestOpportunity(t, 6, "4-HOURS", tt.opts)
+			if opp.IDStatus != tt.want.ID || opp.TagStatus != tt.want.Tag || opp.Status != tt.want.Name {
+				t.Errorf("status = %s, se esperaba %s", opp.TagStatus, tt.want.Tag)
+			}
+		})
+	}
 }

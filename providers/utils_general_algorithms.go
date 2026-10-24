@@ -46,3 +46,8 @@ func seriesRange(values []float64) (float64, float64) {
 func rangeLevel(low, high, ratio float64) float64 {
 	return low + (high-low)*ratio
 }
+
+// sharePercentage retorna el porcentaje que representa part sobre total. Recibe total mayor a 0
+func sharePercentage(part, total float64) float64 {
+	return part / total * 100
+}

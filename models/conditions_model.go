@@ -63,22 +63,17 @@ type ConditionCronjobData struct {
 }
 
 // NewConditionModel crea una condicion de cronjob (is_webhook_only false) con status inactivo hasta que se cumpla.
-// Se programa para evaluarse en la siguiente ejecucion del cronjob. Metadata siempre se guarda como objeto
+// Se programa para evaluarse en la siguiente ejecucion del cronjob. Metadata se guarda como objeto vacio
 func NewConditionModel(
 	// --- Proveedor ---
 	idProvider primitive.ObjectID, nameProvider string,
 	// --- Condicion ---
 	nameCondition, descriptionCondition string,
 	idApi primitive.ObjectID,
-	metadata map[string]any,
 	// --- Cronjob ---
 	cronjob ConditionCronjobData,
 ) (ConditionsModelType, *cmm.ErrorHandler) {
 	now := time.Now().UTC()
-
-	if metadata == nil {
-		metadata = map[string]any{}
-	}
 
 	condition := ConditionsModelType{
 		ID:                   primitive.NewObjectID(),
@@ -86,7 +81,7 @@ func NewConditionModel(
 		NameProvider:         nameProvider,
 		NameCondition:        nameCondition,
 		DescriptionCondition: descriptionCondition,
-		Metadata:             metadata,
+		Metadata:             map[string]any{},
 		IsWebhookOnly:        false,
 		IsProcessing:         false,
 		IDApi:                idApi,

@@ -7,7 +7,6 @@ import (
 
 	cmm "c_trd/common"
 	"c_trd/models"
-	"c_trd/providers"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,14 +14,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// GetTriggerService finds a document by hex ID
-func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHandler) {
+// GetTriggerService busca un trigger no borrado por su ID. Si no existe retorna el trigger vacio sin error
+func GetTriggerService(idTrigger primitive.ObjectID) (models.TriggersModelType, *cmm.ErrorHandler) {
 	var result models.TriggersModelType
-
-	idTriggerParsed, err := primitive.ObjectIDFromHex(idTrigger)
-	if err != nil {
-		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelFatal, "SLISE001")
-	}
 
 	// Set timeout context for the query
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -30,7 +24,7 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHa
 
 	// Create filter and variable to hold the result
 	// TODO: agregar el idStatus al query
-	filter := bson.M{"_id": idTriggerParsed, "logical_delete": false}
+	filter := bson.M{"_id": idTrigger, "logical_delete": false}
 
 	// Extraemos la data que nos importa
 	opts := options.FindOne().SetProjection(bson.M{
@@ -45,7 +39,7 @@ func GetTriggerService(idTrigger string) (models.TriggersModelType, *cmm.ErrorHa
 	})
 
 	// 5. Execute query
-	err = models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
+	err := models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return result, cmm.NewEmptyErrorHandler()
@@ -310,11 +304,6 @@ func GetActiveApiService(idApi primitive.ObjectID) (models.ApisModelType, *cmm.E
 	return result, cmm.NewEmptyErrorHandler()
 }
 
-// ListCallbacksService lista los callbacks compatibles con el formato de respuesta de una API
-func ListCallbacksService(responseFormat string) []providers.CallbackInfo {
-	return providers.ListCallbacksByResponseFormat(responseFormat)
-}
-
 // GetCatalogService busca un catalogo no borrado por su ID y su type_catalog. Si no existe o es de otro tipo
 // retorna el catalogo vacio sin error
 func GetCatalogService(idCatalog primitive.ObjectID, typeCatalog string) (models.CatalogsModelType, *cmm.ErrorHandler) {
@@ -409,4 +398,166 @@ func GetProvidersByIDsService(ids []primitive.ObjectID) (map[primitive.ObjectID]
 	}
 
 	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetAssetsService lista paginados los assets no borrados para los selectores del frontend. La busqueda es literal
+// (sin regex) sobre el nombre, el tag y el tipo de asset.
+// Retorna: los assets de la pagina, el total de documentos encontrados (para paginación) y el error handler
+func GetAssetsService(Limit int, Page int, Search string) ([]models.AssetsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.AssetsModelType, 0)
+
+	// Validaciones de seguridad para la paginación
+	if Limit <= 0 {
+		Limit = 10 // Valor por defecto
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"name": regexPattern},
+			{"tag": regexPattern},
+			{"type_name": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.AssetsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los assets", cmm.LevelDatabase, "SLISE015")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.M{"name": 1}).
+		SetProjection(bson.M{
+			"_id":           1,
+			"id_type_asset": 1,
+			"type_tag":      1,
+			"type_name":     1,
+			"tag":           1,
+			"name":          1,
+			"description":   1,
+			"tag_status":    1,
+			"status":        1,
+		})
+
+	cursor, err := models.AssetsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los assets", cmm.LevelDatabase, "SLISE016")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los assets", cmm.LevelDatabase, "SLISE017")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetCatalogsByTypeService lista los catalogos no borrados de un type_catalog ordenados por nombre. Si el tipo no
+// existe retorna un arreglo vacio sin error
+func GetCatalogsByTypeService(typeCatalog string) ([]models.CatalogsModelType, *cmm.ErrorHandler) {
+	result := make([]models.CatalogsModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"type_catalog": typeCatalog, "logical_delete": false}
+	opts := options.Find().
+		SetSort(bson.M{"name": 1}).
+		SetProjection(bson.M{"_id": 1, "type_catalog": 1, "tag": 1, "name": 1, "description": 1})
+
+	cursor, err := models.CatalogsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando los catalogos", cmm.LevelDatabase, "SLISE018")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando los catalogos", cmm.LevelDatabase, "SLISE019")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetConditionsService lista paginadas las condiciones no borradas, las mas recientes primero. No retorna la peticion
+// (http_request) ni los campos internos del cronjob. La busqueda es literal (sin regex) sobre el nombre, la descripcion,
+// el proveedor y el callback.
+// Retorna: las condiciones de la pagina, el total de documentos encontrados (para paginación) y el error handler
+func GetConditionsService(Limit int, Page int, Search string) ([]models.ConditionsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.ConditionsModelType, 0)
+
+	// Validaciones de seguridad para la paginación
+	if Limit <= 0 {
+		Limit = 10 // Valor por defecto
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"name_condition": regexPattern},
+			{"description_condition": regexPattern},
+			{"name_provider": regexPattern},
+			{"callback_function": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.ConditionsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las condiciones", cmm.LevelDatabase, "SLISE020")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.M{"created_date": -1}).
+		SetProjection(bson.M{
+			"_id":                   1,
+			"id_provider":           1,
+			"name_provider":         1,
+			"name_condition":        1,
+			"description_condition": 1,
+			"is_webhook_only":       1,
+			"interval_seconds":      1,
+			"next_execution_at":     1,
+			"last_executed_at":      1,
+			"id_api":                1,
+			"callback_function":     1,
+			"id_status":             1,
+			"tag_status":            1,
+			"status":                1,
+			"created_date":          1,
+		})
+
+	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las condiciones", cmm.LevelDatabase, "SLISE021")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las condiciones", cmm.LevelDatabase, "SLISE022")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
 }

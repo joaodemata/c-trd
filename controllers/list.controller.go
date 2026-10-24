@@ -3,6 +3,7 @@ package controllers
 import (
 	cmm "c_trd/common"
 	fv "c_trd/format_validates"
+	"c_trd/providers"
 	"c_trd/services"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ func ListApisController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
 
-		payload, err := cmm.GetFromRequestContext[*fv.ListApisFormat](r, "payload")
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, "CLISE003", nil, err)
 			return
@@ -81,7 +82,81 @@ func ListCallbacksController() http.HandlerFunc {
 			return
 		}
 
-		callbacks := services.ListCallbacksService(payload.ResponseFormat)
+		callbacks := providers.ListCallbacksByResponseFormat(payload.ResponseFormat)
 		res.Send(http.StatusOK, "SUCCESS", "Listado de callbacks.", "CLIS003", map[string]any{"callbacks": callbacks})
+	}
+}
+
+// ListAssetsController lista paginados los assets para los selectores del frontend
+func ListAssetsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE004", nil, err)
+			return
+		}
+
+		assets, total, err := services.GetAssetsService(payload.Limit, payload.Page, payload.Search)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		// "page" es el total de documentos para el paginador, igual que los demas listados
+		data := map[string]any{
+			"assets": assets,
+			"page":   total,
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de assets.", "CLIS004", data)
+	}
+}
+
+// ListCatalogsController lista los catalogos de un type_catalog (ej: acciones o temporalidades de vela)
+func ListCatalogsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.ListCatalogsFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE005", nil, err)
+			return
+		}
+
+		catalogs, err := services.GetCatalogsByTypeService(payload.TypeCatalog)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de catalogos.", "CLIS005", map[string]any{"catalogs": catalogs})
+	}
+}
+
+// ListConditionsController lista paginadas las condiciones para asignarlas a un trigger
+func ListConditionsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE006", nil, err)
+			return
+		}
+
+		conditions, total, err := services.GetConditionsService(payload.Limit, payload.Page, payload.Search)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"conditions": conditions,
+			"page":       total,
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de condiciones.", "CLIS006", data)
 	}
 }

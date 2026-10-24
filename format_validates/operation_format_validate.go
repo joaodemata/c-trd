@@ -41,7 +41,6 @@ type CreateConditionFormat struct {
 	Parameters           map[string]string `json:"parameters"`
 	CallbackFunction     string            `json:"callbackFunction" validate:"required"`
 	IntervalSeconds      int               `json:"intervalSeconds" validate:"required,min=60"`
-	Metadata             map[string]any    `json:"metadata"`
 }
 
 var CreateConditionFormatValidate = common.FormatValidateMiddleware[CreateConditionFormat]

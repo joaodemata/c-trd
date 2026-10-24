@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	fv "c_trd/format_validates"
 	"c_trd/models"
 	"c_trd/services"
 	"net/http"
@@ -16,6 +17,18 @@ func TradingViewHookController() http.HandlerFunc {
 		triggerData, err := cmm.GetFromRequestContext[*models.TriggersModelType](r, "triggerData")
 
 		// Verificamos si hay error de parseo
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		payload, err := cmm.GetFromRequestContext[*fv.TradingViewTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		conditions, err := cmm.GetFromRequestContext[[]models.ConditionsModelType](r, "conditions")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
@@ -49,7 +62,10 @@ func TradingViewHookController() http.HandlerFunc {
 				triggerData.IDCandlestickTimeframe,
 				triggerData.TagCandlestickTimeframe,
 				triggerData.CandlestickTimeframe,
-				nil)
+				&models.OpportunityOptionalData{
+					Conditions: conditions,
+					Metadata:   payload.Metadata,
+				})
 
 			// Validamos que no haya errores
 
