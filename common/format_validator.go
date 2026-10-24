@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json" // Importamos el paquete de errores estándar
 	"errors"
 	"fmt"
@@ -34,6 +35,12 @@ var queryTimeLayouts = []string{time.RFC3339, time.DateOnly}
 
 // Solo mayusculas, numeros y guion bajo (ej: GOOGLE_TRENDS_SERIES)
 var upperSnakePattern = regexp.MustCompile(`^[A-Z0-9_]+$`)
+
+// Numero con el formato de JSON (ej: 900, -1.5, 2e3)
+var jsonNumberPattern = regexp.MustCompile(`^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$`)
+
+// Tipos que se decodifican a si mismos (time.Time, ObjectID, json.RawMessage), su valor no se modifica
+var jsonUnmarshalerType = reflect.TypeFor[json.Unmarshaler]()
 
 func init() {
 	validate = validator.New()
@@ -92,7 +99,15 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 
 		// 1. Body: solo se lee si T tiene campos que vienen del body
 		if hasBodyFields {
-			err := json.NewDecoder(r.Body).Decode(&payloadFormat)
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				res.Error("FAIL", "No se pudo leer el body de la petición", "CC005", nil, NewEmptyErrorHandler())
+				return
+			}
+
+			// Los numeros y booleanos enviados como texto ("900", "true") se aceptan en los campos de ese tipo
+			body = numericTextsToNumbers(body, reflect.TypeFor[T]())
+			err = json.NewDecoder(bytes.NewReader(body)).Decode(&payloadFormat)
 
 			// Si el body esta vacio continuamos a la validación del Struct con los valores por defecto (vacíos)
 			if err != nil && !errors.Is(err, io.EOF) {
@@ -255,6 +270,115 @@ func setQueryScalar(field reflect.Value, value string) bool {
 		return false
 	}
 	return true
+}
+
+// numericTextsToNumbers cambia los textos con un numero ("900") por el numero (900) y los textos "true" o "false" por
+// el booleano cuando el campo de destino en targetType es de ese tipo, incluso dentro de objetos, arreglos y mapas. Si el body no es un JSON valido se retorna sin
+// cambios para que el decoder reporte el error
+func numericTextsToNumbers(body []byte, targetType reflect.Type) []byte {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber() // Mantiene el texto exacto de los numeros, sin pasarlos por float64
+
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return body
+	}
+
+	converted, err := json.Marshal(numericTextsInValue(value, targetType))
+	if err != nil {
+		return body
+	}
+	return converted
+}
+
+// numericTextsInValue recorre el valor del JSON junto con el tipo de destino y convierte los textos numericos y booleanos
+func numericTextsInValue(value any, targetType reflect.Type) any {
+	for targetType.Kind() == reflect.Pointer {
+		targetType = targetType.Elem()
+	}
+	if targetType.Implements(jsonUnmarshalerType) || reflect.PointerTo(targetType).Implements(jsonUnmarshalerType) {
+		return value
+	}
+
+	switch typed := value.(type) {
+	case string:
+		text := strings.TrimSpace(typed)
+		if isNumberKind(targetType.Kind()) && jsonNumberPattern.MatchString(text) {
+			return json.Number(text)
+		}
+		if targetType.Kind() == reflect.Bool && (text == "true" || text == "false") {
+			return text == "true"
+		}
+	case []any:
+		if targetType.Kind() == reflect.Slice || targetType.Kind() == reflect.Array {
+			for index, item := range typed {
+				typed[index] = numericTextsInValue(item, targetType.Elem())
+			}
+		}
+	case map[string]any:
+		for key, item := range typed {
+			switch targetType.Kind() {
+			case reflect.Map:
+				typed[key] = numericTextsInValue(item, targetType.Elem())
+			case reflect.Struct:
+				if fieldType, ok := jsonFieldType(targetType, key); ok {
+					typed[key] = numericTextsInValue(item, fieldType)
+				}
+			}
+		}
+	}
+	return value
+}
+
+// isNumberKind tipos enteros o decimales
+func isNumberKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Float32, reflect.Float64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	}
+	return false
+}
+
+// jsonFieldType tipo del campo del struct que recibe la llave del JSON. Igual que encoding/json, primero busca el
+// nombre exacto, luego sin distinguir mayusculas, y revisa los structs embebidos
+func jsonFieldType(structType reflect.Type, key string) (reflect.Type, bool) {
+	var foldedType reflect.Type
+	for index := 0; index < structType.NumField(); index++ {
+		field := structType.Field(index)
+		name := strings.Split(field.Tag.Get("json"), ",")[0]
+		if name == "-" {
+			continue
+		}
+
+		if field.Anonymous && name == "" {
+			embeddedType := field.Type
+			if embeddedType.Kind() == reflect.Pointer {
+				embeddedType = embeddedType.Elem()
+			}
+			if embeddedType.Kind() == reflect.Struct {
+				if fieldType, ok := jsonFieldType(embeddedType, key); ok {
+					return fieldType, true
+				}
+			}
+			continue
+		}
+		if !field.IsExported() {
+			continue
+		}
+
+		if name == "" {
+			name = field.Name
+		}
+		if name == key {
+			return field.Type, true
+		}
+		if foldedType == nil && strings.EqualFold(name, key) {
+			foldedType = field.Type
+		}
+	}
+	return foldedType, foldedType != nil
 }
 
 // formatErrorData arma el data de un error de formato: cada campo con su mensaje ({"campo": {"details": "..."}}),

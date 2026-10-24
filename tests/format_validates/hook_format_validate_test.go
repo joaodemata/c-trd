@@ -30,7 +30,8 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 		{"sin precio", `{"idTrigger":"` + idTrigger + `"}`, false, "CC003", 0},
 		{"precio cero", `{"idTrigger":"` + idTrigger + `","price":0}`, false, "CC003", 0},
 		{"precio negativo", `{"idTrigger":"` + idTrigger + `","price":-5}`, false, "CC003", 0},
-		{"precio como texto", `{"idTrigger":"` + idTrigger + `","price":"67012.34"}`, false, "CC001", 0},
+		{"precio como texto numerico", `{"idTrigger":"` + idTrigger + `","price":"67012.34"}`, true, "", 67012.34},
+		{"precio como texto no numerico", `{"idTrigger":"` + idTrigger + `","price":"alto"}`, false, "CC001", 0},
 		{"sin trigger", `{"price":67012.34}`, false, "CC003", 0},
 	}
 
