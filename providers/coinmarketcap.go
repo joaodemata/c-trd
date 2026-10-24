@@ -58,6 +58,19 @@ type coinMarketCapGlobalMetricsResponse struct {
 	Status coinMarketCapStatus `json:"status"`
 }
 
+// coinMarketCapQuotesResponse estructura minima de la respuesta de /v2/cryptocurrency/quotes/latest pedida por symbol.
+// Cada simbolo trae un arreglo porque varias criptomonedas pueden compartir simbolo
+type coinMarketCapQuotesResponse struct {
+	Data map[string][]struct {
+		Symbol  string `json:"symbol"`
+		CmcRank *int   `json:"cmc_rank"`
+		Quote   map[string]struct {
+			Price *float64 `json:"price"`
+		} `json:"quote"`
+	} `json:"data"`
+	Status coinMarketCapStatus `json:"status"`
+}
+
 // FearAndGreedExtremeFearCallback retorna true si el indice Fear and Greed esta en Extreme Fear (menor a 20)
 func FearAndGreedExtremeFearCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
@@ -211,4 +224,39 @@ func coinMarketCapStatusError(status coinMarketCapStatus) *cmm.ErrorHandler {
 	}
 
 	return cmm.NewErrorHandler(fmt.Errorf("error_code %s: %w", code, errors.New(message)), "CoinMarketCap returned an error message", cmm.LevelError, "PCCMCE002")
+}
+
+// CoinMarketCapQuotePrice retorna el precio en USD del simbolo en la respuesta de /v2/cryptocurrency/quotes/latest.
+// Si varias criptomonedas comparten el simbolo se usa la de mejor cmc_rank; las que no tienen rank estan inactivas
+func CoinMarketCapQuotePrice(responseData []byte, symbol string) (float64, *cmm.ErrorHandler) {
+	var data coinMarketCapQuotesResponse
+	if err := json.Unmarshal(responseData, &data); err != nil {
+		return 0, cmm.NewErrorHandler(err, "Error parsing CoinMarketCap quotes response", cmm.LevelFatal, "PCCMCE009")
+	}
+
+	err := coinMarketCapStatusError(data.Status)
+	if !err.IsEmtpy() {
+		return 0, err
+	}
+
+	bestIndex := -1
+	coins := data.Data[strings.ToUpper(symbol)]
+	for i, coin := range coins {
+		if coin.CmcRank == nil {
+			continue
+		}
+		if bestIndex < 0 || *coin.CmcRank < *coins[bestIndex].CmcRank {
+			bestIndex = i
+		}
+	}
+	if bestIndex < 0 {
+		return 0, cmm.NewErrorHandler(fmt.Errorf("symbol %q coins %d", symbol, len(coins)), "CoinMarketCap has no active cryptocurrency for the symbol", cmm.LevelError, "PCCMCE010")
+	}
+
+	quote, exists := coins[bestIndex].Quote[coinMarketCapQuoteCurrency]
+	if !exists || quote.Price == nil || *quote.Price <= 0 {
+		return 0, cmm.NewErrorHandler(fmt.Errorf("symbol %q price %v", symbol, quote.Price), "CoinMarketCap USD price is missing or invalid", cmm.LevelError, "PCCMCE011")
+	}
+
+	return *quote.Price, cmm.NewEmptyErrorHandler()
 }

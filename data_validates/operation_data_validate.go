@@ -91,46 +91,125 @@ func CreateTriggerDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		asset, ok := validateAssetExists(res, payload.IdAsset)
+		references, ok := validateTriggerReferences(res, payload.IdAsset, payload.IdAction, payload.IdCandlestickTimeframe, payload.Conditions)
 		if !ok {
 			return
 		}
 
-		action, ok := findCatalog(res, payload.IdAction, cmm.CatalogTypeAction)
-		if !ok {
-			return
-		}
-		if action.ID.IsZero() {
-			res.Error("FAIL", "La accion enviada no existe", "DVOPR007", payload.IdAction, cmm.NewEmptyErrorHandler())
-			return
-		}
-
-		timeframe, ok := findCatalog(res, payload.IdCandlestickTimeframe, cmm.CatalogTypeCandleStick)
-		if !ok {
-			return
-		}
-		if timeframe.ID.IsZero() {
-			res.Error("FAIL", "La temporalidad enviada no existe", "DVOPR008", payload.IdCandlestickTimeframe, cmm.NewEmptyErrorHandler())
-			return
-		}
-
-		// Sin una duracion conocida no se puede calcular la expiracion de las oportunidades
-		if !cmm.IsKnownTimeframeTag(timeframe.Tag) {
-			res.Error("FAIL", "La temporalidad enviada no tiene una duracion de vela valida", "DVOPR009", timeframe.Tag, cmm.NewEmptyErrorHandler())
-			return
-		}
-
-		conditions, ok := validateConditionsExist(res, payload.Conditions)
-		if !ok {
-			return
-		}
-
-		r = cmm.SetInRequestContext(r, "asset", &asset)
-		r = cmm.SetInRequestContext(r, "action", &action)
-		r = cmm.SetInRequestContext(r, "timeframe", &timeframe)
-		r = cmm.SetInRequestContext(r, "conditions", conditions)
+		r = setTriggerReferencesInContext(r, references)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// UpdateTriggerDataValidate valida que el trigger a reemplazar exista, que el tag no lo use otro trigger y que el
+// asset, la accion, la temporalidad y las condiciones existan. Deja en el contexto el trigger anterior y los
+// documentos que el controller copia al trigger nuevo
+func UpdateTriggerDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdateTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR017", nil, err)
+			return
+		}
+
+		idTrigger, err := cmm.ParseHexToObjectId(payload.IdTrigger)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		previousTrigger, err := services.GetTriggerService(idTrigger)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if previousTrigger.ID.IsZero() {
+			res.Error("FAIL", "El trigger enviado no existe", "DVOPR018", payload.IdTrigger, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		// El tag puede ser el mismo del trigger anterior, que se borra en la misma transaccion
+		existing, err := services.GetTriggerByTagService(payload.Tag)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if !existing.ID.IsZero() && existing.ID != previousTrigger.ID {
+			res.Error("FAIL", "Ya existe un trigger con el tag enviado", "DVOPR019", payload.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		references, ok := validateTriggerReferences(res, payload.IdAsset, payload.IdAction, payload.IdCandlestickTimeframe, payload.Conditions)
+		if !ok {
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "previousTrigger", &previousTrigger)
+		r = setTriggerReferencesInContext(r, references)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// triggerReferences documentos que el controller copia al trigger
+type triggerReferences struct {
+	asset      models.AssetsModelType
+	action     models.CatalogsModelType
+	timeframe  models.CatalogsModelType
+	conditions []models.ConditionsModelType
+}
+
+// validateTriggerReferences valida que el asset, la accion, la temporalidad y las condiciones del trigger existan.
+// Retorna false si ya se respondio
+func validateTriggerReferences(res *cmm.ResponseHandler, idAsset string, idAction string, idTimeframe string, idConditions []string) (triggerReferences, bool) {
+	var references triggerReferences
+
+	asset, ok := validateAssetExists(res, idAsset)
+	if !ok {
+		return references, false
+	}
+
+	action, ok := findCatalog(res, idAction, cmm.CatalogTypeAction)
+	if !ok {
+		return references, false
+	}
+	if action.ID.IsZero() {
+		res.Error("FAIL", "La accion enviada no existe", "DVOPR007", idAction, cmm.NewEmptyErrorHandler())
+		return references, false
+	}
+
+	timeframe, ok := findCatalog(res, idTimeframe, cmm.CatalogTypeCandleStick)
+	if !ok {
+		return references, false
+	}
+	if timeframe.ID.IsZero() {
+		res.Error("FAIL", "La temporalidad enviada no existe", "DVOPR008", idTimeframe, cmm.NewEmptyErrorHandler())
+		return references, false
+	}
+
+	// Sin una duracion conocida no se puede calcular la expiracion de las oportunidades
+	if !cmm.IsKnownTimeframeTag(timeframe.Tag) {
+		res.Error("FAIL", "La temporalidad enviada no tiene una duracion de vela valida", "DVOPR009", timeframe.Tag, cmm.NewEmptyErrorHandler())
+		return references, false
+	}
+
+	conditions, ok := validateConditionsExist(res, idConditions)
+	if !ok {
+		return references, false
+	}
+
+	references = triggerReferences{asset: asset, action: action, timeframe: timeframe, conditions: conditions}
+	return references, true
+}
+
+// setTriggerReferencesInContext deja en el contexto los documentos que el controller copia al trigger
+func setTriggerReferencesInContext(r *http.Request, references triggerReferences) *http.Request {
+	r = cmm.SetInRequestContext(r, "asset", &references.asset)
+	r = cmm.SetInRequestContext(r, "action", &references.action)
+	r = cmm.SetInRequestContext(r, "timeframe", &references.timeframe)
+	r = cmm.SetInRequestContext(r, "conditions", references.conditions)
+	return r
 }
 
 // findCatalog busca el catalogo del tipo indicado y responde los errores de parseo o de base de datos. Si no existe retorna

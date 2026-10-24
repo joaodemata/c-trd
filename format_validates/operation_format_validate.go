@@ -30,6 +30,22 @@ type CreateTriggerFormat struct {
 
 var CreateTriggerFormatValidate = common.FormatValidateMiddleware[CreateTriggerFormat]
 
+// UpdateTriggerFormat trigger a reemplazar y todos los datos del trigger nuevo (mismas reglas que CreateTriggerFormat).
+// Los campos no se embeben porque el validador reportaria los errores como CreateTriggerFormat.<campo>
+type UpdateTriggerFormat struct {
+	IdTrigger              string   `json:"idTrigger" validate:"required,mongodb"`
+	Tag                    string   `json:"tag" validate:"required"`
+	Name                   string   `json:"name" validate:"required"`
+	Description            string   `json:"description" validate:"required"`
+	IdAsset                string   `json:"idAsset" validate:"required,mongodb"`
+	IdAction               string   `json:"idAction" validate:"required,mongodb"`
+	Conditions             []string `json:"conditions" validate:"omitempty,unique,dive,mongodb"`
+	IdCandlestickTimeframe string   `json:"idCandlestickTimeframe" validate:"required,mongodb"`
+	MaxCandlestickQty      int      `json:"maxCandlestickQty" validate:"required,gt=0"`
+}
+
+var UpdateTriggerFormatValidate = common.FormatValidateMiddleware[UpdateTriggerFormat]
+
 // CreateConditionFormat datos para registrar una condicion sobre una API. Los valores de los parametros se envian
 // como texto y se validan contra el tipo de dato de la API en el data validate. Solo se crean condiciones que evalua
 // el cronjob: isWebhookOnly es opcional y si se envia debe ser false. El intervalo minimo es el del ticker (60s)

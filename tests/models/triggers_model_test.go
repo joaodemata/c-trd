@@ -72,7 +72,7 @@ func TestNewTriggerModel_Defaults(t *testing.T) {
 			if values, _ := conditions.Array().Values(); len(values) != 0 {
 				t.Errorf("conditions tiene %d elementos, se esperaba []", len(values))
 			}
-			for _, key := range []string{"id_reference", "pine_code"} {
+			for _, key := range []string{"id_reference", "id_reference_root", "pine_code"} {
 				if got := raw.Lookup(key).Type; got != bsontype.Null {
 					t.Errorf("%s es %v, se esperaba null", key, got)
 				}
@@ -90,12 +90,14 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 	}
 	second := models.ConditionsModelType{ID: primitive.NewObjectID(), NameCondition: "Trends"}
 	idReference := primitive.NewObjectID()
+	idReferenceRoot := primitive.NewObjectID()
 	pineCode := "//@version=5"
 
 	trigger := newTestTrigger(t, &models.TriggerOptionalData{
-		Conditions:  []models.ConditionsModelType{first, second},
-		IdReference: &idReference,
-		PineCode:    &pineCode,
+		Conditions:      []models.ConditionsModelType{first, second},
+		IdReference:     &idReference,
+		IdReferenceRoot: &idReferenceRoot,
+		PineCode:        &pineCode,
 	})
 
 	if len(trigger.Conditions) != 2 {
@@ -113,7 +115,31 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 	if trigger.IdReference == nil || *trigger.IdReference != idReference {
 		t.Errorf("idReference = %v, se esperaba %s", trigger.IdReference, idReference.Hex())
 	}
+	if trigger.IdReferenceRoot == nil || *trigger.IdReferenceRoot != idReferenceRoot {
+		t.Errorf("idReferenceRoot = %v, se esperaba %s", trigger.IdReferenceRoot, idReferenceRoot.Hex())
+	}
 	if trigger.PineCode == nil || *trigger.PineCode != pineCode {
 		t.Errorf("pineCode = %v, se esperaba %q", trigger.PineCode, pineCode)
+	}
+}
+
+// TestTriggerReferenceRoot la raiz se asigna con el primer reemplazo y se reutiliza en los siguientes
+func TestTriggerReferenceRoot(t *testing.T) {
+	t.Parallel()
+
+	original := newTestTrigger(t, nil)
+
+	// Primer reemplazo: el original no tiene raiz, el original es la raiz
+	firstRoot := models.TriggerReferenceRoot(original)
+	if firstRoot != original.ID {
+		t.Fatalf("root = %s, se esperaba el id del original %s", firstRoot.Hex(), original.ID.Hex())
+	}
+
+	idReference := original.ID
+	second := newTestTrigger(t, &models.TriggerOptionalData{IdReference: &idReference, IdReferenceRoot: &firstRoot})
+
+	// Segundo reemplazo: se reutiliza la raiz y no el id del trigger reemplazado
+	if got := models.TriggerReferenceRoot(second); got != original.ID {
+		t.Errorf("root = %s, se esperaba la raiz %s y no %s", got.Hex(), original.ID.Hex(), second.ID.Hex())
 	}
 }

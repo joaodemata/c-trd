@@ -97,6 +97,68 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 	}
 }
 
+func TestUpdateTriggerFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	idTrigger := primitive.NewObjectID().Hex()
+
+	tests := []struct {
+		name         string
+		edit         func(body map[string]any)
+		wantNext     bool
+		wantTracking string
+	}{
+		{name: "valido", edit: func(map[string]any) {}, wantNext: true},
+		{name: "con condiciones", wantNext: true, edit: func(b map[string]any) {
+			b["conditions"] = []string{primitive.NewObjectID().Hex()}
+		}},
+		{name: "sin trigger", edit: func(b map[string]any) { delete(b, "idTrigger") }, wantTracking: "CC003"},
+		{name: "trigger que no es ObjectID", edit: func(b map[string]any) { b["idTrigger"] = "abc" }, wantTracking: "CC003"},
+		{name: "sin tag", edit: func(b map[string]any) { delete(b, "tag") }, wantTracking: "CC003"},
+		{name: "sin asset", edit: func(b map[string]any) { delete(b, "idAsset") }, wantTracking: "CC003"},
+		{name: "cero velas", edit: func(b map[string]any) { b["maxCandlestickQty"] = 0 }, wantTracking: "CC003"},
+		{name: "velas como texto", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantTracking: "CC001"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := validTriggerBody()
+			body["idTrigger"] = idTrigger
+			tt.edit(body)
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(string(encoded)))
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.UpdateTriggerFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				res := testutil.DecodeResponse(t, rec)
+				if res.Tracking != tt.wantTracking {
+					t.Errorf("tracking = %s, se esperaba %s", res.Tracking, tt.wantTracking)
+				}
+				return
+			}
+
+			payload, errCtx := cmm.GetFromRequestContext[*fv.UpdateTriggerFormat](spy.Request, "payload")
+			testutil.RequireEmptyError(t, errCtx)
+			if payload.IdTrigger != idTrigger || payload.Tag != "TRIGGER-RSI" || payload.MaxCandlestickQty != 6 {
+				t.Errorf("payload = %+v, se esperaba el trigger %s con tag TRIGGER-RSI y 6 velas", payload, idTrigger)
+			}
+		})
+	}
+}
+
 // validConditionBody body valido para crear una condicion de cronjob, cada caso modifica un campo
 func validConditionBody() map[string]any {
 	return map[string]any{

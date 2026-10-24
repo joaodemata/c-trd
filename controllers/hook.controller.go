@@ -63,8 +63,11 @@ func TradingViewHookController() http.HandlerFunc {
 				triggerData.TagCandlestickTimeframe,
 				triggerData.CandlestickTimeframe,
 				&models.OpportunityOptionalData{
-					Conditions: conditions,
-					Metadata:   payload.Metadata,
+					Conditions:     conditions,
+					Metadata:       payload.Metadata,
+					PriceTriggered: &payload.Price,
+					// Sin condiciones nace activa con el mismo precio de TradingView, el modelo lo ignora si nace en curso
+					PriceActiveOpportunity: &payload.Price,
 				})
 
 			// Validamos que no haya errores
