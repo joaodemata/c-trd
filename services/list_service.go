@@ -561,3 +561,32 @@ func GetConditionsService(Limit int, Page int, Search string) ([]models.Conditio
 
 	return result, totalDocs, cmm.NewEmptyErrorHandler()
 }
+
+// GetOngoingOpportunitiesConditionsService lista las oportunidades en curso, no expiradas y con condiciones. Solo
+// retorna el id y las condiciones para comparar sus status con los de la coleccion de condiciones
+func GetOngoingOpportunitiesConditionsService() ([]models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	result := make([]models.OpportunitiesModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"tag_status":      cmm.OpportunityStatusOngoing.Tag,
+		"logical_delete":  false,
+		"expiration_date": bson.M{"$gt": time.Now().UTC()},
+		"conditions.0":    bson.M{"$exists": true},
+	}
+	opts := options.Find().SetProjection(bson.M{"_id": 1, "conditions": 1})
+
+	cursor, err := models.OpportunitiesModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las oportunidades en curso", cmm.LevelDatabase, "SLISE023")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las oportunidades en curso", cmm.LevelDatabase, "SLISE024")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}

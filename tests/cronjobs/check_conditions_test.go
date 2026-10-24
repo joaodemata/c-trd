@@ -204,3 +204,88 @@ func newTestCondition(url string, callback string) models.ConditionsModelType {
 		TagStatus:        cmm.GenericStatusInactive.Tag,
 	}
 }
+
+func TestOutOfSyncConditions(t *testing.T) {
+	t.Parallel()
+
+	active := cmm.GenericStatusActive
+	inactive := cmm.GenericStatusInactive
+	idA := primitive.NewObjectID()
+	idB := primitive.NewObjectID()
+
+	// condition status real en la coleccion de condiciones
+	condition := func(id primitive.ObjectID, status cmm.CatalogStatus) models.ConditionsModelType {
+		return models.ConditionsModelType{ID: id, IDStatus: status.ID, TagStatus: status.Tag, Status: status.Name}
+	}
+	// opportunity oportunidad con las copias de las condiciones y su status
+	opportunity := func(copies map[primitive.ObjectID]cmm.CatalogStatus) models.OpportunitiesModelType {
+		opp := models.OpportunitiesModelType{ID: primitive.NewObjectID()}
+		for id, status := range copies {
+			opp.Conditions = append(opp.Conditions, models.Condition{IDCondition: id, IDStatus: status.ID, TagStatus: status.Tag, Status: status.Name})
+		}
+		return opp
+	}
+
+	tests := []struct {
+		name          string
+		opportunities []models.OpportunitiesModelType
+		conditions    []models.ConditionsModelType
+		want          map[primitive.ObjectID]cmm.CatalogStatus
+	}{
+		{
+			name:          "copias al dia no generan cambios",
+			opportunities: []models.OpportunitiesModelType{opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: active, idB: inactive})},
+			conditions:    []models.ConditionsModelType{condition(idA, active), condition(idB, inactive)},
+			want:          map[primitive.ObjectID]cmm.CatalogStatus{},
+		},
+		{
+			// Oportunidad creada por el hook con el status leido antes de que el cronjob guardara el lote
+			name:          "copia vieja se corrige con el status real",
+			opportunities: []models.OpportunitiesModelType{opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: inactive, idB: active})},
+			conditions:    []models.ConditionsModelType{condition(idA, active), condition(idB, active)},
+			want:          map[primitive.ObjectID]cmm.CatalogStatus{idA: active},
+		},
+		{
+			name: "condicion desincronizada en varias oportunidades aparece una vez",
+			opportunities: []models.OpportunitiesModelType{
+				opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: active}),
+				opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: active}),
+				opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: inactive}),
+			},
+			conditions: []models.ConditionsModelType{condition(idA, inactive)},
+			want:       map[primitive.ObjectID]cmm.CatalogStatus{idA: inactive},
+		},
+		{
+			name:          "condicion borrada se ignora",
+			opportunities: []models.OpportunitiesModelType{opportunity(map[primitive.ObjectID]cmm.CatalogStatus{idA: inactive})},
+			conditions:    []models.ConditionsModelType{},
+			want:          map[primitive.ObjectID]cmm.CatalogStatus{},
+		},
+		{
+			name:          "sin oportunidades",
+			opportunities: nil,
+			conditions:    []models.ConditionsModelType{condition(idA, active)},
+			want:          map[primitive.ObjectID]cmm.CatalogStatus{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			changes := cronjobs.OutOfSyncConditions(tt.opportunities, tt.conditions)
+			if changes == nil {
+				t.Fatal("se esperaba [] y no nil")
+			}
+			if len(changes) != len(tt.want) {
+				t.Fatalf("changes = %+v, want %+v", changes, tt.want)
+			}
+			for _, change := range changes {
+				want, exists := tt.want[change.IDCondition]
+				if !exists || change.NewStatus != want {
+					t.Errorf("change = %+v, se esperaba el status real %+v", change, want)
+				}
+			}
+		})
+	}
+}
