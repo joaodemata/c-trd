@@ -191,6 +191,93 @@ func TestFormatValidateMiddleware_ErrorMessages(t *testing.T) {
 	}
 }
 
+// numericTextPayload campos numericos y booleanos en distintos niveles y campos que deben conservar el texto
+type numericTextPayload struct {
+	Qty     int                `json:"qty"`
+	Price   float64            `json:"price"`
+	Ratio   *float32           `json:"ratio"`
+	Levels  []uint             `json:"levels"`
+	Weights map[string]float64 `json:"weights"`
+	Nested  struct {
+		Max int `json:"max"`
+	} `json:"nested"`
+	Active bool               `json:"active"`
+	Flags  []bool             `json:"flags"`
+	Code   string             `json:"code"`
+	Extra  map[string]any     `json:"extra"`
+	IDItem primitive.ObjectID `json:"idItem"`
+}
+
+func TestFormatValidateMiddleware_NumericTexts(t *testing.T) {
+	t.Parallel()
+
+	itemID := primitive.NewObjectID()
+	ratio := float32(0.5)
+
+	tests := []struct {
+		name         string
+		body         string
+		wantTracking string // vacio si es valida
+		want         numericTextPayload
+		wantMessage  string
+	}{
+		{name: "textos numericos en campos numericos",
+			body: `{"qty":"900","price":" 1.5e2 ","ratio":"0.5","levels":["1",2],"weights":{"a":"-0.25"},"nested":{"max":"7"}}`,
+			want: numericTextPayload{Qty: 900, Price: 150, Ratio: &ratio, Levels: []uint{1, 2}, Weights: map[string]float64{"a": -0.25}, Nested: struct {
+				Max int `json:"max"`
+			}{Max: 7}}},
+		{name: "textos booleanos en campos booleanos", body: `{"active":" true ","flags":["false",true]}`,
+			want: numericTextPayload{Active: true, Flags: []bool{false, true}}},
+		{name: "llave sin distinguir mayusculas", body: `{"QTY":"3"}`, want: numericTextPayload{Qty: 3}},
+		{name: "campos que no son numericos conservan el texto",
+			body: `{"code":"0042","extra":{"limit":"5","on":"true"},"idItem":"` + itemID.Hex() + `"}`,
+			want: numericTextPayload{Code: "0042", Extra: map[string]any{"limit": "5", "on": "true"}, IDItem: itemID}},
+		{name: "texto no numerico", body: `{"qty":"tres"}`, wantTracking: "CC001",
+			wantMessage: "Error de tipo en el campo 'qty': se esperaba un número entero pero se recibió un texto"},
+		{name: "texto decimal en entero", body: `{"qty":"1.5"}`, wantTracking: "CC001",
+			wantMessage: "Error de tipo en el campo 'qty': se esperaba un número entero pero se recibió el número 1.5"},
+		{name: "texto con formato no JSON", body: `{"price":"1,5"}`, wantTracking: "CC001"},
+		{name: "texto no numerico en un objeto anidado", body: `{"nested":{"max":"x"}}`, wantTracking: "CC001",
+			wantMessage: "Error de tipo en el campo 'nested.max': se esperaba un número entero pero se recibió un texto"},
+		{name: "texto no booleano", body: `{"active":"si"}`, wantTracking: "CC001",
+			wantMessage: "Error de tipo en el campo 'active': se esperaba un booleano (true o false) pero se recibió un texto"},
+		{name: "booleano en mayusculas", body: `{"active":"TRUE"}`, wantTracking: "CC001"},
+		{name: "JSON mal formado", body: `{"qty":"9"`, wantTracking: "CC002"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			cmm.FormatValidateMiddleware[numericTextPayload](spy).ServeHTTP(rec, req)
+
+			if tt.wantTracking != "" {
+				res := testutil.DecodeResponse(t, rec)
+				if spy.Called || res.Tracking != tt.wantTracking {
+					t.Fatalf("tracking = %s, se esperaba %s (body: %s)", res.Tracking, tt.wantTracking, rec.Body.String())
+				}
+				if tt.wantMessage != "" && res.Message != tt.wantMessage {
+					t.Errorf("message = %q, se esperaba %q", res.Message, tt.wantMessage)
+				}
+				return
+			}
+
+			if !spy.Called {
+				t.Fatalf("next no fue llamado (body: %s)", rec.Body.String())
+			}
+			payload, err := cmm.GetFromRequestContext[*numericTextPayload](spy.Request, "payload")
+			testutil.RequireEmptyError(t, err)
+			if !reflect.DeepEqual(*payload, tt.want) {
+				t.Errorf("payload = %+v, want %+v", *payload, tt.want)
+			}
+		})
+	}
+}
+
 // mixedPayload campos de query de cada tipo soportado y un campo del body
 type mixedPayload struct {
 	Limit  int       `json:"limit" in:"query" validate:"omitempty,min=1,max=100"`

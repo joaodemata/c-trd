@@ -52,7 +52,8 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 		{name: "temporalidad que no es ObjectID", edit: func(b map[string]any) { b["idCandlestickTimeframe"] = "1H" }, wantTracking: "CC003"},
 		{name: "cero velas", edit: func(b map[string]any) { b["maxCandlestickQty"] = 0 }, wantTracking: "CC003"},
 		{name: "velas negativas", edit: func(b map[string]any) { b["maxCandlestickQty"] = -3 }, wantTracking: "CC003"},
-		{name: "velas como texto", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantTracking: "CC001"},
+		{name: "velas como texto numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantNext: true},
+		{name: "velas como texto no numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "seis" }, wantTracking: "CC001"},
 		{name: "condicion que no es ObjectID", edit: func(b map[string]any) { b["conditions"] = []string{"abc"} }, wantTracking: "CC003"},
 		{name: "condicion repetida", edit: func(b map[string]any) { b["conditions"] = []string{repeatedID, repeatedID} }, wantTracking: "CC003"},
 	}
@@ -117,7 +118,8 @@ func TestUpdateTriggerFormatValidate(t *testing.T) {
 		{name: "sin tag", edit: func(b map[string]any) { delete(b, "tag") }, wantTracking: "CC003"},
 		{name: "sin asset", edit: func(b map[string]any) { delete(b, "idAsset") }, wantTracking: "CC003"},
 		{name: "cero velas", edit: func(b map[string]any) { b["maxCandlestickQty"] = 0 }, wantTracking: "CC003"},
-		{name: "velas como texto", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantTracking: "CC001"},
+		{name: "velas como texto numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantNext: true},
+		{name: "velas como texto no numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "seis" }, wantTracking: "CC001"},
 	}
 
 	for _, tt := range tests {
@@ -185,7 +187,9 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 		{name: "intervalo minimo", edit: func(b map[string]any) { b["intervalSeconds"] = 60 }, wantNext: true},
 		{name: "isWebhookOnly false", edit: func(b map[string]any) { b["isWebhookOnly"] = false }, wantNext: true},
 		{name: "isWebhookOnly true", edit: func(b map[string]any) { b["isWebhookOnly"] = true }, wantTracking: "CC003"},
-		{name: "isWebhookOnly como texto", edit: func(b map[string]any) { b["isWebhookOnly"] = "false" }, wantTracking: "CC001"},
+		{name: "isWebhookOnly como texto false", edit: func(b map[string]any) { b["isWebhookOnly"] = "false" }, wantNext: true},
+		{name: "isWebhookOnly como texto true", edit: func(b map[string]any) { b["isWebhookOnly"] = "true" }, wantTracking: "CC003"},
+		{name: "isWebhookOnly como texto no booleano", edit: func(b map[string]any) { b["isWebhookOnly"] = "no" }, wantTracking: "CC001"},
 		{name: "sin api", edit: func(b map[string]any) { delete(b, "idApi") }, wantTracking: "CC003"},
 		{name: "api que no es ObjectID", edit: func(b map[string]any) { b["idApi"] = "abc" }, wantTracking: "CC003"},
 		{name: "sin nombre", edit: func(b map[string]any) { delete(b, "nameCondition") }, wantTracking: "CC003"},
@@ -194,7 +198,9 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 		{name: "sin intervalo", edit: func(b map[string]any) { delete(b, "intervalSeconds") }, wantTracking: "CC003"},
 		{name: "intervalo menor al ticker", edit: func(b map[string]any) { b["intervalSeconds"] = 59 }, wantTracking: "CC003"},
 		{name: "intervalo negativo", edit: func(b map[string]any) { b["intervalSeconds"] = -60 }, wantTracking: "CC003"},
-		{name: "intervalo como texto", edit: func(b map[string]any) { b["intervalSeconds"] = "3600" }, wantTracking: "CC001"},
+		{name: "intervalo como texto numerico", edit: func(b map[string]any) { b["intervalSeconds"] = "3600" }, wantNext: true},
+		{name: "intervalo como texto menor al ticker", edit: func(b map[string]any) { b["intervalSeconds"] = "59" }, wantTracking: "CC003"},
+		{name: "intervalo como texto no numerico", edit: func(b map[string]any) { b["intervalSeconds"] = "una hora" }, wantTracking: "CC001"},
 		{name: "parametro numerico", edit: func(b map[string]any) { b["parameters"] = map[string]any{"limit": 5} }, wantTracking: "CC001"},
 	}
 
