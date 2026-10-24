@@ -415,3 +415,57 @@ func TestFormatValidateMiddleware_PanicsOnInvalidFields(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatValidateMiddlewareWithKey concatena dos format validates de query en la misma ruta: cada uno inyecta su
+// formato en su propia llave sin pisar al otro
+func TestFormatValidateMiddlewareWithKey(t *testing.T) {
+	t.Parallel()
+
+	type filtersPayload struct {
+		TagStatus      string `json:"tagStatus" in:"query" validate:"omitempty,max=64"`
+		ShowReferences bool   `json:"showReferences" in:"query"`
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?limit=5&page=2&tagStatus=STATUS-INACTIVE&showReferences=true", nil)
+	rec := httptest.NewRecorder()
+	spy := &testutil.NextSpy{}
+
+	handler := cmm.PaginationFormatValidate(cmm.FormatValidateMiddlewareWithKey[filtersPayload]("filters")(spy))
+	handler.ServeHTTP(rec, req)
+
+	if !spy.Called {
+		t.Fatalf("next no fue llamado (body: %s)", rec.Body.String())
+	}
+
+	pagination, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](spy.Request, "payload")
+	testutil.RequireEmptyError(t, err)
+	if pagination.Limit != 5 || pagination.Page != 2 {
+		t.Errorf("paginacion = %+v, se esperaba limit 5 y page 2", *pagination)
+	}
+
+	filters, err := cmm.GetFromRequestContext[*filtersPayload](spy.Request, "filters")
+	testutil.RequireEmptyError(t, err)
+	want := filtersPayload{TagStatus: "STATUS-INACTIVE", ShowReferences: true}
+	if *filters != want {
+		t.Errorf("filters = %+v, want %+v", *filters, want)
+	}
+}
+
+// TestFormatValidateMiddlewareWithKey_InvalidQuery un error en el segundo format validate corta la peticion
+func TestFormatValidateMiddlewareWithKey_InvalidQuery(t *testing.T) {
+	t.Parallel()
+
+	type filtersPayload struct {
+		ShowReferences bool `json:"showReferences" in:"query"`
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?showReferences=si", nil)
+	rec := httptest.NewRecorder()
+	spy := &testutil.NextSpy{}
+
+	cmm.FormatValidateMiddlewareWithKey[filtersPayload]("filters")(spy).ServeHTTP(rec, req)
+
+	if res := testutil.DecodeResponse(t, rec); spy.Called || res.Tracking != "CC004" {
+		t.Fatalf("tracking = %s, se esperaba CC004 (body: %s)", res.Tracking, rec.Body.String())
+	}
+}

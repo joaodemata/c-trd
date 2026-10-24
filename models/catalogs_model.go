@@ -19,11 +19,11 @@ type CatalogsModelType struct {
 	// Common
 	LastUpdatedAt time.Time          `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
 	CreatedDate   time.Time          `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
-	LogicalDelete bool               `bson:"logical_delete" json:"logical_delete" description:"Borrado Logico"`
-	CoreDB        string             `bson:"core_db" json:"core_db" description:"Nombre del Core de Base de datos que hizo el registro"`
-	CoreVersion   string             `bson:"core_version" json:"core_version" description:"Version del Core"`
-	UserDB        string             `bson:"user_db" json:"user_db" description:"Usuario de Base de datos que hizo el registro"`
-	SchemaDB      string             `bson:"schema_db" json:"schema_db" description:"Versionado de la Base de datos"`
+	LogicalDelete bool               `bson:"logical_delete" json:"-" description:"Borrado Logico"`
+	CoreDB        string             `bson:"core_db" json:"-" description:"Nombre del Core de Base de datos que hizo el registro"`
+	CoreVersion   string             `bson:"core_version" json:"-" description:"Version del Core"`
+	UserDB        string             `bson:"user_db" json:"-" description:"Usuario de Base de datos que hizo el registro"`
+	SchemaDB      string             `bson:"schema_db" json:"-" description:"Versionado de la Base de datos"`
 }
 
 // Model pointer

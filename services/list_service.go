@@ -661,3 +661,108 @@ func GetCompletedOpportunitiesService(now time.Time) ([]models.OpportunitiesMode
 
 	return result, cmm.NewEmptyErrorHandler()
 }
+
+// GetTriggersService lista paginados los triggers, los mas recientes primero. No retorna los campos de auditoria.
+// Sin ShowReferences solo lista los triggers activos y no borrados; con ShowReferences tambien los inactivos y los
+// reemplazados (borrados logicamente al crear su nueva version). TagStatus filtra por tag_status si viene.
+// La busqueda es literal (sin regex) sobre el nombre, tag, descripcion, asset, accion y status; las fechas filtran
+// created_date.
+// Retorna: los triggers de la pagina, el total de documentos encontrados (para paginación) y el error handler
+func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, TagStatus string, ShowReferences bool) ([]models.TriggersModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.TriggersModelType, 0)
+
+	// Validaciones de seguridad para la paginación
+	if Limit <= 0 {
+		Limit = 10 // Valor por defecto
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{}
+	if !ShowReferences {
+		filter["logical_delete"] = false
+		filter["tag_status"] = cmm.GenericStatusActive.Tag
+	} else if TagStatus != "" {
+		filter["tag_status"] = TagStatus
+	}
+
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"name": regexPattern},
+			{"tag": regexPattern},
+			{"description": regexPattern},
+			{"asset": regexPattern},
+			{"tag_asset": regexPattern},
+			{"action": regexPattern},
+			{"status": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.TriggersModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los triggers", cmm.LevelDatabase, "SLISE029")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.M{"created_date": -1}).
+		SetProjection(bson.M{
+			"logical_delete": 0,
+			"core_db":        0,
+			"core_version":   0,
+			"user_db":        0,
+			"schema_db":      0,
+		})
+
+	cursor, err := models.TriggersModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los triggers", cmm.LevelDatabase, "SLISE030")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los triggers", cmm.LevelDatabase, "SLISE031")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetCatalogByTagService busca un catalogo no borrado por su tag y su type_catalog. Si no existe retorna el catalogo
+// vacio sin error
+func GetCatalogByTagService(tag string, typeCatalog string) (models.CatalogsModelType, *cmm.ErrorHandler) {
+	var result models.CatalogsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"tag": tag, "type_catalog": typeCatalog, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"_id": 1, "type_catalog": 1, "tag": 1, "name": 1})
+
+	err := models.CatalogsModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, "Error consultando el catalogo", cmm.LevelDatabase, "SLISE032")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}

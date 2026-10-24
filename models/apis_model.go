@@ -69,11 +69,11 @@ type ApisModelType struct {
 	// Comunes
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
 	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
-	LogicalDelete bool      `bson:"logical_delete" json:"logicalDelete" description:"Borrado Logico"`
-	CoreDB        string    `bson:"core_db" json:"coreDb" description:"Nombre del Core de Base de datos que hizo el registro"`
-	CoreVersion   string    `bson:"core_version" json:"coreVersion" description:"Version del Core"`
-	UserDB        string    `bson:"user_db" json:"userDb" description:"Usuario de Base de datos que hizo el registro"`
-	SchemaDB      string    `bson:"schema_db" json:"schemaDb" description:"Versionado de la Base de datos."`
+	LogicalDelete bool      `bson:"logical_delete" json:"-" description:"Borrado Logico"`
+	CoreDB        string    `bson:"core_db" json:"-" description:"Nombre del Core de Base de datos que hizo el registro"`
+	CoreVersion   string    `bson:"core_version" json:"-" description:"Version del Core"`
+	UserDB        string    `bson:"user_db" json:"-" description:"Usuario de Base de datos que hizo el registro"`
+	SchemaDB      string    `bson:"schema_db" json:"-" description:"Versionado de la Base de datos."`
 }
 
 // Model pointer

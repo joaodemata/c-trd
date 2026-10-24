@@ -29,3 +29,13 @@ type ListCatalogsFormat struct {
 }
 
 var ListCatalogsFormatValidate = common.FormatValidateMiddleware[ListCatalogsFormat]
+
+// ListTriggersFormat filtros propios del listado de triggers, se concatena con cmm.PaginationFormatValidate.
+// Sin showReferences solo se listan los triggers activos; con showReferences tambien los inactivos y los reemplazados
+type ListTriggersFormat struct {
+	TagStatus      string `json:"tagStatus" in:"query" validate:"omitempty,max=64"`
+	ShowReferences bool   `json:"showReferences" in:"query"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListTriggersFormatValidate = common.FormatValidateMiddlewareWithKey[ListTriggersFormat]("filters")

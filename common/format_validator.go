@@ -88,8 +88,21 @@ func clientFieldName(field reflect.StructField) string {
 // Los campos de query solo pueden ser textos, numeros, booleanos, time.Time o arreglos de estos, si no la app se
 // detiene al registrar la ruta
 func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
+	return FormatValidateMiddlewareWithKey[T]("payload")(next)
+}
+
+// FormatValidateMiddlewareWithKey igual que FormatValidateMiddleware pero inyecta *T en key. Permite concatenar varios
+// format validates en una ruta (ej: la paginacion en "payload" y los filtros propios de la ruta en otra llave)
+func FormatValidateMiddlewareWithKey[T any](key string) func(http.Handler) http.Handler {
 	queryFields, hasBodyFields := formatFields[T]()
 
+	return func(next http.Handler) http.Handler {
+		return formatValidateHandler[T](next, key, queryFields, hasBodyFields)
+	}
+}
+
+// formatValidateHandler lee, valida e inyecta en key el formato T de cada peticion
+func formatValidateHandler[T any](next http.Handler, key string, queryFields map[int]string, hasBodyFields bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Creamos el response
 		res := NewResponseHandler(w)
@@ -150,7 +163,7 @@ func FormatValidateMiddleware[T any](next http.Handler) http.Handler {
 		}
 
 		// 4. Inyectar en el contexto
-		r = SetInRequestContext(r, "payload", &payloadFormat)
+		r = SetInRequestContext(r, key, &payloadFormat)
 
 		// 5. Continuar al data validate
 		next.ServeHTTP(w, r)
