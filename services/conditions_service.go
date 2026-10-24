@@ -87,6 +87,9 @@ func GetConditionsByIDsService(ids []primitive.ObjectID) ([]models.ConditionsMod
 		"name_provider":         1,
 		"name_condition":        1,
 		"description_condition": 1,
+		"id_status":             1,
+		"tag_status":            1,
+		"status":                1,
 	})
 
 	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)

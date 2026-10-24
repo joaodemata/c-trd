@@ -175,7 +175,6 @@ func CreateConditionController() http.HandlerFunc {
 			provider.ID, provider.Name,
 			payload.NameCondition, payload.DescriptionCondition,
 			api.ID,
-			payload.Metadata,
 			models.ConditionCronjobData{
 				HttpRequest:      *httpRequest,
 				CallbackFunction: payload.CallbackFunction,

@@ -49,6 +49,8 @@ const (
 	ResponseFormatGoogleTrendsFile         = "GOOGLE_TRENDS_FILE"
 	ResponseFormatFredSeriesObservations   = "FRED_SERIES_OBSERVATIONS"
 	ResponseFormatPolymarketFedDecisions   = "POLYMARKET_FED_DECISIONS"
+	ResponseFormatCoinMarketCapFearGreed   = "COINMARKETCAP_FEAR_AND_GREED"
+	ResponseFormatCoinMarketCapGlobal      = "COINMARKETCAP_GLOBAL_METRICS"
 )
 
 // Tipos de dato de los parametros de una API (data_type). El valor se guarda como string y se valida con este tipo

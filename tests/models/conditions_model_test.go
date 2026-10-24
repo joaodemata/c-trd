@@ -14,15 +14,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// newTestCondition crea una condicion con datos fijos, solo varian la metadata y el intervalo
-func newTestCondition(metadata map[string]any, intervalSeconds int) (models.ConditionsModelType, *cmm.ErrorHandler) {
+// newTestCondition crea una condicion con datos fijos, solo varia el intervalo
+func newTestCondition(intervalSeconds int) (models.ConditionsModelType, *cmm.ErrorHandler) {
 	request := providers.HTTPRequestConfig{URL: "https://www.alphavantage.co/query", Method: "GET", QueryData: map[string]string{"symbol": "AAPL"}}
 
 	return models.NewConditionModel(
 		primitive.NewObjectID(), "Alpha Vantage",
 		"Put/Call AAPL", "Ratio alto o bajo",
 		primitive.NewObjectID(),
-		metadata,
 		models.ConditionCronjobData{HttpRequest: request, CallbackFunction: "ProcessAlphaVantageData", IntervalSeconds: intervalSeconds},
 	)
 }
@@ -31,7 +30,7 @@ func TestNewConditionModel(t *testing.T) {
 	t.Parallel()
 
 	before := time.Now().UTC()
-	condition, err := newTestCondition(map[string]any{"source": "manual"}, 3600)
+	condition, err := newTestCondition(3600)
 	testutil.RequireEmptyError(t, err)
 
 	if condition.ID.IsZero() {
@@ -63,7 +62,7 @@ func TestNewConditionModel(t *testing.T) {
 func TestNewConditionModel_EmptyMetadata(t *testing.T) {
 	t.Parallel()
 
-	condition, err := newTestCondition(nil, 60)
+	condition, err := newTestCondition(60)
 	testutil.RequireEmptyError(t, err)
 
 	// Integridad de la data: metadata siempre como objeto y last_executed_at en null
@@ -83,6 +82,6 @@ func TestNewConditionModel_EmptyMetadata(t *testing.T) {
 func TestNewConditionModel_MinInterval(t *testing.T) {
 	t.Parallel()
 
-	_, err := newTestCondition(nil, cmm.ConditionMinIntervalSeconds-1)
+	_, err := newTestCondition(cmm.ConditionMinIntervalSeconds - 1)
 	testutil.RequireTrackingCode(t, err, "MCONE001")
 }

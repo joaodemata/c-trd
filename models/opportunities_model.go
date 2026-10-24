@@ -94,10 +94,11 @@ type OpportunityOptionalData struct {
 	StopLoss   []RiskManagement
 	TakeProfit []RiskManagement
 	Metadata   interface{}
-	Conditions []Condition // Incluido aquí porque a veces la oportunidad nace sin condiciones evaluadas
+	Conditions []ConditionsModelType // Se copian los datos y el status actual de cada condicion a la oportunidad
 }
 
 // NewOpportunity es el método/constructor que crea una nueva instancia de OpportunitiesModelType.
+// Nace en curso hasta que se cumplan sus condiciones; si no tiene condiciones nace activa
 func NewOpportunityModel(
 	// --- Trigger ---
 	idTrigger primitive.ObjectID, tagTrigger, nameTrigger string, descriptionTrigger string,
@@ -170,17 +171,37 @@ func NewOpportunityModel(
 			opp.ID = primitive.NewObjectID()
 		}
 
-		// Asignamos los campos omitempty directamente (pueden ser nil y mongo los ignorará gracias al omitempty)
-		opp.StopLoss = opts.StopLoss
-		opp.TakeProfit = opts.TakeProfit
+		// Los slices solo se reemplazan si vienen, asi se guardan como [] y no como null
+		if opts.StopLoss != nil {
+			opp.StopLoss = opts.StopLoss
+		}
+		if opts.TakeProfit != nil {
+			opp.TakeProfit = opts.TakeProfit
+		}
 		opp.Metadata = opts.Metadata
 
-		if opts.Conditions != nil {
-			opp.Conditions = opts.Conditions
+		for _, condition := range opts.Conditions {
+			opp.Conditions = append(opp.Conditions, Condition{
+				IDCondition:          condition.ID,
+				IDProvider:           condition.IDProvider,
+				NameProvider:         condition.NameProvider,
+				NameCondition:        condition.NameCondition,
+				DescriptionCondition: condition.DescriptionCondition,
+				IDStatus:             condition.IDStatus,
+				TagStatus:            condition.TagStatus,
+				Status:               condition.Status,
+			})
 		}
 	} else {
 		// guardamos vacio para integridad de la data
 		opp.ID = primitive.NewObjectID()
+	}
+
+	// 3. Sin condiciones que esperar la oportunidad nace activa
+	if len(opp.Conditions) == 0 {
+		opp.IDStatus = cmm.OpportunityStatusActive.ID
+		opp.TagStatus = cmm.OpportunityStatusActive.Tag
+		opp.Status = cmm.OpportunityStatusActive.Name
 	}
 
 	return opp, cmm.NewEmptyErrorHandler()
