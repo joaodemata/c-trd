@@ -11,7 +11,7 @@ import (
 // Evita que dos ejecuciones de ProcessConditions se solapen si una tarda mas de un tick
 var isCheckingConditions atomic.Bool
 
-// Evita que dos ejecuciones de ProcessExpiredOpportunities se solapen
+// Evita que dos ejecuciones de ProcessExpiredOpportunities y ProcessFinishedOpportunities se solapen
 var isCheckingOpportunities atomic.Bool
 
 // StartTicker ahora recibe un ctx (Context)
@@ -55,13 +55,14 @@ func runCheckConditions() {
 	ProcessConditions()
 }
 
-// runCheckOpportunities ejecuta ProcessExpiredOpportunities si no hay otra ejecucion en curso
+// runCheckOpportunities ejecuta ProcessExpiredOpportunities y ProcessFinishedOpportunities si no hay otra ejecucion en curso
 func runCheckOpportunities() {
 	if !isCheckingOpportunities.CompareAndSwap(false, true) {
-		log.Println("ProcessExpiredOpportunities sigue en ejecucion, se omite este tick")
+		log.Println("El chequeo de oportunidades sigue en ejecucion, se omite este tick")
 		return
 	}
 	defer isCheckingOpportunities.Store(false)
 
 	ProcessExpiredOpportunities()
+	ProcessFinishedOpportunities()
 }

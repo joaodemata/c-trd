@@ -70,7 +70,7 @@ Request pipeline: **router → format validate → data validate → controller*
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/hook/trading_view` | Receives a TradingView alert and creates (or returns) the ONGOING opportunity of the trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
+| `POST` | `/hook/trading_view` | Receives a TradingView alert and creates (or returns) the ONGOING opportunity of the trigger. Body: `{ "idTrigger": "<ObjectID>", "price": 67012.34, "metadatos": { ... }, "stopLoss": [{ "price": 65000, "probability": 0.3 }], "takeProfit": [{ "price": 72000, "probability": 0.5 }] }` (`stopLoss`, `takeProfit` and `probability` are optional and only saved when the opportunity is created). With `"idCancel": "<ObjectID>"` (catalog `CANCEL_REASON`) the ongoing or active opportunity of the trigger is CANCELED and `price` is saved in `price_achieved` |
 | `GET` | `/list/opportunities` | Paginated list of opportunities. JSON body (optional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Placeholder, not implemented yet |
 | `POST` | `/operation/create/trigger` | Creates a trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (optional) }`. The tag must be unique; asset, action, timeframe and conditions must exist |
@@ -250,7 +250,7 @@ Pipeline de una petición: **router → format validate → data validate → co
 
 | Método | Ruta | Descripción |
 | --- | --- | --- |
-| `POST` | `/hook/trading_view` | Recibe una alerta de TradingView y crea (o retorna) la oportunidad ONGOING del trigger. Body: `{ "idTrigger": "<ObjectID>", "metadatos": { ... } }` |
+| `POST` | `/hook/trading_view` | Recibe una alerta de TradingView y crea (o retorna) la oportunidad ONGOING del trigger. Body: `{ "idTrigger": "<ObjectID>", "price": 67012.34, "metadatos": { ... }, "stopLoss": [{ "price": 65000, "probability": 0.3 }], "takeProfit": [{ "price": 72000, "probability": 0.5 }] }` (`stopLoss`, `takeProfit` y `probability` son opcionales y solo se guardan al crear la oportunidad). Con `"idCancel": "<ObjectID>"` (catalogo `CANCEL_REASON`) la oportunidad en curso o activa del trigger pasa a CANCELED y `price` se guarda en `price_achieved` |
 | `GET` | `/list/opportunities` | Listado paginado de oportunidades. Body JSON (opcional): `{ "limit": 10, "page": 1, "search": "", "startDate": "...", "endDate": "..." }` |
 | `POST` | `/operation/create/oportunity` | Pendiente, aún no implementado |
 | `POST` | `/operation/create/trigger` | Crea un trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (opcional) }`. El tag debe ser único; el asset, la acción, la temporalidad y las condiciones deben existir |

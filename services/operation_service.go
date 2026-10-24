@@ -117,6 +117,96 @@ func ExpireOpportunitiesService(now time.Time) (int64, *cmm.ErrorHandler) {
 	return result.ModifiedCount, cmm.NewEmptyErrorHandler()
 }
 
+// CancelOpportunityService cambia a CANCELED una oportunidad en curso o activa y guarda la razon de cancelacion y el
+// precio en price_achieved. El filtro vuelve a validar el status, asi no se cancela una que cambio desde que se consulto
+func CancelOpportunityService(idOpportunity primitive.ObjectID, cancelReason models.CatalogsModelType, priceAchieved float64, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"_id": idOpportunity,
+		"tag_status": bson.M{"$in": []string{
+			cmm.OpportunityStatusOngoing.Tag,
+			cmm.OpportunityStatusActive.Tag,
+		}},
+		"logical_delete": false,
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"id_status":         cmm.OpportunityStatusCanceled.ID,
+			"tag_status":        cmm.OpportunityStatusCanceled.Tag,
+			"status":            cmm.OpportunityStatusCanceled.Name,
+			"price_achieved":    priceAchieved,
+			"id_cancel":         cancelReason.ID,
+			"tag_cancel_reason": cancelReason.Tag,
+			"cancel_reason":     cancelReason.Name,
+			"last_updated_at":   now,
+		},
+	}
+
+	result, err := models.OpportunitiesModel.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error cancelando la oportunidad.", cmm.LevelDatabase, "SOPRE048")
+	}
+
+	if result.MatchedCount < 1 {
+		return cmm.NewErrorHandler(fmt.Errorf("opportunity %s", idOpportunity.Hex()), "La oportunidad ya no esta en curso ni activa.", cmm.LevelError, "SOPRE049")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// finishedOpportunitiesFilter oportunidades activas cuya fecha de expiracion ya paso
+func finishedOpportunitiesFilter(now time.Time) bson.M {
+	return bson.M{
+		"tag_status":      cmm.OpportunityStatusActive.Tag,
+		"logical_delete":  false,
+		"expiration_date": bson.M{"$lte": now},
+	}
+}
+
+// OpportunityFinish oportunidad que pasa a FINISHED con el precio de mercado de su asset (nil si no se obtuvo)
+type OpportunityFinish struct {
+	IDOpportunity primitive.ObjectID
+	PriceAchieved *float64
+}
+
+// FinishOpportunitiesService cambia a FINISHED las oportunidades y guarda su precio en price_achieved. Cada oportunidad
+// se vuelve a filtrar con finishedOpportunitiesFilter, asi no se finaliza una que cambio desde que se listo
+func FinishOpportunitiesService(finishes []OpportunityFinish, now time.Time) (int64, *cmm.ErrorHandler) {
+	if len(finishes) == 0 {
+		return 0, cmm.NewEmptyErrorHandler()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	writes := make([]mongo.WriteModel, 0, len(finishes))
+	for _, finish := range finishes {
+		filter := finishedOpportunitiesFilter(now)
+		filter["_id"] = finish.IDOpportunity
+
+		update := bson.M{
+			"$set": bson.M{
+				"id_status":       cmm.OpportunityStatusFinished.ID,
+				"tag_status":      cmm.OpportunityStatusFinished.Tag,
+				"status":          cmm.OpportunityStatusFinished.Name,
+				"price_achieved":  finish.PriceAchieved,
+				"last_updated_at": now,
+			},
+		}
+
+		writes = append(writes, mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update))
+	}
+
+	result, err := models.OpportunitiesModel.BulkWrite(ctx, writes, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		return 0, cmm.NewErrorHandler(err, "Error finalizando las oportunidades.", cmm.LevelDatabase, "SOPRE050")
+	}
+
+	return result.ModifiedCount, cmm.NewEmptyErrorHandler()
+}
+
 // UpdateCondition actualiza la condición
 func UpdateCondition(ctx context.Context, idCondition primitive.ObjectID, newIDStatus primitive.ObjectID, newTagStatus string, newStatus string) *cmm.ErrorHandler {
 	filter := bson.M{"_id": idCondition}

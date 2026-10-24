@@ -662,6 +662,29 @@ func GetCompletedOpportunitiesService(now time.Time) ([]models.OpportunitiesMode
 	return result, cmm.NewEmptyErrorHandler()
 }
 
+// GetFinishedOpportunitiesService lista las oportunidades listas para pasar a FINISHED (ver finishedOpportunitiesFilter).
+// Solo retorna el id y el asset para consultar el precio de mercado antes de finalizarlas
+func GetFinishedOpportunitiesService(now time.Time) ([]models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	result := make([]models.OpportunitiesModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	opts := options.Find().SetProjection(bson.M{"_id": 1, "id_asset": 1})
+
+	cursor, err := models.OpportunitiesModel.Find(ctx, finishedOpportunitiesFilter(now), opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las oportunidades por finalizar", cmm.LevelDatabase, "SLISE033")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las oportunidades por finalizar", cmm.LevelDatabase, "SLISE034")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
 // GetTriggersService lista paginados los triggers, los mas recientes primero. No retorna los campos de auditoria.
 // Sin ShowReferences solo lista los triggers activos y no borrados; con ShowReferences tambien los inactivos y los
 // reemplazados (borrados logicamente al crear su nueva version). TagStatus filtra por tag_status si viene.
