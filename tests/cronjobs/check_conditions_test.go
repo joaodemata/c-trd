@@ -103,13 +103,13 @@ func TestEvaluateCondition(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	registerCallback(t, "TestIsBullish", func(body []byte) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestIsBullish", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 		return string(body) == "bullish", cmm.NewEmptyErrorHandler()
 	})
-	registerCallback(t, "TestCallbackError", func(body []byte) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestCallbackError", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 		return true, cmm.NewErrorHandler(errors.New("respuesta inesperada"), "callback fallido", cmm.LevelError, "TESTE005")
 	})
-	registerCallback(t, "TestCallbackPanic", func(body []byte) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestCallbackPanic", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 		panic("bug en el callback")
 	})
 
@@ -155,7 +155,7 @@ func TestEvaluateConditions_KeepsOrderWithMoreConditionsThanWorkers(t *testing.T
 	}))
 	t.Cleanup(server.Close)
 
-	registerCallback(t, "TestIsEven", func(body []byte) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestIsEven", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 		n, err := strconv.Atoi(string(body))
 		if err != nil {
 			return false, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE006")
@@ -181,6 +181,51 @@ func TestEvaluateConditions_KeepsOrderWithMoreConditionsThanWorkers(t *testing.T
 		if !result.Evaluated || result.Accepted != (i%2 == 0) {
 			t.Errorf("resultado %d: evaluated = %v, accepted = %v", i, result.Evaluated, result.Accepted)
 		}
+	}
+}
+
+func TestEvaluateCondition_PassesParametersCallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "70")
+	}))
+	t.Cleanup(server.Close)
+
+	// El callback acepta si el valor de la respuesta supera el umbral de la condicion
+	registerCallback(t, "TestAboveThreshold", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+		value, err := strconv.ParseFloat(string(body), 64)
+		if err != nil {
+			return false, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE007")
+		}
+		threshold, ok := parameters["threshold"].(float64)
+		if !ok {
+			return false, cmm.NewErrorHandler(nil, "umbral invalido", cmm.LevelError, "TESTE008")
+		}
+		return value > threshold, cmm.NewEmptyErrorHandler()
+	})
+
+	tests := []struct {
+		name          string
+		parameters    map[string]any
+		wantEvaluated bool
+		wantAccepted  bool
+	}{
+		{name: "supera el umbral", parameters: map[string]any{"threshold": 60.0}, wantEvaluated: true, wantAccepted: true},
+		{name: "no supera el umbral", parameters: map[string]any{"threshold": 80.0}, wantEvaluated: true, wantAccepted: false},
+		{name: "sin parametros el callback falla", parameters: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			condition := newTestCondition(server.URL, "TestAboveThreshold")
+			condition.ParametersCallback = tt.parameters
+
+			result := cronjobs.EvaluateCondition(context.Background(), condition, nil)
+
+			if result.Evaluated != tt.wantEvaluated || result.Accepted != tt.wantAccepted {
+				t.Errorf("evaluated = %v, accepted = %v; se esperaba evaluated = %v, accepted = %v",
+					result.Evaluated, result.Accepted, tt.wantEvaluated, tt.wantAccepted)
+			}
+		})
 	}
 }
 

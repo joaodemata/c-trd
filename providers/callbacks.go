@@ -6,10 +6,20 @@ import (
 )
 
 // CallbackFunc defines the signature for dynamic callback functions.
-// It receives the original condition, the HTTP response body, and the status code.
+// Recibe el body de la respuesta HTTP y el parameters_callback de la condicion (ya tipados segun su data_type)
 // Todos los callbacks solo deberian recibir un bool
-// TODO: agregar callback_parameters en las condiciones para que los umbrales (ej: dominancia de BTC) sean dinamicos
-type CallbackFunc func(responseBody []byte) (bool, *cmm.ErrorHandler)
+type CallbackFunc func(responseBody []byte, parameters map[string]any) (bool, *cmm.ErrorHandler)
+
+// CallbackParameter parametro que acepta un callback (ej: umbral). El callback solo define el parametro,
+// el valor lo guarda cada condicion en parameters_callback
+type CallbackParameter struct {
+	Name         string  `json:"name"`
+	Label        string  `json:"label"`
+	Description  string  `json:"description"`
+	DataType     string  `json:"dataType"`
+	IsRequired   bool    `json:"isRequired"`
+	DefaultValue *string `json:"defaultValue"`
+}
 
 // CallbackDefinition callback registrado y el formato de respuesta que sabe leer. Solo es compatible con
 // las APIs que tengan el mismo response_format. ID es la llave del registro y lo que se guarda en callback_function,
@@ -21,15 +31,18 @@ type CallbackDefinition struct {
 	Fn             CallbackFunc
 	Description    string
 	ResponseFormat string
+	// Parametros que la condicion puede personalizar, nil si no tiene
+	Parameters []CallbackParameter
 }
 
 // CallbackInfo datos publicos de un callback para listarlo
 type CallbackInfo struct {
-	ID             string `json:"id"`
-	Tag            string `json:"tag"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	ResponseFormat string `json:"responseFormat"`
+	ID             string              `json:"id"`
+	Tag            string              `json:"tag"`
+	Name           string              `json:"name"`
+	Description    string              `json:"description"`
+	ResponseFormat string              `json:"responseFormat"`
+	Parameters     []CallbackParameter `json:"parameters"`
 }
 
 // FunctionRegistry maps a string (from the database) to an actual Go function.
@@ -194,12 +207,17 @@ func ListCallbacksByResponseFormat(responseFormat string) []CallbackInfo {
 	result := make([]CallbackInfo, 0)
 	for _, definition := range FunctionRegistry {
 		if definition.ResponseFormat == responseFormat {
+			parameters := definition.Parameters
+			if parameters == nil {
+				parameters = []CallbackParameter{}
+			}
 			result = append(result, CallbackInfo{
 				ID:             definition.ID,
 				Tag:            definition.Tag,
 				Name:           definition.Name,
 				Description:    definition.Description,
 				ResponseFormat: definition.ResponseFormat,
+				Parameters:     parameters,
 			})
 		}
 	}

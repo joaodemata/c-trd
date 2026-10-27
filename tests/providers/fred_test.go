@@ -40,13 +40,13 @@ func TestFredSeriesCallbacks_Fixtures(t *testing.T) {
 
 			body := testutil.ReadFixture(t, tt.fixture)
 
-			rising, err := providers.FredSeriesRisingCallback(body)
+			rising, err := providers.FredSeriesRisingCallback(body, nil)
 			testutil.RequireEmptyError(t, err)
 			if rising != tt.wantRising {
 				t.Errorf("rising = %v, want %v", rising, tt.wantRising)
 			}
 
-			falling, err := providers.FredSeriesFallingCallback(body)
+			falling, err := providers.FredSeriesFallingCallback(body, nil)
 			testutil.RequireEmptyError(t, err)
 			if falling != tt.wantFalling {
 				t.Errorf("falling = %v, want %v", falling, tt.wantFalling)
@@ -87,13 +87,13 @@ func TestFredSeriesCallbacks_Trend(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			rising, err := providers.FredSeriesRisingCallback(tt.body)
+			rising, err := providers.FredSeriesRisingCallback(tt.body, nil)
 			testutil.RequireEmptyError(t, err)
 			if rising != tt.wantRising {
 				t.Errorf("rising = %v, want %v", rising, tt.wantRising)
 			}
 
-			falling, err := providers.FredSeriesFallingCallback(tt.body)
+			falling, err := providers.FredSeriesFallingCallback(tt.body, nil)
 			testutil.RequireEmptyError(t, err)
 			if falling != tt.wantFalling {
 				t.Errorf("falling = %v, want %v", falling, tt.wantFalling)
@@ -123,13 +123,13 @@ func TestFredSeriesCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			rising, err := providers.FredSeriesRisingCallback(tt.body)
+			rising, err := providers.FredSeriesRisingCallback(tt.body, nil)
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 			if rising {
 				t.Error("un error nunca debe aceptar la condicion")
 			}
 
-			falling, err := providers.FredSeriesFallingCallback(tt.body)
+			falling, err := providers.FredSeriesFallingCallback(tt.body, nil)
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 			if falling {
 				t.Error("un error nunca debe aceptar la condicion")

@@ -34,7 +34,7 @@ type googleTrendsResponse struct {
 }
 
 // GoogleTrendsHighCallback retorna true si el ultimo valor de interes esta en la zona alta del rango de la serie
-func GoogleTrendsHighCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsHighCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsSeries(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -53,7 +53,7 @@ func GoogleTrendsHighCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 }
 
 // GoogleTrendsLowCallback retorna true si el ultimo valor de interes esta en la zona baja del rango de la serie
-func GoogleTrendsLowCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsLowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsSeries(responseData)
 	if !err.IsEmtpy() {
 		return false, err

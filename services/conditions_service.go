@@ -82,14 +82,15 @@ func GetConditionsByIDsService(ids []primitive.ObjectID) ([]models.ConditionsMod
 
 	filter := bson.M{"_id": bson.M{"$in": ids}, "logical_delete": false}
 	opts := options.Find().SetProjection(bson.M{
-		"_id":                   1,
-		"id_provider":           1,
-		"name_provider":         1,
-		"name_condition":        1,
-		"description_condition": 1,
-		"id_status":             1,
-		"tag_status":            1,
-		"status":                1,
+		"_id":           1,
+		"id_provider":   1,
+		"name_provider": 1,
+		"tag":           1,
+		"name":          1,
+		"description":   1,
+		"id_status":     1,
+		"tag_status":    1,
+		"status":        1,
 	})
 
 	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)

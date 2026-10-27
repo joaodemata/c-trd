@@ -47,6 +47,12 @@
       "description": "Se asigna con la respuesta de List APIs"
     },
     {
+      "key": "idTypeCondition",
+      "value": "",
+      "type": "string",
+      "description": "ID de un catalogo TYPE_CONDITION (List catalogs con typeCatalog=TYPE_CONDITION)"
+    },
+    {
       "key": "callbackFunction",
       "value": "",
       "type": "string",
@@ -456,7 +462,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idApi\": \"{{idApi}}\",\n  \"nameCondition\": \"Condicion de prueba\",\n  \"descriptionCondition\": \"Condicion creada desde Postman para probar la API\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
+              "raw": "{\n  \"tag\": \"CONDICION-PRUEBA-{{$timestamp}}\",\n  \"name\": \"Condicion de prueba\",\n  \"description\": \"Condicion creada desde Postman para probar la API\",\n  \"idTypeCondition\": \"{{idTypeCondition}}\",\n  \"idApi\": \"{{idApi}}\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"parametersCallback\": {},\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -509,7 +515,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idApi\": \"{{idApi}}\",\n  \"nameCondition\": \"Condicion de prueba\",\n  \"descriptionCondition\": \"Condicion creada desde Postman para probar la API\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"intervalSeconds\": 30,\n  \"metadata\": {}\n}",
+              "raw": "{\n  \"tag\": \"CONDICION-PRUEBA-{{$timestamp}}\",\n  \"name\": \"Condicion de prueba\",\n  \"description\": \"Condicion creada desde Postman para probar la API\",\n  \"idTypeCondition\": \"{{idTypeCondition}}\",\n  \"idApi\": \"{{idApi}}\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"parametersCallback\": {},\n  \"intervalSeconds\": 30,\n  \"metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -576,7 +582,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idApi\": \"{{idApi}}\",\n  \"nameCondition\": \"Condicion de prueba\",\n  \"descriptionCondition\": \"Condicion creada desde Postman para probar la API\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {\"parametroQueNoExiste\": \"x\"},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
+              "raw": "{\n  \"tag\": \"CONDICION-PRUEBA-{{$timestamp}}\",\n  \"name\": \"Condicion de prueba\",\n  \"description\": \"Condicion creada desde Postman para probar la API\",\n  \"idTypeCondition\": \"{{idTypeCondition}}\",\n  \"idApi\": \"{{idApi}}\",\n  \"isWebhookOnly\": false,\n  \"parameters\": {\"parametroQueNoExiste\": \"x\"},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"parametersCallback\": {},\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -629,7 +635,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idApi\": \"{{idApi}}\",\n  \"nameCondition\": \"Condicion de prueba\",\n  \"descriptionCondition\": \"Condicion creada desde Postman para probar la API\",\n  \"isWebhookOnly\": true,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
+              "raw": "{\n  \"tag\": \"CONDICION-PRUEBA-{{$timestamp}}\",\n  \"name\": \"Condicion de prueba\",\n  \"description\": \"Condicion creada desde Postman para probar la API\",\n  \"idTypeCondition\": \"{{idTypeCondition}}\",\n  \"idApi\": \"{{idApi}}\",\n  \"isWebhookOnly\": true,\n  \"parameters\": {{conditionParameters}},\n  \"callbackFunction\": \"{{callbackFunction}}\",\n  \"parametersCallback\": {},\n  \"intervalSeconds\": 3600,\n  \"metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"

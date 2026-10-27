@@ -684,6 +684,48 @@ func BuildConditionHTTPRequestService(api models.ApisModelType, parameters map[s
 	return config, cmm.NewEmptyErrorHandler()
 }
 
+// BuildConditionCallbackParametersService valida los parametros enviados para el callback: que el callback los acepte,
+// que esten los requeridos (o tengan valor por defecto) y que respeten su tipo de dato. Retorna los valores tipados
+// que se guardan en parameters_callback, {} si el callback no tiene parametros
+func BuildConditionCallbackParametersService(callback providers.CallbackDefinition, parameters map[string]string) (map[string]any, *cmm.ErrorHandler) {
+	result := map[string]any{}
+
+	// 1. Parametros enviados que el callback no acepta
+	unknown := []string{}
+	for name := range parameters {
+		if !slices.ContainsFunc(callback.Parameters, func(p providers.CallbackParameter) bool { return p.Name == name }) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return result, cmm.NewErrorHandler(fmt.Errorf("unknown callback parameters %v", unknown), fmt.Sprintf("El callback no acepta los parametros: %s", strings.Join(unknown, ", ")), cmm.LevelError, "SOPRE051")
+	}
+
+	// 2. Valores tipados, con el valor por defecto si no se envio
+	for _, parameter := range callback.Parameters {
+		value, exists := parameters[parameter.Name]
+		if !exists && parameter.DefaultValue != nil {
+			value, exists = *parameter.DefaultValue, true
+		}
+		if !exists {
+			if parameter.IsRequired {
+				return result, cmm.NewErrorHandler(fmt.Errorf("missing callback parameter %q", parameter.Name), fmt.Sprintf("El parametro %q del callback es requerido", parameter.Name), cmm.LevelError, "SOPRE052")
+			}
+			continue
+		}
+
+		// Los parametros del callback no tienen opciones, se validan como un parametro libre de API
+		typed, errValue := parseParameterValue(models.ApiParameter{Name: parameter.Name, DataType: parameter.DataType}, value)
+		if !errValue.IsEmtpy() {
+			return result, errValue
+		}
+		result[parameter.Name] = typed
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
 // parseParameterValue valida el valor segun el tipo de dato y las opciones del parametro. Retorna el valor con su tipo
 // para que el body se envie con tipos JSON (5 y no "5")
 func parseParameterValue(parameter models.ApiParameter, value string) (any, *cmm.ErrorHandler) {

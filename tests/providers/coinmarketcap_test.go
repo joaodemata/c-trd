@@ -32,7 +32,7 @@ func fearAndGreedZones(t *testing.T, body []byte) [5]bool {
 
 	var zones [5]bool
 	for i, callback := range callbacks {
-		accepted, err := callback(body)
+		accepted, err := callback(body, nil)
 		testutil.RequireEmptyError(t, err)
 		zones[i] = accepted
 	}
@@ -104,7 +104,7 @@ func TestFearAndGreedCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.FearAndGreedNeutralCallback(tt.body)
+			accepted, err := providers.FearAndGreedNeutralCallback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.code)
 			if accepted {
@@ -120,9 +120,9 @@ func TestDominanceCallbacks_Fixture(t *testing.T) {
 	// Respuesta real: dominancia de BTC 60.14% y stablecoins 282.4B de 2736.1B (10.32%)
 	body := testutil.ReadFixture(t, "coinmarketcap_global_metrics_latest.json")
 
-	btcAbove, err := providers.BtcDominanceAbove60Callback(body)
+	btcAbove, err := providers.BtcDominanceAbove60Callback(body, nil)
 	testutil.RequireEmptyError(t, err)
-	stablecoinAbove, err := providers.StablecoinDominanceAbove12Callback(body)
+	stablecoinAbove, err := providers.StablecoinDominanceAbove12Callback(body, nil)
 	testutil.RequireEmptyError(t, err)
 
 	if !btcAbove || stablecoinAbove {
@@ -147,7 +147,7 @@ func TestBtcDominanceAbove60Callback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := providers.BtcDominanceAbove60Callback(globalMetricsBody(tt.btcDominance, 1000, 100))
+			got, err := providers.BtcDominanceAbove60Callback(globalMetricsBody(tt.btcDominance, 1000, 100), nil)
 
 			testutil.RequireEmptyError(t, err)
 			if got != tt.want {
@@ -176,7 +176,7 @@ func TestStablecoinDominanceAbove12Callback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := providers.StablecoinDominanceAbove12Callback(globalMetricsBody(50, tt.totalMarketCap, tt.stablecoinMarketCap))
+			got, err := providers.StablecoinDominanceAbove12Callback(globalMetricsBody(50, tt.totalMarketCap, tt.stablecoinMarketCap), nil)
 
 			testutil.RequireEmptyError(t, err)
 			if got != tt.want {
@@ -216,7 +216,7 @@ func TestDominanceCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(tt.body)
+			accepted, err := tt.callback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.code)
 			if accepted {

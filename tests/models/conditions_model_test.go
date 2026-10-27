@@ -14,15 +14,19 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// newTestCondition crea una condicion con datos fijos, solo varia el intervalo
-func newTestCondition(intervalSeconds int) (models.ConditionsModelType, *cmm.ErrorHandler) {
+// typeCondition catalogo TYPE_CONDITION fijo de las pruebas
+var typeCondition = models.ConditionTypeData{ID: primitive.NewObjectID(), Tag: "SENTIMENT", Name: "Sentimiento"}
+
+// newTestCondition crea una condicion con datos fijos, solo varian el intervalo y los parametros del callback
+func newTestCondition(intervalSeconds int, parametersCallback map[string]any) (models.ConditionsModelType, *cmm.ErrorHandler) {
 	request := providers.HTTPRequestConfig{URL: "https://www.alphavantage.co/query", Method: "GET", QueryData: map[string]string{"symbol": "AAPL"}}
 
 	return models.NewConditionModel(
+		"PUT-CALL-AAPL", "Put/Call AAPL", "Ratio alto o bajo",
 		primitive.NewObjectID(), "Alpha Vantage",
-		"Put/Call AAPL", "Ratio alto o bajo",
+		typeCondition,
 		primitive.NewObjectID(),
-		models.ConditionCronjobData{HttpRequest: request, CallbackFunction: "ProcessAlphaVantageData", IntervalSeconds: intervalSeconds},
+		models.ConditionCronjobData{HttpRequest: request, CallbackFunction: "ProcessAlphaVantageData", ParametersCallback: parametersCallback, IntervalSeconds: intervalSeconds},
 	)
 }
 
@@ -30,11 +34,20 @@ func TestNewConditionModel(t *testing.T) {
 	t.Parallel()
 
 	before := time.Now().UTC()
-	condition, err := newTestCondition(3600)
+	condition, err := newTestCondition(3600, map[string]any{"threshold": 60.5})
 	testutil.RequireEmptyError(t, err)
 
 	if condition.ID.IsZero() {
 		t.Error("el ID debe generarse en el constructor")
+	}
+	if condition.Tag != "PUT-CALL-AAPL" || condition.Name != "Put/Call AAPL" || condition.Description != "Ratio alto o bajo" {
+		t.Errorf("tag = %s, name = %s, description = %s, se esperaban los datos enviados", condition.Tag, condition.Name, condition.Description)
+	}
+	if condition.IDTypeCondition != typeCondition.ID || condition.TagTypeCondition != typeCondition.Tag || condition.NameTypeCondition != typeCondition.Name {
+		t.Errorf("tipo de condicion = %s/%s, se esperaba la copia de %+v", condition.TagTypeCondition, condition.NameTypeCondition, typeCondition)
+	}
+	if condition.ParametersCallback["threshold"] != 60.5 {
+		t.Errorf("parameters_callback = %v, se esperaban los parametros enviados", condition.ParametersCallback)
 	}
 	// Una condicion nace inactiva, el cronjob la activa cuando se cumple
 	if condition.IDStatus != cmm.GenericStatusInactive.ID || condition.TagStatus != cmm.GenericStatusInactive.Tag {
@@ -62,10 +75,10 @@ func TestNewConditionModel(t *testing.T) {
 func TestNewConditionModel_EmptyMetadata(t *testing.T) {
 	t.Parallel()
 
-	condition, err := newTestCondition(60)
+	condition, err := newTestCondition(60, nil)
 	testutil.RequireEmptyError(t, err)
 
-	// Integridad de la data: metadata siempre como objeto y last_executed_at en null
+	// Integridad de la data: metadata y parameters_callback siempre como objeto y last_executed_at en null
 	doc, errMarshal := bson.Marshal(condition)
 	if errMarshal != nil {
 		t.Fatalf("bson.Marshal: %v", errMarshal)
@@ -73,6 +86,9 @@ func TestNewConditionModel_EmptyMetadata(t *testing.T) {
 	raw := bson.Raw(doc)
 	if got := raw.Lookup("metadata").Type; got != bsontype.EmbeddedDocument {
 		t.Errorf("metadata es %v, se esperaba un objeto", got)
+	}
+	if got := raw.Lookup("parameters_callback").Type; got != bsontype.EmbeddedDocument {
+		t.Errorf("parameters_callback es %v, se esperaba un objeto", got)
 	}
 	if got := raw.Lookup("last_executed_at").Type; got != bsontype.Null {
 		t.Errorf("last_executed_at es %v, se esperaba null", got)
@@ -82,6 +98,6 @@ func TestNewConditionModel_EmptyMetadata(t *testing.T) {
 func TestNewConditionModel_MinInterval(t *testing.T) {
 	t.Parallel()
 
-	_, err := newTestCondition(cmm.ConditionMinIntervalSeconds - 1)
+	_, err := newTestCondition(cmm.ConditionMinIntervalSeconds-1, nil)
 	testutil.RequireTrackingCode(t, err, "MCONE001")
 }

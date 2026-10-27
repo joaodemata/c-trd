@@ -81,11 +81,11 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 
 		id := primitive.NewObjectID()
 		conditions := []models.ConditionsModelType{{
-			ID:            primitive.NewObjectID(),
-			NameCondition: "Put/Call AAPL",
-			IDStatus:      cmm.GenericStatusActive.ID,
-			TagStatus:     cmm.GenericStatusActive.Tag,
-			Status:        cmm.GenericStatusActive.Name,
+			ID:        primitive.NewObjectID(),
+			Name:      "Put/Call AAPL",
+			IDStatus:  cmm.GenericStatusActive.ID,
+			TagStatus: cmm.GenericStatusActive.Tag,
+			Status:    cmm.GenericStatusActive.Name,
 		}}
 		metadata := map[string]any{"price": 100.5}
 
@@ -95,7 +95,7 @@ func TestNewOpportunityModel_OptionalData(t *testing.T) {
 			t.Errorf("ID = %v, se esperaba %v", opp.ID, id)
 		}
 		// Se copia el status actual de la condicion, no nace inactiva
-		if len(opp.Conditions) != 1 || opp.Conditions[0].IDCondition != conditions[0].ID || opp.Conditions[0].TagStatus != cmm.GenericStatusActive.Tag || opp.Conditions[0].NameCondition != conditions[0].NameCondition {
+		if len(opp.Conditions) != 1 || opp.Conditions[0].IDCondition != conditions[0].ID || opp.Conditions[0].TagStatus != cmm.GenericStatusActive.Tag || opp.Conditions[0].NameCondition != conditions[0].Name {
 			t.Errorf("conditions = %+v, se esperaba la copia de %+v", opp.Conditions, conditions)
 		}
 		if got, ok := opp.Metadata.(map[string]any); !ok || got["price"] != 100.5 {

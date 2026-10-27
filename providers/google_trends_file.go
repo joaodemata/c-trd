@@ -32,7 +32,7 @@ type googleTrendsFileResponse struct {
 }
 
 // GoogleTrendsFileHighCallback el ultimo periodo del CSV esta en la zona alta del rango
-func GoogleTrendsFileHighCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsFileHighCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -51,7 +51,7 @@ func GoogleTrendsFileHighCallback(responseData []byte) (bool, *cmm.ErrorHandler)
 }
 
 // GoogleTrendsFileLowCallback el ultimo periodo del CSV esta en la zona baja del rango
-func GoogleTrendsFileLowCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsFileLowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -70,7 +70,7 @@ func GoogleTrendsFileLowCallback(responseData []byte) (bool, *cmm.ErrorHandler) 
 }
 
 // GoogleTrendsFileNewMaxCallback el ultimo periodo del CSV es un nuevo maximo de la serie
-func GoogleTrendsFileNewMaxCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsFileNewMaxCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -86,7 +86,7 @@ func GoogleTrendsFileNewMaxCallback(responseData []byte) (bool, *cmm.ErrorHandle
 }
 
 // GoogleTrendsFileNewMinCallback el ultimo periodo del CSV es un nuevo minimo de la serie
-func GoogleTrendsFileNewMinCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func GoogleTrendsFileNewMinCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	series, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
 		return false, err

@@ -12,11 +12,17 @@ import (
 )
 
 type ConditionsModelType struct {
-	ID                   primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	IDProvider           primitive.ObjectID `bson:"id_provider" json:"idProvider"`
-	NameProvider         string             `bson:"name_provider" json:"nameProvider"`
-	NameCondition        string             `bson:"name_condition" json:"nameCondition"`
-	DescriptionCondition string             `bson:"description_condition" json:"descriptionCondition"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Tag          string             `bson:"tag" json:"tag"`
+	Name         string             `bson:"name" json:"name"`
+	Description  string             `bson:"description" json:"description"`
+	IDProvider   primitive.ObjectID `bson:"id_provider" json:"idProvider"`
+	NameProvider string             `bson:"name_provider" json:"nameProvider"`
+
+	// Type condition
+	IDTypeCondition   primitive.ObjectID `bson:"id_type_condition" json:"idTypeCondition"`
+	NameTypeCondition string             `bson:"name_type_condition" json:"nameTypeCondition"`
+	TagTypeCondition  string             `bson:"tag_type_condition" json:"tagTypeCondition"`
 
 	// Si Metadata es nil en Go, se guardará como null en la base de datos, siempre debe ser un objeto asi sea vacio
 	Metadata interface{} `bson:"metadata" json:"metadata" description:"Objeto con datos a guardar para data analisis"`
@@ -34,6 +40,8 @@ type ConditionsModelType struct {
 	IDApi            primitive.ObjectID          `bson:"id_api" json:"idApi" description:"Id de la api"`
 	HttpRequest      providers.HTTPRequestConfig `bson:"http_request" json:"httpRequest" description:"Peticion."`
 	CallbackFunction string                      `bson:"callback_function" json:"callbackFunction" description:"Nombre de la función que procesará la respuesta"`
+	// Valores de los parametros del callback ya tipados (ej: umbrales). Se guarda {} si no tiene
+	ParametersCallback map[string]any `bson:"parameters_callback" json:"parametersCallback" description:"Parametros que recibe el callback"`
 
 	// Status
 	IDStatus  primitive.ObjectID `bson:"id_status" json:"id_status"`
@@ -57,18 +65,28 @@ var ConditionsModel *mongo.Collection
 
 // ConditionCronjobData datos con los que el cronjob evalua la condicion
 type ConditionCronjobData struct {
-	HttpRequest      providers.HTTPRequestConfig
-	CallbackFunction string
-	IntervalSeconds  int
+	HttpRequest        providers.HTTPRequestConfig
+	CallbackFunction   string
+	ParametersCallback map[string]any
+	IntervalSeconds    int
+}
+
+// ConditionTypeData catalogo TYPE_CONDITION que clasifica la condicion
+type ConditionTypeData struct {
+	ID   primitive.ObjectID
+	Tag  string
+	Name string
 }
 
 // NewConditionModel crea una condicion de cronjob (is_webhook_only false) con status inactivo hasta que se cumpla.
-// Se programa para evaluarse en la siguiente ejecucion del cronjob. Metadata se guarda como objeto vacio
+// Se programa para evaluarse en la siguiente ejecucion del cronjob. Metadata y parameters_callback se guardan como objeto vacio
 func NewConditionModel(
+	// --- Condicion ---
+	tag, name, description string,
 	// --- Proveedor ---
 	idProvider primitive.ObjectID, nameProvider string,
-	// --- Condicion ---
-	nameCondition, descriptionCondition string,
+	// --- Tipo de condicion ---
+	typeCondition ConditionTypeData,
 	idApi primitive.ObjectID,
 	// --- Cronjob ---
 	cronjob ConditionCronjobData,
@@ -76,18 +94,23 @@ func NewConditionModel(
 	now := time.Now().UTC()
 
 	condition := ConditionsModelType{
-		ID:                   primitive.NewObjectID(),
-		IDProvider:           idProvider,
-		NameProvider:         nameProvider,
-		NameCondition:        nameCondition,
-		DescriptionCondition: descriptionCondition,
-		Metadata:             map[string]any{},
-		IsWebhookOnly:        false,
-		IsProcessing:         false,
-		IDApi:                idApi,
-		IDStatus:             cmm.GenericStatusInactive.ID,
-		TagStatus:            cmm.GenericStatusInactive.Tag,
-		Status:               cmm.GenericStatusInactive.Name,
+		ID:                 primitive.NewObjectID(),
+		Tag:                tag,
+		Name:               name,
+		Description:        description,
+		IDProvider:         idProvider,
+		NameProvider:       nameProvider,
+		IDTypeCondition:    typeCondition.ID,
+		NameTypeCondition:  typeCondition.Name,
+		TagTypeCondition:   typeCondition.Tag,
+		Metadata:           map[string]any{},
+		ParametersCallback: map[string]any{},
+		IsWebhookOnly:      false,
+		IsProcessing:       false,
+		IDApi:              idApi,
+		IDStatus:           cmm.GenericStatusInactive.ID,
+		TagStatus:          cmm.GenericStatusInactive.Tag,
+		Status:             cmm.GenericStatusInactive.Name,
 
 		// Auditoría
 		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),
@@ -107,6 +130,9 @@ func NewConditionModel(
 	interval := cronjob.IntervalSeconds
 	condition.HttpRequest = cronjob.HttpRequest
 	condition.CallbackFunction = cronjob.CallbackFunction
+	if cronjob.ParametersCallback != nil {
+		condition.ParametersCallback = cronjob.ParametersCallback
+	}
 	condition.IntervalSeconds = &interval
 	condition.NextExecutionAt = &now
 

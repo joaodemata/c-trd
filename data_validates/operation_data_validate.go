@@ -297,7 +297,7 @@ func validateAssetExists(res *cmm.ResponseHandler, idAssetHex string) (models.As
 
 // CreateConditionDataValidate valida que la API este activa, que su proveedor exista y que el callback lea el formato
 // de respuesta de la API. Construye la peticion con los parametros enviados y valida que pueda enviarse al proveedor.
-// Deja en el contexto la API, el proveedor y la peticion
+// Deja en el contexto el tipo de condicion, la API, el proveedor, la peticion y los parametros del callback
 func CreateConditionDataValidate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
@@ -305,6 +305,33 @@ func CreateConditionDataValidate(next http.Handler) http.Handler {
 		payload, err := cmm.GetFromRequestContext[*fv.CreateConditionFormat](r, "payload")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, "DVOPR011", nil, err)
+			return
+		}
+
+		// El tag es unico entre las condiciones no borradas
+		existing, err := services.GetConditionByTagService(payload.Tag)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if !existing.ID.IsZero() {
+			res.Error("FAIL", "Ya existe una condicion con el tag enviado", "DVOPR020", payload.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		idTypeCondition, err := cmm.ParseHexToObjectId(payload.IdTypeCondition)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		typeCondition, err := services.GetCatalogService(idTypeCondition, cmm.CatalogTypeCondition)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if typeCondition.ID.IsZero() {
+			res.Error("FAIL", "El tipo de condicion enviado no existe", "DVOPR021", payload.IdTypeCondition, cmm.NewEmptyErrorHandler())
 			return
 		}
 
@@ -348,6 +375,12 @@ func CreateConditionDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
+		parametersCallback, err := services.BuildConditionCallbackParametersService(callback, payload.ParametersCallback)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
 		httpRequest, err := services.BuildConditionHTTPRequestService(api, payload.Parameters)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
@@ -360,6 +393,8 @@ func CreateConditionDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
+		r = cmm.SetInRequestContext(r, "typeCondition", &typeCondition)
+		r = cmm.SetInRequestContext(r, "parametersCallback", parametersCallback)
 		r = cmm.SetInRequestContext(r, "api", &api)
 		r = cmm.SetInRequestContext(r, "provider", &provider)
 		r = cmm.SetInRequestContext(r, "httpRequest", &httpRequest)

@@ -56,11 +56,11 @@ func fomcBody(t *testing.T, events ...fomcEvent) []byte {
 func fedDecisions(t *testing.T, body []byte) (cut, hold, hike bool) {
 	t.Helper()
 
-	cut, err := providers.FedNextMeetingCutLikely(body)
+	cut, err := providers.FedNextMeetingCutLikely(body, nil)
 	testutil.RequireEmptyError(t, err)
-	hold, err = providers.FedNextMeetingHoldLikely(body)
+	hold, err = providers.FedNextMeetingHoldLikely(body, nil)
 	testutil.RequireEmptyError(t, err)
-	hike, err = providers.FedNextMeetingHikeLikely(body)
+	hike, err = providers.FedNextMeetingHikeLikely(body, nil)
 	testutil.RequireEmptyError(t, err)
 	return cut, hold, hike
 }
@@ -158,7 +158,7 @@ func TestFedNextMeetingCallbacks_Errors(t *testing.T) {
 		{"precio fuera de rango", withMarket(highPrice), "PCPOLYE007"},
 	}
 
-	callbacks := map[string]func([]byte) (bool, *cmm.ErrorHandler){
+	callbacks := map[string]func([]byte, map[string]any) (bool, *cmm.ErrorHandler){
 		"cut":  providers.FedNextMeetingCutLikely,
 		"hold": providers.FedNextMeetingHoldLikely,
 		"hike": providers.FedNextMeetingHikeLikely,
@@ -169,7 +169,7 @@ func TestFedNextMeetingCallbacks_Errors(t *testing.T) {
 			t.Parallel()
 
 			for name, callback := range callbacks {
-				got, err := callback(tt.body)
+				got, err := callback(tt.body, nil)
 				testutil.RequireTrackingCode(t, err, tt.code)
 				if got {
 					t.Errorf("%s: se esperaba false con error", name)

@@ -348,3 +348,73 @@ func TestBuildConditionHTTPRequestService_Errors(t *testing.T) {
 		})
 	}
 }
+
+// newTestCallback callback con un umbral requerido y una ventana opcional con valor por defecto
+func newTestCallback() providers.CallbackDefinition {
+	window := "12"
+	return providers.CallbackDefinition{
+		ID: "TestCallback",
+		Parameters: []providers.CallbackParameter{
+			{Name: "threshold", Label: "Umbral", DataType: cmm.ApiParameterTypeFloat, IsRequired: true},
+			{Name: "window", Label: "Ventana", DataType: cmm.ApiParameterTypeInteger, DefaultValue: &window},
+			{Name: "inclusive", Label: "Incluye el umbral", DataType: cmm.ApiParameterTypeBoolean},
+		},
+	}
+}
+
+func TestBuildConditionCallbackParametersService(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		callback   providers.CallbackDefinition
+		parameters map[string]string
+		want       map[string]any
+	}{
+		{name: "valores tipados y default", callback: newTestCallback(), parameters: map[string]string{"threshold": "60.5"},
+			want: map[string]any{"threshold": 60.5, "window": int64(12)}},
+		{name: "reemplaza el default y agrega el opcional", callback: newTestCallback(), parameters: map[string]string{"threshold": "60", "window": "4", "inclusive": "true"},
+			want: map[string]any{"threshold": 60.0, "window": int64(4), "inclusive": true}},
+		{name: "callback sin parametros", callback: providers.CallbackDefinition{ID: "SinParametros"}, parameters: nil,
+			want: map[string]any{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := services.BuildConditionCallbackParametersService(tt.callback, tt.parameters)
+			testutil.RequireEmptyError(t, err)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parameters_callback = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildConditionCallbackParametersService_Errors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		callback     providers.CallbackDefinition
+		parameters   map[string]string
+		wantTracking string
+	}{
+		{name: "parametro que el callback no acepta", callback: newTestCallback(), parameters: map[string]string{"threshold": "60", "symbol": "AAPL"}, wantTracking: "SOPRE051"},
+		{name: "callback sin parametros recibe uno", callback: providers.CallbackDefinition{ID: "SinParametros"}, parameters: map[string]string{"threshold": "60"}, wantTracking: "SOPRE051"},
+		{name: "falta el requerido", callback: newTestCallback(), parameters: map[string]string{"window": "4"}, wantTracking: "SOPRE052"},
+		{name: "valor que no es del tipo", callback: newTestCallback(), parameters: map[string]string{"threshold": "alto"}, wantTracking: "SOPRE037"},
+		{name: "tipo de dato no soportado", callback: providers.CallbackDefinition{Parameters: []providers.CallbackParameter{{Name: "list", DataType: "ARRAY", IsRequired: true}}},
+			parameters: map[string]string{"list": "a,b"}, wantTracking: "SOPRE036"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := services.BuildConditionCallbackParametersService(tt.callback, tt.parameters)
+			testutil.RequireTrackingCode(t, err, tt.wantTracking)
+		})
+	}
+}
