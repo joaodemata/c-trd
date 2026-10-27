@@ -53,6 +53,7 @@ const (
 	ResponseFormatPolymarketFedDecisions   = "POLYMARKET_FED_DECISIONS"
 	ResponseFormatCoinMarketCapFearGreed   = "COINMARKETCAP_FEAR_AND_GREED"
 	ResponseFormatCoinMarketCapGlobal      = "COINMARKETCAP_GLOBAL_METRICS"
+	ResponseFormatCoinMarketCapUsdtQuote   = "COINMARKETCAP_USDT_QUOTE" // /v2/cryptocurrency/quotes/latest con symbol=USDT
 )
 
 // Tipos de dato de los parametros de una API (data_type). El valor se guarda como string y se valida con este tipo
