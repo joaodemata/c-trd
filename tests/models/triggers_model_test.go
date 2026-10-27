@@ -48,6 +48,9 @@ func TestNewTriggerModel_Defaults(t *testing.T) {
 			if trigger.ID.IsZero() {
 				t.Error("el ID debe generarse en el constructor")
 			}
+			if trigger.IDWebhook.IsZero() || trigger.IDWebhook == trigger.ID {
+				t.Errorf("idWebhook = %s, debe generarse en el constructor y ser distinto del ID", trigger.IDWebhook.Hex())
+			}
 			if trigger.IDStatus != cmm.GenericStatusActive.ID || trigger.TagStatus != cmm.GenericStatusActive.Tag {
 				t.Errorf("status = %s, todo trigger nace en %s", trigger.TagStatus, cmm.GenericStatusActive.Tag)
 			}
@@ -89,12 +92,14 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 		NameProvider: "Alpha Vantage", Name: "Put/Call", Description: "Ratio alto",
 	}
 	second := models.ConditionsModelType{ID: primitive.NewObjectID(), Name: "Trends"}
+	idWebhook := primitive.NewObjectID()
 	idReference := primitive.NewObjectID()
 	idReferenceRoot := primitive.NewObjectID()
 	pineCode := "//@version=5"
 
 	trigger := newTestTrigger(t, &models.TriggerOptionalData{
 		Conditions:      []models.ConditionsModelType{first, second},
+		IdWebhook:       &idWebhook,
 		IdReference:     &idReference,
 		IdReferenceRoot: &idReferenceRoot,
 		PineCode:        &pineCode,
@@ -111,6 +116,9 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 	}
 	if trigger.Conditions[1].IDCondition != second.ID {
 		t.Errorf("conditions[1] = %s, se esperaba %s", trigger.Conditions[1].IDCondition.Hex(), second.ID.Hex())
+	}
+	if trigger.IDWebhook != idWebhook {
+		t.Errorf("idWebhook = %s, se esperaba %s", trigger.IDWebhook.Hex(), idWebhook.Hex())
 	}
 	if trigger.IdReference == nil || *trigger.IdReference != idReference {
 		t.Errorf("idReference = %v, se esperaba %s", trigger.IdReference, idReference.Hex())
@@ -141,5 +149,29 @@ func TestTriggerReferenceRoot(t *testing.T) {
 	// Segundo reemplazo: se reutiliza la raiz y no el id del trigger reemplazado
 	if got := models.TriggerReferenceRoot(second); got != original.ID {
 		t.Errorf("root = %s, se esperaba la raiz %s y no %s", got.Hex(), original.ID.Hex(), second.ID.Hex())
+	}
+}
+
+// TestTriggerWebhookID el id del webhook se conserva en todas las versiones del trigger
+func TestTriggerWebhookID(t *testing.T) {
+	t.Parallel()
+
+	original := newTestTrigger(t, nil)
+
+	idWebhook := models.TriggerWebhookID(original)
+	if idWebhook != original.IDWebhook {
+		t.Fatalf("idWebhook = %s, se esperaba el del original %s", idWebhook.Hex(), original.IDWebhook.Hex())
+	}
+
+	second := newTestTrigger(t, &models.TriggerOptionalData{IdWebhook: &idWebhook})
+	if got := models.TriggerWebhookID(second); got != original.IDWebhook {
+		t.Errorf("idWebhook = %s, se esperaba %s en la segunda version", got.Hex(), original.IDWebhook.Hex())
+	}
+
+	// Trigger anterior al campo: se usa su ID, que es el que ya envian sus alertas
+	legacy := newTestTrigger(t, nil)
+	legacy.IDWebhook = primitive.NilObjectID
+	if got := models.TriggerWebhookID(legacy); got != legacy.ID {
+		t.Errorf("idWebhook = %s, se esperaba el ID %s del trigger sin id_webhook", got.Hex(), legacy.ID.Hex())
 	}
 }

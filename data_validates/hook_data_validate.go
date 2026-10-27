@@ -23,14 +23,14 @@ func TradingViewHookDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		idTrigger, err := cmm.ParseHexToObjectId(payload.IdTrigger)
+		idWebhook, err := cmm.ParseHexToObjectId(payload.IdWebhook)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
 		}
 
-		// Buscamos el trigger en mongoDB para validar si existe
-		triggerData, err := services.GetTriggerService(idTrigger)
+		// Buscamos la version vigente del trigger con ese id de webhook para validar si existe
+		triggerData, err := services.GetTriggerByWebhookService(idWebhook)
 
 		// Validamos que no este vacio
 		if !err.IsEmtpy() {
@@ -39,7 +39,7 @@ func TradingViewHookDataValidate(next http.Handler) http.Handler {
 		}
 
 		if triggerData.ID.IsZero() {
-			res.Error("FAIL", "El trigger enviado no existe", "DVHOOK002", payload.IdTrigger, cmm.NewEmptyErrorHandler())
+			res.Error("FAIL", "El trigger enviado no existe", "DVHOOK002", payload.IdWebhook, cmm.NewEmptyErrorHandler())
 			return
 		}
 
@@ -69,7 +69,7 @@ func TradingViewHookDataValidate(next http.Handler) http.Handler {
 			}
 
 			if opportunity.ID.IsZero() {
-				res.Error("FAIL", "El trigger no tiene una oportunidad en curso o activa para cancelar", "DVHOOK004", payload.IdTrigger, cmm.NewEmptyErrorHandler())
+				res.Error("FAIL", "El trigger no tiene una oportunidad en curso o activa para cancelar", "DVHOOK004", payload.IdWebhook, cmm.NewEmptyErrorHandler())
 				return
 			}
 
