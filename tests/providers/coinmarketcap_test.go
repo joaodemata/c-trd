@@ -274,3 +274,235 @@ func TestCoinMarketCapQuotePrice(t *testing.T) {
 		})
 	}
 }
+
+// thresholdParameters parameters_callback de una condicion con el umbral indicado
+func thresholdParameters(threshold any) map[string]any {
+	return map[string]any{"threshold": threshold}
+}
+
+// dominanceGlobalMetricsBody respuesta exitosa de /v1/global-metrics/quotes/latest con las dominancias de BTC y ETH
+func dominanceGlobalMetricsBody(btcDominance, ethDominance float64) []byte {
+	return fmt.Appendf(nil, `{"data":{"btc_dominance":%v,"eth_dominance":%v,"quote":{"USD":{"total_market_cap":1000,"stablecoin_market_cap":100}}},"status":{"error_code":0,"error_message":null}}`, btcDominance, ethDominance)
+}
+
+// usdtQuotesBody respuesta de /v2/cryptocurrency/quotes/latest?symbol=USDT con el market_cap_dominance indicado y una
+// moneda inactiva sin rank que comparte el simbolo
+func usdtQuotesBody(dominance string) []byte {
+	return []byte(`{"data":{"USDT":[` +
+		`{"id":99999,"symbol":"USDT","cmc_rank":null,"quote":{"USD":{"price":null,"market_cap_dominance":null}}},` +
+		`{"id":825,"symbol":"USDT","cmc_rank":3,"quote":{"USD":{"price":1.0002,"market_cap_dominance":` + dominance + `}}}` +
+		`]},"status":{"error_code":0,"error_message":null}}`)
+}
+
+func TestFearAndGreedThresholdCallbacks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		value     string
+		threshold any
+		wantAbove bool
+		wantBelow bool
+	}{
+		{"mayor al umbral", "26", 25.0, true, false},
+		{"en el umbral no es mayor ni menor", "25", 25.0, false, false},
+		{"menor al umbral", "24", 25.0, false, true},
+		{"umbral decimal", "75", 74.5, true, false},
+		{"umbral int32 guardado a mano en mongo", "10", int32(20), false, true},
+		{"umbral int64", "90", int64(80), true, false},
+		{"umbral cero", "0", 0.0, false, false},
+		{"umbral 100", "100", 100.0, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := fearAndGreedBody(tt.value)
+			above, err := providers.FearAndGreedAboveCallback(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+			below, err := providers.FearAndGreedBelowCallback(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+
+			if above != tt.wantAbove || below != tt.wantBelow {
+				t.Errorf("valor %s umbral %v: above, below = %v, %v, want %v, %v", tt.value, tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			}
+		})
+	}
+}
+
+func TestFearAndGreedThresholdCallbacks_Fixture(t *testing.T) {
+	t.Parallel()
+
+	// Respuesta real con valor 49
+	body := testutil.ReadFixture(t, "coinmarketcap_fear_and_greed_latest.json")
+
+	above, err := providers.FearAndGreedAboveCallback(body, thresholdParameters(45.0))
+	testutil.RequireEmptyError(t, err)
+	below, err := providers.FearAndGreedBelowCallback(body, thresholdParameters(45.0))
+	testutil.RequireEmptyError(t, err)
+
+	if !above || below {
+		t.Errorf("above, below = %v, %v, want true, false", above, below)
+	}
+}
+
+func TestDominanceThresholdCallbacks_Fixture(t *testing.T) {
+	t.Parallel()
+
+	// Respuesta real: BTC.D 60.14%, ETH.D 10.78%, OTHERS2 39.86% y OTHERS3 29.08%
+	body := testutil.ReadFixture(t, "coinmarketcap_global_metrics_latest.json")
+
+	tests := []struct {
+		name      string
+		callback  providers.CallbackFunc
+		threshold float64
+		want      bool
+	}{
+		{"btc mayor a 60", providers.BtcDominanceAboveCallback, 60, true},
+		{"btc menor a 60", providers.BtcDominanceBelowCallback, 60, false},
+		{"others2 mayor a 39", providers.Others2DominanceAboveCallback, 39, true},
+		{"others2 menor a 40", providers.Others2DominanceBelowCallback, 40, true},
+		{"others3 mayor a 29", providers.Others3DominanceAboveCallback, 29, true},
+		{"others3 menor a 29", providers.Others3DominanceBelowCallback, 29, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.callback(body, thresholdParameters(tt.threshold))
+
+			testutil.RequireEmptyError(t, err)
+			if got != tt.want {
+				t.Errorf("umbral %v: got %v, want %v", tt.threshold, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDominanceThresholdCallbacks(t *testing.T) {
+	t.Parallel()
+
+	// Con BTC.D 55 y ETH.D 15: OTHERS2 = 45 y OTHERS3 = 30
+	body := dominanceGlobalMetricsBody(55, 15)
+
+	tests := []struct {
+		name      string
+		above     providers.CallbackFunc
+		below     providers.CallbackFunc
+		threshold float64
+		wantAbove bool
+		wantBelow bool
+	}{
+		{"btc mayor al umbral", providers.BtcDominanceAboveCallback, providers.BtcDominanceBelowCallback, 54.99, true, false},
+		{"btc en el umbral", providers.BtcDominanceAboveCallback, providers.BtcDominanceBelowCallback, 55, false, false},
+		{"btc menor al umbral", providers.BtcDominanceAboveCallback, providers.BtcDominanceBelowCallback, 55.01, false, true},
+		{"others2 mayor al umbral", providers.Others2DominanceAboveCallback, providers.Others2DominanceBelowCallback, 44.99, true, false},
+		{"others2 en el umbral", providers.Others2DominanceAboveCallback, providers.Others2DominanceBelowCallback, 45, false, false},
+		{"others2 menor al umbral", providers.Others2DominanceAboveCallback, providers.Others2DominanceBelowCallback, 45.01, false, true},
+		{"others3 mayor al umbral", providers.Others3DominanceAboveCallback, providers.Others3DominanceBelowCallback, 29.99, true, false},
+		{"others3 en el umbral", providers.Others3DominanceAboveCallback, providers.Others3DominanceBelowCallback, 30, false, false},
+		{"others3 menor al umbral", providers.Others3DominanceAboveCallback, providers.Others3DominanceBelowCallback, 30.01, false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			above, err := tt.above(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+			below, err := tt.below(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+
+			if above != tt.wantAbove || below != tt.wantBelow {
+				t.Errorf("umbral %v: above, below = %v, %v, want %v, %v", tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			}
+		})
+	}
+}
+
+func TestUsdtDominanceCallbacks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		dominance string
+		threshold float64
+		wantAbove bool
+		wantBelow bool
+	}{
+		{"mayor al umbral", "5.01", 5, true, false},
+		{"en el umbral", "5", 5, false, false},
+		{"menor al umbral", "4.99", 5, false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := usdtQuotesBody(tt.dominance)
+			above, err := providers.UsdtDominanceAboveCallback(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+			below, err := providers.UsdtDominanceBelowCallback(body, thresholdParameters(tt.threshold))
+			testutil.RequireEmptyError(t, err)
+
+			if above != tt.wantAbove || below != tt.wantBelow {
+				t.Errorf("dominancia %s umbral %v: above, below = %v, %v, want %v, %v", tt.dominance, tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			}
+		})
+	}
+}
+
+func TestThresholdCallbacks_Errors(t *testing.T) {
+	t.Parallel()
+
+	rateLimit := testutil.ReadFixture(t, "coinmarketcap_rate_limit_error.json")
+	noData := []byte(`{"status":{"error_code":0,"error_message":null}}`)
+	valid := thresholdParameters(50.0)
+
+	tests := []struct {
+		name       string
+		callback   providers.CallbackFunc
+		body       []byte
+		parameters map[string]any
+		code       string
+	}{
+		{"fear and greed sin parametros", providers.FearAndGreedAboveCallback, fearAndGreedBody("50"), nil, "PCCMCE012"},
+		{"fear and greed umbral texto", providers.FearAndGreedBelowCallback, fearAndGreedBody("50"), thresholdParameters("50"), "PCCMCE012"},
+		{"fear and greed umbral negativo", providers.FearAndGreedAboveCallback, fearAndGreedBody("50"), thresholdParameters(-1.0), "PCCMCE013"},
+		{"fear and greed umbral mayor a 100", providers.FearAndGreedBelowCallback, fearAndGreedBody("50"), thresholdParameters(100.1), "PCCMCE013"},
+		{"fear and greed valor invalido", providers.FearAndGreedAboveCallback, fearAndGreedBody("101"), valid, "PCCMCE003"},
+		{"btc sin umbral", providers.BtcDominanceAboveCallback, dominanceGlobalMetricsBody(55, 15), map[string]any{}, "PCCMCE012"},
+		{"btc json invalido", providers.BtcDominanceBelowCallback, []byte(`[`), valid, "PCCMCE004"},
+		{"btc sin data", providers.BtcDominanceAboveCallback, noData, valid, "PCCMCE005"},
+		{"btc dominancia mayor a 100", providers.BtcDominanceBelowCallback, dominanceGlobalMetricsBody(100.5, 0), valid, "PCCMCE006"},
+		{"others2 limite de peticiones", providers.Others2DominanceAboveCallback, rateLimit, valid, "PCCMCE002"},
+		{"others2 sin dominancia de btc", providers.Others2DominanceBelowCallback, []byte(`{"data":{"quote":{}},"status":{"error_code":0}}`), valid, "PCCMCE006"},
+		{"others3 umbral mayor a 100", providers.Others3DominanceAboveCallback, dominanceGlobalMetricsBody(55, 15), thresholdParameters(int64(101)), "PCCMCE013"},
+		{"others3 sin dominancia de eth", providers.Others3DominanceAboveCallback, globalMetricsBody(55, 1000, 100), valid, "PCCMCE014"},
+		{"others3 dominancias suman mas de 100", providers.Others3DominanceBelowCallback, dominanceGlobalMetricsBody(90, 10.5), valid, "PCCMCE014"},
+		{"others3 dominancia de eth negativa", providers.Others3DominanceBelowCallback, dominanceGlobalMetricsBody(55, -1), valid, "PCCMCE014"},
+		{"others3 sin data", providers.Others3DominanceBelowCallback, noData, valid, "PCCMCE005"},
+		{"usdt sin umbral", providers.UsdtDominanceAboveCallback, usdtQuotesBody("5"), nil, "PCCMCE012"},
+		{"usdt no es JSON", providers.UsdtDominanceAboveCallback, []byte(`<html></html>`), valid, "PCCMCE009"},
+		{"usdt error de la API", providers.UsdtDominanceBelowCallback, []byte(`{"status":{"error_code":1002,"error_message":"API key missing."}}`), valid, "PCCMCE002"},
+		{"usdt pedido con otro simbolo", providers.UsdtDominanceAboveCallback, []byte(coinMarketCapQuotesBody), valid, "PCCMCE010"},
+		{"usdt sin market_cap_dominance", providers.UsdtDominanceBelowCallback, usdtQuotesBody("null"), valid, "PCCMCE015"},
+		{"usdt market_cap_dominance mayor a 100", providers.UsdtDominanceAboveCallback, usdtQuotesBody("100.01"), valid, "PCCMCE015"},
+		{"usdt sin cotizacion USD", providers.UsdtDominanceAboveCallback, []byte(`{"data":{"USDT":[{"cmc_rank":3,"quote":{"EUR":{"market_cap_dominance":5}}}]},"status":{"error_code":0}}`), valid, "PCCMCE015"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			accepted, err := tt.callback(tt.body, tt.parameters)
+
+			testutil.RequireTrackingCode(t, err, tt.code)
+			if accepted {
+				t.Error("un error no debe aceptar la condicion")
+			}
+		})
+	}
+}

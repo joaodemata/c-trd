@@ -13,7 +13,7 @@ import (
 func TestFunctionRegistry_Definitions(t *testing.T) {
 	t.Parallel()
 
-	known := []string{cmm.ResponseFormatAlphaVantagePutCallRatio, cmm.ResponseFormatGoogleTrendsSeries, cmm.ResponseFormatGoogleTrendsFile, cmm.ResponseFormatFredSeriesObservations, cmm.ResponseFormatPolymarketFedDecisions, cmm.ResponseFormatCoinMarketCapFearGreed, cmm.ResponseFormatCoinMarketCapGlobal}
+	known := []string{cmm.ResponseFormatAlphaVantagePutCallRatio, cmm.ResponseFormatGoogleTrendsSeries, cmm.ResponseFormatGoogleTrendsFile, cmm.ResponseFormatFredSeriesObservations, cmm.ResponseFormatPolymarketFedDecisions, cmm.ResponseFormatCoinMarketCapFearGreed, cmm.ResponseFormatCoinMarketCapGlobal, cmm.ResponseFormatCoinMarketCapUsdtQuote}
 	tags := make(map[string]string)
 	for name, definition := range providers.FunctionRegistry {
 		if definition.Fn == nil || definition.Description == "" || definition.Name == "" || definition.Tag == "" {
@@ -61,8 +61,9 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin"}},
 		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesFalling", "FredSeriesRising"}},
 		{"polymarket fed", cmm.ResponseFormatPolymarketFedDecisions, []string{"FedNextMeetingCutLikely", "FedNextMeetingHikeLikely", "FedNextMeetingHoldLikely"}},
-		{"coinmarketcap fear and greed", cmm.ResponseFormatCoinMarketCapFearGreed, []string{"FearAndGreedExtremeFear", "FearAndGreedExtremeGreed", "FearAndGreedFear", "FearAndGreedGreed", "FearAndGreedNeutral"}},
-		{"coinmarketcap global metrics", cmm.ResponseFormatCoinMarketCapGlobal, []string{"BtcDominanceAbove60", "StablecoinDominanceAbove12"}},
+		{"coinmarketcap fear and greed", cmm.ResponseFormatCoinMarketCapFearGreed, []string{"FearAndGreedAbove", "FearAndGreedBelow", "FearAndGreedExtremeFear", "FearAndGreedExtremeGreed", "FearAndGreedFear", "FearAndGreedGreed", "FearAndGreedNeutral"}},
+		{"coinmarketcap global metrics", cmm.ResponseFormatCoinMarketCapGlobal, []string{"BtcDominanceAbove", "BtcDominanceAbove60", "BtcDominanceBelow", "Others2DominanceAbove", "Others2DominanceBelow", "Others3DominanceAbove", "Others3DominanceBelow", "StablecoinDominanceAbove12"}},
+		{"coinmarketcap usdt", cmm.ResponseFormatCoinMarketCapUsdtQuote, []string{"UsdtDominanceAbove", "UsdtDominanceBelow"}},
 		{"formato desconocido", "UNKNOWN", []string{}},
 		{"formato vacio", "", []string{}},
 	}
