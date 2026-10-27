@@ -748,7 +748,8 @@ func validateCallbackParameterRange(parameter providers.CallbackParameter, typed
 	belowMin := parameter.MinValue != nil && number < *parameter.MinValue
 	aboveMax := parameter.MaxValue != nil && number > *parameter.MaxValue
 	if belowMin || aboveMax {
-		return cmm.NewErrorHandler(fmt.Errorf("value %v min %v max %v", number, parameter.MinValue, parameter.MaxValue), fmt.Sprintf("El parametro %q del callback esta fuera del rango permitido (%s)", parameter.Name, callbackParameterRangeText(parameter)), cmm.LevelError, "SOPRE053")
+		rangeText := callbackParameterRangeText(parameter)
+		return cmm.NewErrorHandler(fmt.Errorf("parameter %q value %v not %s", parameter.Name, number, rangeText), fmt.Sprintf("El parametro %q del callback esta fuera del rango permitido (%s)", parameter.Name, rangeText), cmm.LevelError, "SOPRE053")
 	}
 
 	return cmm.NewEmptyErrorHandler()

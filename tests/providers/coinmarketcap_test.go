@@ -275,6 +275,52 @@ func TestCoinMarketCapQuotePrice(t *testing.T) {
 	}
 }
 
+func TestCoinMarketCapErrors_Detail(t *testing.T) {
+	t.Parallel()
+
+	// El detalle del log debe tener el valor recibido o null, y no la direccion de memoria del puntero
+	valid := map[string]any{"threshold": 50.0}
+
+	tests := []struct {
+		name     string
+		callback providers.CallbackFunc
+		body     []byte
+		code     string
+		want     string
+	}{
+		{"btc dominancia fuera de rango", providers.BtcDominanceAbove60Callback, globalMetricsBody(100.5, 1000, 100), "PCCMCE006", "btc_dominance 100.5"},
+		{"btc sin dominancia", providers.BtcDominanceAboveCallback, []byte(`{"data":{"quote":{}},"status":{"error_code":0}}`), "PCCMCE006", "btc_dominance null"},
+		{"market caps invalidos", providers.StablecoinDominanceAbove12Callback, []byte(`{"data":{"quote":{"USD":{"total_market_cap":0}}},"status":{"error_code":0}}`), "PCCMCE008", "total_market_cap 0 stablecoin_market_cap null"},
+		{"others3 sin eth", providers.Others3DominanceAboveCallback, globalMetricsBody(55, 1000, 100), "PCCMCE014", "btc_dominance 55 eth_dominance null"},
+		{"usdt fuera de rango", providers.UsdtDominanceBelowCallback, usdtQuotesBody("100.01"), "PCCMCE015", "market_cap_dominance 100.01"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := tt.callback(tt.body, valid)
+
+			testutil.RequireTrackingCode(t, err, tt.code)
+			if err.Err == nil || err.Err.Error() != tt.want {
+				t.Errorf("detalle = %v, want %q", err.Err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCoinMarketCapQuotePrice_ErrorDetail(t *testing.T) {
+	t.Parallel()
+
+	_, err := providers.CoinMarketCapQuotePrice([]byte(`{"data":{"BTC":[{"cmc_rank":1,"quote":{"USD":{"price":null}}}]},"status":{"error_code":0}}`), "BTC")
+
+	testutil.RequireTrackingCode(t, err, "PCCMCE011")
+	want := `symbol "BTC" price null`
+	if err.Err == nil || err.Err.Error() != want {
+		t.Errorf("detalle = %v, want %q", err.Err, want)
+	}
+}
+
 // thresholdParameters parameters_callback de una condicion con el umbral indicado
 func thresholdParameters(threshold any) map[string]any {
 	return map[string]any{"threshold": threshold}
