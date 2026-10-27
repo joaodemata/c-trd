@@ -418,3 +418,61 @@ func TestBuildConditionCallbackParametersService_Errors(t *testing.T) {
 		})
 	}
 }
+
+// newRangeTestCallback callback con un umbral FLOAT en [0, 100], una ventana INTEGER mayor o igual a 1 y un texto
+// con limites que se ignoran porque no es numerico
+func newRangeTestCallback() providers.CallbackDefinition {
+	zero, one, hundred := 0.0, 1.0, 100.0
+	return providers.CallbackDefinition{
+		ID: "RangeTestCallback",
+		Parameters: []providers.CallbackParameter{
+			{Name: "threshold", Label: "Umbral", DataType: cmm.ApiParameterTypeFloat, IsRequired: true, MinValue: &zero, MaxValue: &hundred},
+			{Name: "window", Label: "Ventana", DataType: cmm.ApiParameterTypeInteger, MinValue: &one},
+			{Name: "symbol", Label: "Simbolo", DataType: cmm.ApiParameterTypeString, MinValue: &one, MaxValue: &one},
+		},
+	}
+}
+
+func TestBuildConditionCallbackParametersService_Range(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		parameters   map[string]string
+		wantTracking string
+	}{
+		{"limite inferior incluido", map[string]string{"threshold": "0"}, ""},
+		{"limite superior incluido", map[string]string{"threshold": "100"}, ""},
+		{"dentro del rango", map[string]string{"threshold": "25.5", "window": "1"}, ""},
+		{"sin limite superior", map[string]string{"threshold": "50", "window": "1000"}, ""},
+		{"texto ignora los limites", map[string]string{"threshold": "50", "symbol": "USDT"}, ""},
+		{"negativo", map[string]string{"threshold": "-1"}, "SOPRE053"},
+		{"negativo decimal", map[string]string{"threshold": "-0.01"}, "SOPRE053"},
+		{"mayor al maximo", map[string]string{"threshold": "100.1"}, "SOPRE053"},
+		{"entero menor al minimo", map[string]string{"threshold": "50", "window": "0"}, "SOPRE053"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := services.BuildConditionCallbackParametersService(newRangeTestCallback(), tt.parameters)
+
+			if tt.wantTracking != "" {
+				testutil.RequireTrackingCode(t, err, tt.wantTracking)
+				return
+			}
+			testutil.RequireEmptyError(t, err)
+		})
+	}
+}
+
+func TestBuildConditionCallbackParametersService_RegisteredThreshold(t *testing.T) {
+	t.Parallel()
+
+	// Los callbacks reales de CoinMarketCap rechazan un umbral negativo al crear la condicion
+	for _, name := range []string{"FearAndGreedBelow", "BtcDominanceAbove", "UsdtDominanceBelow", "Others3DominanceAbove"} {
+		_, err := services.BuildConditionCallbackParametersService(providers.FunctionRegistry[name], map[string]string{"threshold": "-5"})
+		testutil.RequireTrackingCode(t, err, "SOPRE053")
+	}
+}

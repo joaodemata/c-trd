@@ -39,6 +39,12 @@ const (
 // thresholdParameterName nombre del parametro del callback con el umbral (porcentaje o valor del indice, ambos de 0 a 100)
 const thresholdParameterName = "threshold"
 
+// Rango del parametro threshold al crear la condicion. Son variables porque CallbackParameter guarda punteros
+var (
+	thresholdMinValue = dominanceMinValue
+	thresholdMaxValue = dominanceMaxValue
+)
+
 // fearAndGreedThresholdParameters parametros de los callbacks de umbral del indice Fear and Greed
 var fearAndGreedThresholdParameters = []CallbackParameter{
 	{
@@ -47,6 +53,8 @@ var fearAndGreedThresholdParameters = []CallbackParameter{
 		Description: "Valor del indice Fear and Greed (0 a 100) contra el que se compara el valor actual",
 		DataType:    cmm.ApiParameterTypeFloat,
 		IsRequired:  true,
+		MinValue:    &thresholdMinValue,
+		MaxValue:    &thresholdMaxValue,
 	},
 }
 
@@ -58,6 +66,8 @@ var dominanceThresholdParameters = []CallbackParameter{
 		Description: "Porcentaje del market cap total (0 a 100) contra el que se compara la dominancia actual",
 		DataType:    cmm.ApiParameterTypeFloat,
 		IsRequired:  true,
+		MinValue:    &thresholdMinValue,
+		MaxValue:    &thresholdMaxValue,
 	},
 }
 

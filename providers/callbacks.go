@@ -19,6 +19,9 @@ type CallbackParameter struct {
 	DataType     string  `json:"dataType"`
 	IsRequired   bool    `json:"isRequired"`
 	DefaultValue *string `json:"defaultValue"`
+	// Rango inclusivo del valor, solo para INTEGER y FLOAT. nil si no tiene limite
+	MinValue *float64 `json:"minValue"`
+	MaxValue *float64 `json:"maxValue"`
 }
 
 // CallbackDefinition callback registrado y el formato de respuesta que sabe leer. Solo es compatible con
