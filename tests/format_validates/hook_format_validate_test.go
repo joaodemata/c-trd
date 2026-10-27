@@ -16,7 +16,7 @@ import (
 func TestTradingViewTriggerFormatValidate(t *testing.T) {
 	t.Parallel()
 
-	idTrigger := primitive.NewObjectID().Hex()
+	idWebhook := primitive.NewObjectID().Hex()
 	idCancel := primitive.NewObjectID().Hex()
 
 	tests := []struct {
@@ -27,17 +27,17 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 		wantPrice    float64
 		wantIdCancel string
 	}{
-		{"precio decimal", `{"idTrigger":"` + idTrigger + `","price":67012.34}`, true, "", 67012.34, ""},
-		{"precio con metadatos", `{"idTrigger":"` + idTrigger + `","price":1.0842,"metadatos":{"rsi":28}}`, true, "", 1.0842, ""},
-		{"sin precio", `{"idTrigger":"` + idTrigger + `"}`, false, "CC003", 0, ""},
-		{"precio cero", `{"idTrigger":"` + idTrigger + `","price":0}`, false, "CC003", 0, ""},
-		{"precio negativo", `{"idTrigger":"` + idTrigger + `","price":-5}`, false, "CC003", 0, ""},
-		{"precio como texto numerico", `{"idTrigger":"` + idTrigger + `","price":"67012.34"}`, true, "", 67012.34, ""},
-		{"precio como texto no numerico", `{"idTrigger":"` + idTrigger + `","price":"alto"}`, false, "CC001", 0, ""},
-		{"sin trigger", `{"price":67012.34}`, false, "CC003", 0, ""},
-		{"cancelacion", `{"idTrigger":"` + idTrigger + `","price":67012.34,"idCancel":"` + idCancel + `"}`, true, "", 67012.34, idCancel},
-		{"cancelacion con id invalido", `{"idTrigger":"` + idTrigger + `","price":67012.34,"idCancel":"abc"}`, false, "CC003", 0, ""},
-		{"cancelacion sin precio", `{"idTrigger":"` + idTrigger + `","idCancel":"` + idCancel + `"}`, false, "CC003", 0, ""},
+		{"precio decimal", `{"idWebhook":"` + idWebhook + `","price":67012.34}`, true, "", 67012.34, ""},
+		{"precio con metadatos", `{"idWebhook":"` + idWebhook + `","price":1.0842,"metadatos":{"rsi":28}}`, true, "", 1.0842, ""},
+		{"sin precio", `{"idWebhook":"` + idWebhook + `"}`, false, "CC003", 0, ""},
+		{"precio cero", `{"idWebhook":"` + idWebhook + `","price":0}`, false, "CC003", 0, ""},
+		{"precio negativo", `{"idWebhook":"` + idWebhook + `","price":-5}`, false, "CC003", 0, ""},
+		{"precio como texto numerico", `{"idWebhook":"` + idWebhook + `","price":"67012.34"}`, true, "", 67012.34, ""},
+		{"precio como texto no numerico", `{"idWebhook":"` + idWebhook + `","price":"alto"}`, false, "CC001", 0, ""},
+		{"sin webhook", `{"price":67012.34}`, false, "CC003", 0, ""},
+		{"cancelacion", `{"idWebhook":"` + idWebhook + `","price":67012.34,"idCancel":"` + idCancel + `"}`, true, "", 67012.34, idCancel},
+		{"cancelacion con id invalido", `{"idWebhook":"` + idWebhook + `","price":67012.34,"idCancel":"abc"}`, false, "CC003", 0, ""},
+		{"cancelacion sin precio", `{"idWebhook":"` + idWebhook + `","idCancel":"` + idCancel + `"}`, false, "CC003", 0, ""},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +76,7 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 func TestTradingViewTriggerFormatValidateRiskManagement(t *testing.T) {
 	t.Parallel()
 
-	base := `{"idTrigger":"` + primitive.NewObjectID().Hex() + `","price":100,`
+	base := `{"idWebhook":"` + primitive.NewObjectID().Hex() + `","price":100,`
 
 	tests := []struct {
 		name           string

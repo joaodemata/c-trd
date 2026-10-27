@@ -73,6 +73,7 @@ func CreateTriggerController() http.HandlerFunc {
 
 		data := map[string]any{
 			"idTrigger": idTrigger,
+			"idWebhook": trigger.IDWebhook.Hex(),
 		}
 
 		res.Send(http.StatusCreated, "SUCCESS", "Trigger creado exitosamente", "COPR003", data)
@@ -80,7 +81,7 @@ func CreateTriggerController() http.HandlerFunc {
 }
 
 // UpdateTriggerController reemplaza un trigger: el anterior queda borrado e inactivo y el nuevo apunta a el con
-// id_reference y a la raiz de la cadena con id_reference_root. Los datos ya fueron validados en el data validate
+// id_reference y a la raiz de la cadena con id_reference_root. El id_webhook se conserva para no cambiar las alertas. Los datos ya fueron validados en el data validate
 func UpdateTriggerController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
@@ -123,6 +124,7 @@ func UpdateTriggerController() http.HandlerFunc {
 
 		idReference := previousTrigger.ID
 		idReferenceRoot := models.TriggerReferenceRoot(*previousTrigger)
+		idWebhook := models.TriggerWebhookID(*previousTrigger)
 
 		// El pine_code no se envia en la peticion, se conserva el del trigger anterior
 		trigger, err := models.NewTriggerModel(
@@ -132,6 +134,7 @@ func UpdateTriggerController() http.HandlerFunc {
 			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
 			&models.TriggerOptionalData{
 				Conditions:      conditions,
+				IdWebhook:       &idWebhook,
 				IdReference:     &idReference,
 				IdReferenceRoot: &idReferenceRoot,
 				PineCode:        previousTrigger.PineCode,
@@ -152,6 +155,7 @@ func UpdateTriggerController() http.HandlerFunc {
 			"idTrigger":         idTrigger,
 			"idPreviousTrigger": previousTrigger.ID.Hex(),
 			"idReferenceRoot":   idReferenceRoot.Hex(),
+			"idWebhook":         idWebhook.Hex(),
 		}
 
 		res.Send(http.StatusCreated, "SUCCESS", "Trigger actualizado exitosamente", "COPR005", data)

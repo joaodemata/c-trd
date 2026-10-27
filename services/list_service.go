@@ -327,6 +327,37 @@ func GetCatalogService(idCatalog primitive.ObjectID, typeCatalog string) (models
 	return result, cmm.NewEmptyErrorHandler()
 }
 
+// GetTriggerByWebhookService busca la version vigente (no borrada) del trigger con el id de webhook enviado.
+// Si no existe retorna el trigger vacio sin error
+func GetTriggerByWebhookService(idWebhook primitive.ObjectID) (models.TriggersModelType, *cmm.ErrorHandler) {
+	var result models.TriggersModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_webhook": idWebhook, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{
+		"last_updated_at": 0,
+		"created_date":    0,
+		"logical_delete":  0,
+		"core_db":         0,
+		"core_version":    0,
+		"user_db":         0,
+		"schema_db":       0,
+	})
+
+	err := models.TriggersModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE036")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
 // GetTriggerByTagService busca un trigger no borrado por su tag. Si no existe retorna el trigger vacio sin error
 func GetTriggerByTagService(tag string) (models.TriggersModelType, *cmm.ErrorHandler) {
 	var result models.TriggersModelType

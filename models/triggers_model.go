@@ -21,6 +21,7 @@ type conditionTriggers struct {
 
 type TriggersModelType struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	IDWebhook   primitive.ObjectID `bson:"id_webhook" json:"idWebhook" description:"Id que recibe el hook, se mantiene entre las versiones del trigger"`
 	Tag         string             `bson:"tag" json:"tag" description:"tag del trigger"`
 	Name        string             `bson:"name" json:"name" description:"Nombre del trigger"`
 	Description string             `bson:"description" json:"description" description:"Que principio utiliza este trigger"`
@@ -74,16 +75,28 @@ func TriggerReferenceRoot(previous TriggersModelType) primitive.ObjectID {
 	return previous.ID
 }
 
+// TriggerWebhookID retorna el id del webhook para el trigger que reemplaza a previous: se reutiliza el de previous
+// para que las alertas sigan apuntando al mismo id. Si previous no tiene (triggers anteriores al campo) se usa su ID,
+// que es el id que ya envian sus alertas
+func TriggerWebhookID(previous TriggersModelType) primitive.ObjectID {
+	if !previous.IDWebhook.IsZero() {
+		return previous.IDWebhook
+	}
+
+	return previous.ID
+}
+
 // CONSTRUCTORS
 
 type TriggerOptionalData struct {
 	Conditions      []ConditionsModelType // Se copian los datos de cada condicion al trigger
+	IdWebhook       *primitive.ObjectID   // Si no viene se genera uno nuevo
 	IdReference     *primitive.ObjectID
 	IdReferenceRoot *primitive.ObjectID
 	PineCode        *string
 }
 
-// NewTriggerModel crea un trigger nuevo con status activo. Los arreglos opcionales se guardan como []
+// NewTriggerModel crea un trigger nuevo con status activo. El id del webhook se genera si no viene en opts. Los arreglos opcionales se guardan como []
 // y los demas campos opcionales como null para mantener la integridad de la data
 func NewTriggerModel(
 	// --- Trigger ---
@@ -101,6 +114,7 @@ func NewTriggerModel(
 
 	trigger := TriggersModelType{
 		ID:                      primitive.NewObjectID(),
+		IDWebhook:               primitive.NewObjectID(),
 		Tag:                     tag,
 		Name:                    name,
 		Description:             description,
@@ -139,6 +153,9 @@ func NewTriggerModel(
 				NameCondition:        condition.Name,
 				DescriptionCondition: condition.Description,
 			})
+		}
+		if opts.IdWebhook != nil {
+			trigger.IDWebhook = *opts.IdWebhook
 		}
 		trigger.IdReference = opts.IdReference
 		trigger.IdReferenceRoot = opts.IdReferenceRoot
