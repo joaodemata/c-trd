@@ -20,8 +20,9 @@ type conditionTriggers struct {
 }
 
 type TriggersModelType struct {
+	// El id del webhook no se envia en los listados (json:"-"), solo en la respuesta de crear y actualizar el trigger
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	IDWebhook   primitive.ObjectID `bson:"id_webhook" json:"idWebhook" description:"Id que recibe el hook, se mantiene entre las versiones del trigger"`
+	IDWebhook   primitive.ObjectID `bson:"id_webhook" json:"-" description:"Id que recibe el hook, se mantiene entre las versiones del trigger"`
 	Tag         string             `bson:"tag" json:"tag" description:"tag del trigger"`
 	Name        string             `bson:"name" json:"name" description:"Nombre del trigger"`
 	Description string             `bson:"description" json:"description" description:"Que principio utiliza este trigger"`

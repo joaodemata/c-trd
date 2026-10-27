@@ -45,21 +45,22 @@ type ApisModelType struct {
 	TagProvider  string             `bson:"tag_provider" json:"tagProvider" description:"Tag del proveedor de la API."`
 	NameProvider string             `bson:"name_provider" json:"nameProvider" description:"Nombre del proveedor de la API."`
 
+	// Los datos de la peticion (method, url, headers, data_location, retry_policy, timeout_seconds) no se envian al frontend (json:"-")
 	Tag          string            `bson:"tag" json:"tag" description:"Tag de la API."`
 	Name         string            `bson:"name" json:"name" description:"Nombre de la API."`
 	Description  string            `bson:"description" json:"description" description:"Descripcion de la API."`
 	IsActive     bool              `bson:"is_active" json:"isActive" description:"Si esta activo la API."`
 	Type         string            `bson:"type" json:"type" description:"Tipo de api (interna o externa)"`
-	Method       string            `bson:"method" json:"method" description:"metodo de la peticion a Llamar"`
-	URL          string            `bson:"url" json:"url" description:"url a Llamar"`
-	Headers      map[string]string `bson:"headers" json:"headers" description:"cabeceras fijas de la peticion"`
-	DataLocation string            `bson:"data_location" json:"dataLocation" description:"Por donde se envian los parametros: QUERY o BODY"`
+	Method       string            `bson:"method" json:"-" description:"metodo de la peticion a Llamar"`
+	URL          string            `bson:"url" json:"-" description:"url a Llamar"`
+	Headers      map[string]string `bson:"headers" json:"-" description:"cabeceras fijas de la peticion"`
+	DataLocation string            `bson:"data_location" json:"-" description:"Por donde se envian los parametros: QUERY o BODY"`
 	Data         interface{}       `bson:"data" json:"data" description:"data que siempre se envia por esta api (Ej: function, id, etc)"`
 
 	// Configuracion de la peticion, se copia al http_request de cada condicion
 	Auth           *providers.HTTPAuth    `bson:"auth" json:"auth" description:"Autorizacion, el secreto sale del secret_ref del proveedor. null si no requiere"`
-	RetryPolicy    *providers.RetryPolicy `bson:"retry_policy" json:"retryPolicy" description:"Reintentos en caso de fallo, null si no reintenta"`
-	TimeoutSeconds int                    `bson:"timeout_seconds" json:"timeoutSeconds" description:"Tiempo maximo de espera en segundos, 0 usa el valor por defecto"`
+	RetryPolicy    *providers.RetryPolicy `bson:"retry_policy" json:"-" description:"Reintentos en caso de fallo, null si no reintenta"`
+	TimeoutSeconds int                    `bson:"timeout_seconds" json:"-" description:"Tiempo maximo de espera en segundos, 0 usa el valor por defecto"`
 
 	// Formato de la respuesta, define que callbacks pueden procesarla
 	ResponseFormat string `bson:"response_format" json:"responseFormat" description:"Formato de la respuesta (ej: GOOGLE_TRENDS_SERIES)"`
