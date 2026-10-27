@@ -72,7 +72,7 @@ type coinMarketCapQuotesResponse struct {
 }
 
 // FearAndGreedExtremeFearCallback retorna true si el indice Fear and Greed esta en Extreme Fear (menor a 20)
-func FearAndGreedExtremeFearCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FearAndGreedExtremeFearCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -84,7 +84,7 @@ func FearAndGreedExtremeFearCallback(responseData []byte) (bool, *cmm.ErrorHandl
 }
 
 // FearAndGreedFearCallback retorna true si el indice Fear and Greed esta en Fear (20 a menos de 40)
-func FearAndGreedFearCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FearAndGreedFearCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -96,7 +96,7 @@ func FearAndGreedFearCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 }
 
 // FearAndGreedNeutralCallback retorna true si el indice Fear and Greed esta en Neutral (40 a menos de 60)
-func FearAndGreedNeutralCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FearAndGreedNeutralCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -108,7 +108,7 @@ func FearAndGreedNeutralCallback(responseData []byte) (bool, *cmm.ErrorHandler) 
 }
 
 // FearAndGreedGreedCallback retorna true si el indice Fear and Greed esta en Greed (60 a menos de 80)
-func FearAndGreedGreedCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FearAndGreedGreedCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -120,7 +120,7 @@ func FearAndGreedGreedCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 }
 
 // FearAndGreedExtremeGreedCallback retorna true si el indice Fear and Greed esta en Extreme Greed (80 o mas)
-func FearAndGreedExtremeGreedCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FearAndGreedExtremeGreedCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	value, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -132,7 +132,7 @@ func FearAndGreedExtremeGreedCallback(responseData []byte) (bool, *cmm.ErrorHand
 }
 
 // BtcDominanceAbove60Callback retorna true si la dominancia de Bitcoin es mayor a btcDominanceThreshold
-func BtcDominanceAbove60Callback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func BtcDominanceAbove60Callback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	data, err := parseGlobalMetricsLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -150,7 +150,7 @@ func BtcDominanceAbove60Callback(responseData []byte) (bool, *cmm.ErrorHandler) 
 // StablecoinDominanceAbove12Callback retorna true si el market cap de las stablecoins es mayor a
 // stablecoinDominanceThreshold por ciento del market cap total. Una dominancia alta indica liquidez fuera del
 // mercado esperando entrar (miedo o capitulacion), historicamente cerca de los minimos
-func StablecoinDominanceAbove12Callback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func StablecoinDominanceAbove12Callback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	data, err := parseGlobalMetricsLatest(responseData)
 	if !err.IsEmtpy() {
 		return false, err

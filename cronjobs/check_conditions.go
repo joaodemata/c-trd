@@ -192,7 +192,7 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 	}
 
 	// 4. Ejecutamos el callback
-	accepted, err := callback.Fn(responseBody)
+	accepted, err := callback.Fn(responseBody, condition.ParametersCallback)
 	if !err.IsEmtpy() {
 		log.Printf("Error executing callback '%s' for condition %s: %v", callbackName, condition.ID.Hex(), err)
 		return result

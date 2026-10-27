@@ -86,9 +86,9 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 
 	first := models.ConditionsModelType{
 		ID: primitive.NewObjectID(), IDProvider: primitive.NewObjectID(),
-		NameProvider: "Alpha Vantage", NameCondition: "Put/Call", DescriptionCondition: "Ratio alto",
+		NameProvider: "Alpha Vantage", Name: "Put/Call", Description: "Ratio alto",
 	}
-	second := models.ConditionsModelType{ID: primitive.NewObjectID(), NameCondition: "Trends"}
+	second := models.ConditionsModelType{ID: primitive.NewObjectID(), Name: "Trends"}
 	idReference := primitive.NewObjectID()
 	idReferenceRoot := primitive.NewObjectID()
 	pineCode := "//@version=5"
@@ -106,7 +106,7 @@ func TestNewTriggerModel_OptionalData(t *testing.T) {
 	// Se conserva el orden y se copian los datos de la condicion
 	got := trigger.Conditions[0]
 	if got.IDCondition != first.ID || got.IDProvider != first.IDProvider || got.NameProvider != first.NameProvider ||
-		got.NameCondition != first.NameCondition || got.DescriptionCondition != first.DescriptionCondition {
+		got.NameCondition != first.Name || got.DescriptionCondition != first.Description {
 		t.Errorf("conditions[0] = %+v, se esperaba la copia de %+v", got, first)
 	}
 	if trigger.Conditions[1].IDCondition != second.ID {

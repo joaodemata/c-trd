@@ -72,7 +72,7 @@ func TestGoogleTrendsFileCallbacks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(fileResponse(t, now, week, tt.values...))
+			accepted, err := tt.callback(fileResponse(t, now, week, tt.values...), nil)
 
 			testutil.RequireEmptyError(t, err)
 			if accepted != tt.want {
@@ -102,7 +102,7 @@ func TestGoogleTrendsFileCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.GoogleTrendsFileHighCallback(tt.body)
+			accepted, err := providers.GoogleTrendsFileHighCallback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 			if accepted {

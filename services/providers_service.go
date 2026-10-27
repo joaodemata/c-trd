@@ -1,21 +1,22 @@
 package services
 
 import (
+	"c_trd/models"
+	"c_trd/providers"
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
 	cmm "c_trd/common"
-	"c_trd/models"
-	"c_trd/providers"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Llamadas explicitas a las APIs de los proveedores. La autenticacion sale del secret_ref del proveedor
 // y el host debe estar en sus allowed_hosts
-
+// TODO: esto posiblemente sea mejor usar el idApi y hacer un query por si cambia la url en el futuro
+// TODO: y realmente lo mejor para obtener el precio es tener un websocket apuntando a la coleccion assets y agregar un campo price del activo (asumiendo siempre dolares)
 const (
 	coinMarketCapQuotesURL     = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
 	coinMarketCapQuoteCurrency = "USD"

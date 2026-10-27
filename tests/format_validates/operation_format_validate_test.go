@@ -164,12 +164,15 @@ func TestUpdateTriggerFormatValidate(t *testing.T) {
 // validConditionBody body valido para crear una condicion de cronjob, cada caso modifica un campo
 func validConditionBody() map[string]any {
 	return map[string]any{
-		"idApi":                primitive.NewObjectID().Hex(),
-		"nameCondition":        "Put/Call AAPL",
-		"descriptionCondition": "Ratio alto o bajo",
-		"parameters":           map[string]string{"symbol": "AAPL"},
-		"callbackFunction":     "ProcessAlphaVantageData",
-		"intervalSeconds":      3600,
+		"tag":                "PUT-CALL-AAPL",
+		"name":               "Put/Call AAPL",
+		"description":        "Ratio alto o bajo",
+		"idTypeCondition":    primitive.NewObjectID().Hex(),
+		"idApi":              primitive.NewObjectID().Hex(),
+		"parameters":         map[string]string{"symbol": "AAPL"},
+		"callbackFunction":   "ProcessAlphaVantageData",
+		"parametersCallback": map[string]string{"threshold": "60"},
+		"intervalSeconds":    3600,
 	}
 }
 
@@ -192,8 +195,13 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 		{name: "isWebhookOnly como texto no booleano", edit: func(b map[string]any) { b["isWebhookOnly"] = "no" }, wantTracking: "CC001"},
 		{name: "sin api", edit: func(b map[string]any) { delete(b, "idApi") }, wantTracking: "CC003"},
 		{name: "api que no es ObjectID", edit: func(b map[string]any) { b["idApi"] = "abc" }, wantTracking: "CC003"},
-		{name: "sin nombre", edit: func(b map[string]any) { delete(b, "nameCondition") }, wantTracking: "CC003"},
-		{name: "sin descripcion", edit: func(b map[string]any) { delete(b, "descriptionCondition") }, wantTracking: "CC003"},
+		{name: "sin tag", edit: func(b map[string]any) { delete(b, "tag") }, wantTracking: "CC003"},
+		{name: "sin nombre", edit: func(b map[string]any) { delete(b, "name") }, wantTracking: "CC003"},
+		{name: "sin descripcion", edit: func(b map[string]any) { delete(b, "description") }, wantTracking: "CC003"},
+		{name: "sin tipo de condicion", edit: func(b map[string]any) { delete(b, "idTypeCondition") }, wantTracking: "CC003"},
+		{name: "tipo de condicion que no es ObjectID", edit: func(b map[string]any) { b["idTypeCondition"] = "abc" }, wantTracking: "CC003"},
+		{name: "sin parametros del callback", edit: func(b map[string]any) { delete(b, "parametersCallback") }, wantNext: true},
+		{name: "parametro del callback numerico", edit: func(b map[string]any) { b["parametersCallback"] = map[string]any{"threshold": 60} }, wantTracking: "CC001"},
 		{name: "sin callback", edit: func(b map[string]any) { delete(b, "callbackFunction") }, wantTracking: "CC003"},
 		{name: "sin intervalo", edit: func(b map[string]any) { delete(b, "intervalSeconds") }, wantTracking: "CC003"},
 		{name: "intervalo menor al ticker", edit: func(b map[string]any) { b["intervalSeconds"] = 59 }, wantTracking: "CC003"},
@@ -234,8 +242,8 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 
 			payload, errCtx := cmm.GetFromRequestContext[*fv.CreateConditionFormat](spy.Request, "payload")
 			testutil.RequireEmptyError(t, errCtx)
-			if payload.NameCondition != "Put/Call AAPL" {
-				t.Errorf("payload = %+v, se esperaba el nombre enviado", payload)
+			if payload.Name != "Put/Call AAPL" || payload.Tag != "PUT-CALL-AAPL" || payload.IdTypeCondition == "" {
+				t.Errorf("payload = %+v, se esperaban el tag, el nombre y el tipo enviados", payload)
 			}
 		})
 	}

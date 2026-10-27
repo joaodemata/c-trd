@@ -48,15 +48,19 @@ var UpdateTriggerFormatValidate = common.FormatValidateMiddleware[UpdateTriggerF
 
 // CreateConditionFormat datos para registrar una condicion sobre una API. Los valores de los parametros se envian
 // como texto y se validan contra el tipo de dato de la API en el data validate. Solo se crean condiciones que evalua
-// el cronjob: isWebhookOnly es opcional y si se envia debe ser false. El intervalo minimo es el del ticker (60s)
+// el cronjob: isWebhookOnly es opcional y si se envia debe ser false. El intervalo minimo es el del ticker (60s).
+// parametersCallback sigue las mismas reglas que parameters pero contra los parametros del callback
 type CreateConditionFormat struct {
-	IdApi                string            `json:"idApi" validate:"required,mongodb"`
-	NameCondition        string            `json:"nameCondition" validate:"required"`
-	DescriptionCondition string            `json:"descriptionCondition" validate:"required"`
-	IsWebhookOnly        bool              `json:"isWebhookOnly" validate:"isdefault"`
-	Parameters           map[string]string `json:"parameters"`
-	CallbackFunction     string            `json:"callbackFunction" validate:"required"`
-	IntervalSeconds      int               `json:"intervalSeconds" validate:"required,min=60"`
+	Tag                string            `json:"tag" validate:"required"`
+	Name               string            `json:"name" validate:"required"`
+	Description        string            `json:"description" validate:"required"`
+	IdTypeCondition    string            `json:"idTypeCondition" validate:"required,mongodb"`
+	IdApi              string            `json:"idApi" validate:"required,mongodb"`
+	IsWebhookOnly      bool              `json:"isWebhookOnly" validate:"isdefault"`
+	Parameters         map[string]string `json:"parameters"`
+	CallbackFunction   string            `json:"callbackFunction" validate:"required"`
+	ParametersCallback map[string]string `json:"parametersCallback"`
+	IntervalSeconds    int               `json:"intervalSeconds" validate:"required,min=60"`
 }
 
 var CreateConditionFormatValidate = common.FormatValidateMiddleware[CreateConditionFormat]

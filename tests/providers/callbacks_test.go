@@ -29,6 +29,22 @@ func TestFunctionRegistry_Definitions(t *testing.T) {
 		if !slices.Contains(known, definition.ResponseFormat) {
 			t.Errorf("%s: response_format %q desconocido", name, definition.ResponseFormat)
 		}
+
+		// Los parametros se validan al crear la condicion, deben tener nombre unico y un tipo de dato soportado
+		dataTypes := []string{cmm.ApiParameterTypeString, cmm.ApiParameterTypeInteger, cmm.ApiParameterTypeFloat, cmm.ApiParameterTypeBoolean, cmm.ApiParameterTypeDate}
+		parameterNames := make(map[string]bool)
+		for _, parameter := range definition.Parameters {
+			if parameter.Name == "" || parameter.Label == "" || parameter.Description == "" {
+				t.Errorf("%s: parametro %+v con nombre, label o descripcion vacio", name, parameter)
+			}
+			if parameterNames[parameter.Name] {
+				t.Errorf("%s: parametro %q repetido", name, parameter.Name)
+			}
+			parameterNames[parameter.Name] = true
+			if !slices.Contains(dataTypes, parameter.DataType) {
+				t.Errorf("%s: parametro %q con data_type %q no soportado", name, parameter.Name, parameter.DataType)
+			}
+		}
 	}
 }
 
@@ -65,6 +81,9 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 				names[i] = callback.ID
 				if callback.ResponseFormat != tt.format || callback.Description == "" || callback.Name == "" || callback.Tag == "" {
 					t.Errorf("callback = %+v, se esperaba el formato %s con descripcion, nombre y tag", callback, tt.format)
+				}
+				if callback.Parameters == nil {
+					t.Errorf("callback %s: parameters debe ser [] y no nil", callback.ID)
 				}
 			}
 			if !slices.Equal(names, tt.want) {

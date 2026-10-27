@@ -349,6 +349,28 @@ func GetTriggerByTagService(tag string) (models.TriggersModelType, *cmm.ErrorHan
 	return result, cmm.NewEmptyErrorHandler()
 }
 
+// GetConditionByTagService busca una condicion no borrada por su tag. Si no existe retorna la condicion vacia sin error
+func GetConditionByTagService(tag string) (models.ConditionsModelType, *cmm.ErrorHandler) {
+	var result models.ConditionsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"tag": tag, "logical_delete": false}
+	opts := options.FindOne().SetProjection(bson.M{"_id": 1, "tag": 1})
+
+	err := models.ConditionsModel.FindOne(ctx, filter, opts).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE035")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
 // GetProvidersByIDsService obtiene los proveedores activos con los ids indicados, indexados por id
 func GetProvidersByIDsService(ids []primitive.ObjectID) (map[primitive.ObjectID]models.ProvidersModelType, *cmm.ErrorHandler) {
 	result := make(map[primitive.ObjectID]models.ProvidersModelType)
@@ -512,8 +534,10 @@ func GetConditionsService(Limit int, Page int, Search string) ([]models.Conditio
 	if Search != "" {
 		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
 		filter["$or"] = []bson.M{
-			{"name_condition": regexPattern},
-			{"description_condition": regexPattern},
+			{"tag": regexPattern},
+			{"name": regexPattern},
+			{"description": regexPattern},
+			{"name_type_condition": regexPattern},
 			{"name_provider": regexPattern},
 			{"callback_function": regexPattern},
 		}
@@ -532,21 +556,26 @@ func GetConditionsService(Limit int, Page int, Search string) ([]models.Conditio
 		SetLimit(int64(Limit)).
 		SetSort(bson.M{"created_date": -1}).
 		SetProjection(bson.M{
-			"_id":                   1,
-			"id_provider":           1,
-			"name_provider":         1,
-			"name_condition":        1,
-			"description_condition": 1,
-			"is_webhook_only":       1,
-			"interval_seconds":      1,
-			"next_execution_at":     1,
-			"last_executed_at":      1,
-			"id_api":                1,
-			"callback_function":     1,
-			"id_status":             1,
-			"tag_status":            1,
-			"status":                1,
-			"created_date":          1,
+			"_id":                 1,
+			"id_provider":         1,
+			"name_provider":       1,
+			"tag":                 1,
+			"name":                1,
+			"description":         1,
+			"id_type_condition":   1,
+			"tag_type_condition":  1,
+			"name_type_condition": 1,
+			"is_webhook_only":     1,
+			"interval_seconds":    1,
+			"next_execution_at":   1,
+			"last_executed_at":    1,
+			"id_api":              1,
+			"callback_function":   1,
+			"parameters_callback": 1,
+			"id_status":           1,
+			"tag_status":          1,
+			"status":              1,
+			"created_date":        1,
 		})
 
 	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)

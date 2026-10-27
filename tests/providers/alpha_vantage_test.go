@@ -11,7 +11,7 @@ func TestRealtimePutCallRatioCallback_Fixture(t *testing.T) {
 	t.Parallel()
 
 	// Respuesta real de Alpha Vantage con ratio 1.27 (> 1 es bullish)
-	accepted, err := providers.RealtimePutCallRatioCallback(testutil.ReadFixture(t, "alpha_vantage_put_call_ratio.json"))
+	accepted, err := providers.RealtimePutCallRatioCallback(testutil.ReadFixture(t, "alpha_vantage_put_call_ratio.json"), nil)
 
 	testutil.RequireEmptyError(t, err)
 	if !accepted {
@@ -40,7 +40,7 @@ func TestRealtimePutCallRatioCallback_Thresholds(t *testing.T) {
 			t.Parallel()
 
 			body := []byte(`{"symbol":"SPY","put_call_ratio_full_chain":"` + tt.ratio + `"}`)
-			accepted, err := providers.RealtimePutCallRatioCallback(body)
+			accepted, err := providers.RealtimePutCallRatioCallback(body, nil)
 
 			testutil.RequireEmptyError(t, err)
 			if accepted != tt.want {
@@ -70,7 +70,7 @@ func TestRealtimePutCallRatioCallback_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.RealtimePutCallRatioCallback([]byte(tt.body))
+			accepted, err := providers.RealtimePutCallRatioCallback([]byte(tt.body), nil)
 
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 			if accepted {

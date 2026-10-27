@@ -16,13 +16,13 @@ func TestGoogleTrendsCallbacks_Fixture(t *testing.T) {
 	// el ultimo valor seria 30 y la zona alta no se cumpliria
 	body := testutil.ReadFixture(t, "serpapi_google_trends.json")
 
-	high, err := providers.GoogleTrendsHighCallback(body)
+	high, err := providers.GoogleTrendsHighCallback(body, nil)
 	testutil.RequireEmptyError(t, err)
 	if !high {
 		t.Error("GoogleTrendsHighCallback deberia aceptar 97 en el rango 20-100")
 	}
 
-	low, err := providers.GoogleTrendsLowCallback(body)
+	low, err := providers.GoogleTrendsLowCallback(body, nil)
 	testutil.RequireEmptyError(t, err)
 	if low {
 		t.Error("GoogleTrendsLowCallback no deberia aceptar 97 en el rango 20-100")
@@ -48,7 +48,7 @@ func TestGoogleTrendsCallbacks_Zones(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback([]byte(timeline(tt.values...)))
+			accepted, err := tt.callback([]byte(timeline(tt.values...)), nil)
 
 			testutil.RequireEmptyError(t, err)
 			if accepted != tt.want {
@@ -77,7 +77,7 @@ func TestGoogleTrendsCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.GoogleTrendsHighCallback([]byte(tt.body))
+			accepted, err := providers.GoogleTrendsHighCallback([]byte(tt.body), nil)
 
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 			if accepted {

@@ -232,6 +232,18 @@ func CreateConditionController() http.HandlerFunc {
 			return
 		}
 
+		typeCondition, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "typeCondition")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		parametersCallback, err := cmm.GetFromRequestContext[map[string]any](r, "parametersCallback")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
 		api, err := cmm.GetFromRequestContext[*models.ApisModelType](r, "api")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
@@ -251,13 +263,15 @@ func CreateConditionController() http.HandlerFunc {
 		}
 
 		condition, err := models.NewConditionModel(
+			payload.Tag, payload.Name, payload.Description,
 			provider.ID, provider.Name,
-			payload.NameCondition, payload.DescriptionCondition,
+			models.ConditionTypeData{ID: typeCondition.ID, Tag: typeCondition.Tag, Name: typeCondition.Name},
 			api.ID,
 			models.ConditionCronjobData{
-				HttpRequest:      *httpRequest,
-				CallbackFunction: payload.CallbackFunction,
-				IntervalSeconds:  payload.IntervalSeconds,
+				HttpRequest:        *httpRequest,
+				CallbackFunction:   payload.CallbackFunction,
+				ParametersCallback: parametersCallback,
+				IntervalSeconds:    payload.IntervalSeconds,
 			},
 		)
 		if !err.IsEmtpy() {

@@ -36,7 +36,7 @@ type fredPoint struct {
 
 // FredSeriesRisingCallback retorna true si la pendiente de la regresion lineal de la ventana es positiva.
 // La ventana es la cantidad de observaciones que devuelve FRED (parametro limit de la condicion)
-func FredSeriesRisingCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FredSeriesRisingCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	points, err := parseFredSeries(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -49,7 +49,7 @@ func FredSeriesRisingCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
 }
 
 // FredSeriesFallingCallback retorna true si la pendiente de la regresion lineal de la ventana es negativa
-func FredSeriesFallingCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FredSeriesFallingCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	points, err := parseFredSeries(responseData)
 	if !err.IsEmtpy() {
 		return false, err

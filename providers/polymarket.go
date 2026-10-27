@@ -48,7 +48,7 @@ type polymarketMarket struct {
 
 // FedNextMeetingCutLikely retorna true si en la proxima reunion de la FED la probabilidad de bajar la tasa
 // (suma de todos los mercados "decrease") es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingCutLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingCutLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -62,7 +62,7 @@ func FedNextMeetingCutLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
 
 // FedNextMeetingHoldLikely retorna true si en la proxima reunion de la FED la probabilidad de mantener la tasa
 // es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingHoldLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingHoldLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
 		return false, err
@@ -76,7 +76,7 @@ func FedNextMeetingHoldLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
 
 // FedNextMeetingHikeLikely retorna true si en la proxima reunion de la FED la probabilidad de subir la tasa
 // (suma de todos los mercados "increase") es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingHikeLikely(responseData []byte) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingHikeLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
 		return false, err

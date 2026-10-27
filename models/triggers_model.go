@@ -136,8 +136,8 @@ func NewTriggerModel(
 				IDCondition:          condition.ID,
 				IDProvider:           condition.IDProvider,
 				NameProvider:         condition.NameProvider,
-				NameCondition:        condition.NameCondition,
-				DescriptionCondition: condition.DescriptionCondition,
+				NameCondition:        condition.Name,
+				DescriptionCondition: condition.Description,
 			})
 		}
 		trigger.IdReference = opts.IdReference

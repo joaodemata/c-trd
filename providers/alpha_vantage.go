@@ -8,7 +8,7 @@ import (
 )
 
 // TODO: seria bueno crear una coleccion que guarde las respuestas de las logicas de los callbacks y acciones de los webhooks
-func RealtimePutCallRatioCallback(responseData []byte) (bool, *cmm.ErrorHandler) {
+func RealtimePutCallRatioCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
 	// 1. Definir un struct local para extraer exactamente lo que necesitamos del JSON
 	type PCRResponse struct {
 		Symbol                string `json:"symbol"`
