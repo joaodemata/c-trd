@@ -44,6 +44,16 @@ func TestFunctionRegistry_Definitions(t *testing.T) {
 			if !slices.Contains(dataTypes, parameter.DataType) {
 				t.Errorf("%s: parametro %q con data_type %q no soportado", name, parameter.Name, parameter.DataType)
 			}
+
+			// El rango solo se valida en parametros numericos y debe poder cumplirse
+			hasRange := parameter.MinValue != nil || parameter.MaxValue != nil
+			isNumeric := parameter.DataType == cmm.ApiParameterTypeInteger || parameter.DataType == cmm.ApiParameterTypeFloat
+			if hasRange && !isNumeric {
+				t.Errorf("%s: parametro %q con rango pero data_type %q no es numerico", name, parameter.Name, parameter.DataType)
+			}
+			if parameter.MinValue != nil && parameter.MaxValue != nil && *parameter.MinValue > *parameter.MaxValue {
+				t.Errorf("%s: parametro %q con min_value %v mayor a max_value %v", name, parameter.Name, *parameter.MinValue, *parameter.MaxValue)
+			}
 		}
 	}
 }

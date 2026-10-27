@@ -720,10 +720,50 @@ func BuildConditionCallbackParametersService(callback providers.CallbackDefiniti
 		if !errValue.IsEmtpy() {
 			return result, errValue
 		}
+
+		// 3. Rango del valor numerico, si el callback lo define
+		errRange := validateCallbackParameterRange(parameter, typed)
+		if !errRange.IsEmtpy() {
+			return result, errRange
+		}
 		result[parameter.Name] = typed
 	}
 
 	return result, cmm.NewEmptyErrorHandler()
+}
+
+// validateCallbackParameterRange valida que el valor ya tipado (int64 o float64) este dentro del rango inclusivo
+// [min_value, max_value] del parametro. Los limites nil no se validan y los valores no numericos no tienen rango
+func validateCallbackParameterRange(parameter providers.CallbackParameter, typed any) *cmm.ErrorHandler {
+	var number float64
+	switch value := typed.(type) {
+	case float64:
+		number = value
+	case int64:
+		number = float64(value)
+	default:
+		return cmm.NewEmptyErrorHandler()
+	}
+
+	belowMin := parameter.MinValue != nil && number < *parameter.MinValue
+	aboveMax := parameter.MaxValue != nil && number > *parameter.MaxValue
+	if belowMin || aboveMax {
+		return cmm.NewErrorHandler(fmt.Errorf("value %v min %v max %v", number, parameter.MinValue, parameter.MaxValue), fmt.Sprintf("El parametro %q del callback esta fuera del rango permitido (%s)", parameter.Name, callbackParameterRangeText(parameter)), cmm.LevelError, "SOPRE053")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// callbackParameterRangeText texto del rango del parametro para el mensaje de error (ej: "entre 0 y 100" o "mayor o igual a 0")
+func callbackParameterRangeText(parameter providers.CallbackParameter) string {
+	switch {
+	case parameter.MinValue != nil && parameter.MaxValue != nil:
+		return fmt.Sprintf("entre %v y %v", *parameter.MinValue, *parameter.MaxValue)
+	case parameter.MinValue != nil:
+		return fmt.Sprintf("mayor o igual a %v", *parameter.MinValue)
+	default:
+		return fmt.Sprintf("menor o igual a %v", *parameter.MaxValue)
+	}
 }
 
 // parseParameterValue valida el valor segun el tipo de dato y las opciones del parametro. Retorna el valor con su tipo
