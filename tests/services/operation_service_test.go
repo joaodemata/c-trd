@@ -467,6 +467,19 @@ func TestBuildConditionCallbackParametersService_Range(t *testing.T) {
 	}
 }
 
+func TestBuildConditionCallbackParametersService_RangeErrorDetail(t *testing.T) {
+	t.Parallel()
+
+	// El detalle del log debe tener los limites y no las direcciones de memoria de MinValue y MaxValue
+	_, err := services.BuildConditionCallbackParametersService(newRangeTestCallback(), map[string]string{"threshold": "150"})
+
+	testutil.RequireTrackingCode(t, err, "SOPRE053")
+	want := `parameter "threshold" value 150 not entre 0 y 100`
+	if err.Err == nil || err.Err.Error() != want {
+		t.Errorf("detalle = %v, want %q", err.Err, want)
+	}
+}
+
 func TestBuildConditionCallbackParametersService_RegisteredThreshold(t *testing.T) {
 	t.Parallel()
 

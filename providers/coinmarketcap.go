@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -206,7 +207,7 @@ func StablecoinDominanceAbove12Callback(responseData []byte, parameters map[stri
 	}
 
 	if quote.TotalMarketCap == nil || quote.StablecoinMarketCap == nil || *quote.TotalMarketCap <= 0 || *quote.StablecoinMarketCap < 0 {
-		return false, cmm.NewErrorHandler(fmt.Errorf("total_market_cap %v stablecoin_market_cap %v", quote.TotalMarketCap, quote.StablecoinMarketCap), "CoinMarketCap market caps are missing or invalid", cmm.LevelError, "PCCMCE008")
+		return false, cmm.NewErrorHandler(fmt.Errorf("total_market_cap %s stablecoin_market_cap %s", optionalFloatText(quote.TotalMarketCap), optionalFloatText(quote.StablecoinMarketCap)), "CoinMarketCap market caps are missing or invalid", cmm.LevelError, "PCCMCE008")
 	}
 
 	dominance := sharePercentage(*quote.StablecoinMarketCap, *quote.TotalMarketCap)
@@ -425,7 +426,7 @@ func parseBtcDominance(responseData []byte) (float64, *cmm.ErrorHandler) {
 	}
 
 	if !isValidDominance(data.Data.BtcDominance) {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %v", data.Data.BtcDominance), "CoinMarketCap btc_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE006")
+		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s", optionalFloatText(data.Data.BtcDominance)), "CoinMarketCap btc_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE006")
 	}
 
 	return *data.Data.BtcDominance, cmm.NewEmptyErrorHandler()
@@ -441,7 +442,7 @@ func parseOthers3Dominance(responseData []byte) (float64, *cmm.ErrorHandler) {
 	btcDominance := data.Data.BtcDominance
 	ethDominance := data.Data.EthDominance
 	if !isValidDominance(btcDominance) || !isValidDominance(ethDominance) || *btcDominance+*ethDominance > dominanceMaxValue {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %v eth_dominance %v", btcDominance, ethDominance), "CoinMarketCap btc_dominance or eth_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE014")
+		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s eth_dominance %s", optionalFloatText(btcDominance), optionalFloatText(ethDominance)), "CoinMarketCap btc_dominance or eth_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE014")
 	}
 
 	return dominanceMaxValue - *btcDominance - *ethDominance, cmm.NewEmptyErrorHandler()
@@ -461,10 +462,19 @@ func parseUsdtDominance(responseData []byte) (float64, *cmm.ErrorHandler) {
 
 	quote, exists := coin.Quote[coinMarketCapQuoteCurrency]
 	if !exists || !isValidDominance(quote.MarketCapDominance) {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("market_cap_dominance %v", quote.MarketCapDominance), "CoinMarketCap USDT market_cap_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE015")
+		return 0, cmm.NewErrorHandler(fmt.Errorf("market_cap_dominance %s", optionalFloatText(quote.MarketCapDominance)), "CoinMarketCap USDT market_cap_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE015")
 	}
 
 	return *quote.MarketCapDominance, cmm.NewEmptyErrorHandler()
+}
+
+// optionalFloatText texto de un numero opcional para el detalle de los errores: el valor o "null" si no llego.
+// Con %v un *float64 imprime la direccion de memoria y no el valor
+func optionalFloatText(value *float64) string {
+	if value == nil {
+		return "null"
+	}
+	return strconv.FormatFloat(*value, 'f', -1, 64)
 }
 
 // isValidDominance retorna true si la dominancia existe y esta en el rango [0, 100]
@@ -542,7 +552,7 @@ func CoinMarketCapQuotePrice(responseData []byte, symbol string) (float64, *cmm.
 
 	quote, exists := coin.Quote[coinMarketCapQuoteCurrency]
 	if !exists || quote.Price == nil || *quote.Price <= 0 {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("symbol %q price %v", symbol, quote.Price), "CoinMarketCap USD price is missing or invalid", cmm.LevelError, "PCCMCE011")
+		return 0, cmm.NewErrorHandler(fmt.Errorf("symbol %q price %s", symbol, optionalFloatText(quote.Price)), "CoinMarketCap USD price is missing or invalid", cmm.LevelError, "PCCMCE011")
 	}
 
 	return *quote.Price, cmm.NewEmptyErrorHandler()
