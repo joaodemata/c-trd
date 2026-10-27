@@ -36,7 +36,7 @@ type OpportunitiesModelType struct {
 	IDTrigger          primitive.ObjectID `bson:"id_trigger" json:"idTrigger"`
 	TagTrigger         string             `bson:"tag_trigger" json:"tagTrigger"`
 	Trigger            string             `bson:"trigger" json:"trigger"`
-	DescriptionTrigger string             `bson:"description_trigger" json:"description_trigger"`
+	DescriptionTrigger string             `bson:"description_trigger" json:"descriptionTrigger"`
 	// Asset
 	IDAsset  primitive.ObjectID `bson:"id_asset" json:"idAsset"`
 	TagAsset string             `bson:"tag_asset" json:"tagAsset"`

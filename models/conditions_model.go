@@ -24,33 +24,34 @@ type ConditionsModelType struct {
 	NameTypeCondition string             `bson:"name_type_condition" json:"nameTypeCondition"`
 	TagTypeCondition  string             `bson:"tag_type_condition" json:"tagTypeCondition"`
 
+	// Metadata y http_request no se envian al frontend (json:"-")
 	// Si Metadata es nil en Go, se guardará como null en la base de datos, siempre debe ser un objeto asi sea vacio
-	Metadata interface{} `bson:"metadata" json:"metadata" description:"Objeto con datos a guardar para data analisis"`
+	Metadata interface{} `bson:"metadata" json:"-" description:"Objeto con datos a guardar para data analisis"`
 
 	// --- CAMPOS DE EJECUCIÓN Y WEBHOOKS ---
-	IsWebhookOnly bool `bson:"is_webhook_only" json:"is_webhook_only" description:"Indica si el status solo cambia por webhook"`
+	IsWebhookOnly bool `bson:"is_webhook_only" json:"isWebhookOnly" description:"Indica si el status solo cambia por webhook"`
 
 	// Solo si se valida por cronjob
-	NextExecutionAt *time.Time `bson:"next_execution_at" json:"next_execution_at" description:"Momento en el que el cronjob debe evaluar esta condición"`
-	IntervalSeconds *int       `bson:"interval_seconds" json:"interval_seconds" description:"Frecuencia de actualización en segundos"`
-	LastExecutedAt  *time.Time `bson:"last_executed_at" json:"last_executed_at" description:"Última vez que se evaluó la condición"`
+	NextExecutionAt *time.Time `bson:"next_execution_at" json:"nextExecutionAt" description:"Momento en el que el cronjob debe evaluar esta condición"`
+	IntervalSeconds *int       `bson:"interval_seconds" json:"intervalSeconds" description:"Frecuencia de actualización en segundos"`
+	LastExecutedAt  *time.Time `bson:"last_executed_at" json:"lastExecutedAt" description:"Última vez que se evaluó la condición"`
 
-	IsProcessing bool `bson:"is_processing" json:"is_processing" description:"Lock optimista para evitar que dos workers procesen el mismo registro"`
+	IsProcessing bool `bson:"is_processing" json:"isProcessing" description:"Lock optimista para evitar que dos workers procesen el mismo registro"`
 	// Data que se pasa a la API (parametros dinamicos. Ej: symbol, pair, currency)
 	IDApi            primitive.ObjectID          `bson:"id_api" json:"idApi" description:"Id de la api"`
-	HttpRequest      providers.HTTPRequestConfig `bson:"http_request" json:"httpRequest" description:"Peticion."`
+	HttpRequest      providers.HTTPRequestConfig `bson:"http_request" json:"-" description:"Peticion."`
 	CallbackFunction string                      `bson:"callback_function" json:"callbackFunction" description:"Nombre de la función que procesará la respuesta"`
 	// Valores de los parametros del callback ya tipados (ej: umbrales). Se guarda {} si no tiene
 	ParametersCallback map[string]any `bson:"parameters_callback" json:"parametersCallback" description:"Parametros que recibe el callback"`
 
 	// Status
-	IDStatus  primitive.ObjectID `bson:"id_status" json:"id_status"`
-	TagStatus string             `bson:"tag_status" json:"tag_status" description:"Tag estatus de la condicion"`
+	IDStatus  primitive.ObjectID `bson:"id_status" json:"idStatus"`
+	TagStatus string             `bson:"tag_status" json:"tagStatus" description:"Tag estatus de la condicion"`
 	Status    string             `bson:"status" json:"status"`
 
 	// Common
-	LastUpdatedAt time.Time `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
-	CreatedDate   time.Time `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
+	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
+	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
 	LogicalDelete bool      `bson:"logical_delete" json:"-" description:"Borrado Logico"`
 	CoreDB        string    `bson:"core_db" json:"-" description:"Nombre del Core de Base de datos que hizo el registro"`
 	CoreVersion   string    `bson:"core_version" json:"-" description:"Version del Core"`

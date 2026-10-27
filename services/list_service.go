@@ -815,6 +815,7 @@ func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time,
 		SetLimit(int64(Limit)).
 		SetSort(bson.M{"created_date": -1}).
 		SetProjection(bson.M{
+			"id_webhook":     0,
 			"logical_delete": 0,
 			"core_db":        0,
 			"core_version":   0,

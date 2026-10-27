@@ -9,21 +9,21 @@ import (
 
 type AssetsModelType struct {
 	ID              primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	IDTypeAsset     primitive.ObjectID `bson:"id_type_asset,omitempty" json:"id_type_asset"`
-	TypeTag         string             `bson:"type_tag" json:"type_tag" description:"Tag del tipo de asset"`
-	TypeName        string             `bson:"type_name" json:"type_name" description:"Nombre del tipo de asset"`
-	TypeDescription string             `bson:"type_description" json:"type_description" description:"Descripcion del tipo de asset"`
+	IDTypeAsset     primitive.ObjectID `bson:"id_type_asset,omitempty" json:"idTypeAsset"`
+	TypeTag         string             `bson:"type_tag" json:"typeTag" description:"Tag del tipo de asset"`
+	TypeName        string             `bson:"type_name" json:"typeName" description:"Nombre del tipo de asset"`
+	TypeDescription string             `bson:"type_description" json:"typeDescription" description:"Descripcion del tipo de asset"`
 	Tag             string             `bson:"tag" json:"tag" description:"Tag o identificador"`
 	Name            string             `bson:"name" json:"name" description:"Nombre"`
 	Description     string             `bson:"description" json:"description" description:"Nombre"`
 	Configs         interface{}        `bson:"configs" json:"configs" description:"Objeto con configuraciones varias"`
 	Comment         string             `bson:"comment,omitempty" json:"comment,omitempty" description:"Comentario"`
-	TagStatus       string             `bson:"tag_status" json:"tag_status" description:"Tag estatus del catalogo"`
+	TagStatus       string             `bson:"tag_status" json:"tagStatus" description:"Tag estatus del catalogo"`
 	Status          string             `bson:"status" json:"status" description:"Estatus del catalogo"`
 
 	// Common
-	LastUpdatedAt time.Time `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
-	CreatedDate   time.Time `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
+	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
+	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
 	LogicalDelete bool      `bson:"logical_delete" json:"-" description:"Borrado Logico"`
 	CoreDB        string    `bson:"core_db" json:"-" description:"Nombre del Core de Base de datos que hizo el registro"`
 	CoreVersion   string    `bson:"core_version" json:"-" description:"Version del Core"`

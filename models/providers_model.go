@@ -14,7 +14,7 @@ type ProvidersModelType struct {
 	Description string             `bson:"description" json:"description" description:"Nombre"`
 	Configs     interface{}        `bson:"configs" json:"configs" description:"Objeto con configuraciones varias (URLS, HEADERS, ETC)"`
 	Comment     string             `bson:"comment,omitempty" json:"comment,omitempty" description:"Comentario"`
-	TagStatus   string             `bson:"tag_status" json:"tag_status" description:"Tag estatus del catalogo"`
+	TagStatus   string             `bson:"tag_status" json:"tagStatus" description:"Tag estatus del catalogo"`
 	Status      string             `bson:"status" json:"status" description:"Estatus del catalogo"`
 
 	// Autenticacion de las peticiones HTTP de las condiciones de este proveedor
@@ -22,8 +22,8 @@ type ProvidersModelType struct {
 	AllowedHosts []string `bson:"allowed_hosts,omitempty" json:"allowedHosts,omitempty" description:"Hosts a los que se pueden enviar peticiones de este proveedor"`
 
 	// Common
-	LastUpdatedAt time.Time `bson:"last_updated_at" json:"last_updated_at" description:"Ultima Actualizacion"`
-	CreatedDate   time.Time `bson:"created_date" json:"created_date" description:"Fecha de Creacion"`
+	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
+	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
 	LogicalDelete bool      `bson:"logical_delete" json:"-" description:"Borrado Logico"`
 	CoreDB        string    `bson:"core_db" json:"-" description:"Nombre del Core de Base de datos que hizo el registro"`
 	CoreVersion   string    `bson:"core_version" json:"-" description:"Version del Core"`
