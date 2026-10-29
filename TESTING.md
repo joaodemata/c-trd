@@ -107,6 +107,7 @@ func TestMyCallback(t *testing.T) {
 | `cronjobs/` decisions and evaluation | Yes | Test callbacks registered with `registerCallback` |
 | `models/` constructors | Yes | Directly |
 | `services/` pure logic (parsers, files) | Yes | Directly, `t.TempDir()` for files |
+| `data_validates/` paths that fail before querying MongoDB (Authorization header without token) | Yes | `httptest.NewRecorder` + `testutil.NextSpy` |
 | `services/` Mongo queries, `data_validates/`, `controllers/` | No | Integration tests against a real MongoDB (pending) |
 
 Mongo queries are not faked with mocks: a mock of the driver proves that the expected query was

@@ -15,6 +15,7 @@ func SetupRouter(server *http.ServeMux, hub *cmm.Hub) *http.ServeMux {
 	listRoutes(server)
 	operationRoutes(server)
 	hookRoutes(server)
+	authRoutes(server)
 
 	return server
 }

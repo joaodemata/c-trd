@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"c_trd/models"
 	"c_trd/providers"
@@ -106,6 +107,8 @@ func TestModels_JSONKeysCamelCase(t *testing.T) {
 		{"opportunities", models.OpportunitiesModelType{}},
 		{"providers", models.ProvidersModelType{}},
 		{"triggers", models.TriggersModelType{}},
+		{"users", models.UsersModelType{}},
+		{"sessions", models.SessionsModelType{}},
 	}
 
 	for _, tt := range tests {
@@ -119,4 +122,32 @@ func TestModels_JSONKeysCamelCase(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUsersModel_HidesPassword(t *testing.T) {
+	t.Parallel()
+
+	user, err := models.NewUserModel("jmata", models.CatalogsModelType{ID: primitive.NewObjectID(), Tag: "SUPER_USER"}, "pbkdf2_sha256$1$salt$hash", nil)
+	if !err.IsEmtpy() {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	requireHiddenKeys(t, jsonKeys(t, user),
+		[]string{"passwordHash", "passwordUpdatedAt", "failedLoginAttempts", "lockedUntil", "logicalDelete"},
+		[]string{"id", "username", "email", "name", "lastName", "idTypePrivilege", "tagPrivilege", "namePrivilege", "descriptionPrivilege", "isActive", "maxTriggersQuantity", "maxConditionsQuantity", "availableApis", "config"},
+	)
+}
+
+func TestSessionsModel_HidesTokenHash(t *testing.T) {
+	t.Parallel()
+
+	session, err := models.NewSessionModel(primitive.NewObjectID(), "hash-del-token", time.Now())
+	if !err.IsEmtpy() {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	requireHiddenKeys(t, jsonKeys(t, session),
+		[]string{"tokenHash", "logicalDelete"},
+		[]string{"id", "idUser", "expiresAt"},
+	)
 }
