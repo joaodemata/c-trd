@@ -32,6 +32,12 @@ var (
 	OpportunityStatusCanceled = CatalogStatus{ID: mustParseObjectId("6a84257d9687e916f29f234c"), Tag: "OPPORTUNITY-CANCELED", Name: "Cancelada"}
 )
 
+// USER_PRIVILEGES. Solo puede existir un super usuario (indice unico parcial sobre id_type_privilege en users)
+var (
+	UserPrivilegeSuperUser   = CatalogStatus{ID: mustParseObjectId("6ae38e7bb1bb56b09f96ce13"), Tag: "SUPER_USER", Name: "Super user"}
+	UserPrivilegeGenericUser = CatalogStatus{ID: mustParseObjectId("6ae38ef3b1bb56b09f96ce14"), Tag: "GENERIC_USER", Name: "Usuario genérico"}
+)
+
 // Valores de type_catalog en la coleccion catalogs
 const (
 	CatalogTypeGenericStatus     = "GENERIC_STATUS"
@@ -41,6 +47,7 @@ const (
 	CatalogTypeCandleStick       = "TYPE_CANDLE_STICK"
 	CatalogTypeCancelReason      = "CANCEL_REASON"
 	CatalogTypeCondition         = "TYPE_CONDITION"
+	CatalogTypeUserPrivileges    = "USER_PRIVILEGES"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara
@@ -140,3 +147,14 @@ func mustParseObjectId(hex string) primitive.ObjectID {
 	}
 	return id
 }
+
+// Autenticacion
+const (
+	// Duracion de una sesion desde el login
+	SessionTTL = 12 * time.Hour
+	// Iteraciones de PBKDF2-SHA256 (recomendacion OWASP)
+	PasswordHashIterations = 600000
+	// Intentos fallidos de login antes de bloquear el usuario y duracion del bloqueo
+	LoginMaxFailedAttempts = 5
+	LoginLockDuration      = 15 * time.Minute
+)
