@@ -78,8 +78,12 @@ func NewRecordVisibilityData(visibility CatalogsModelType, allowedUsers []primit
 }
 
 // VisibleToUserFilter filtro de MongoDB de los registros que puede ver el usuario: los publicos, los suyos y los de
-// lista blanca donde esta en allowed_users
+// lista blanca donde esta en allowed_users. Con idUser cero (usuario sin registro) solo los publicos
 func VisibleToUserFilter(idUser primitive.ObjectID) bson.M {
+	if idUser.IsZero() {
+		return bson.M{"tag_type_visibility": cmm.VisibilityTagPublic}
+	}
+
 	return bson.M{"$or": []bson.M{
 		{"tag_type_visibility": cmm.VisibilityTagPublic},
 		{"id_user": idUser},

@@ -165,3 +165,14 @@ func TestModels_OwnerAndVisibility(t *testing.T) {
 		})
 	}
 }
+
+// TestVisibleToUserFilter_Anonymous el usuario sin registro solo ve los registros publicos
+func TestVisibleToUserFilter_Anonymous(t *testing.T) {
+	t.Parallel()
+
+	filter := models.VisibleToUserFilter(primitive.NilObjectID)
+
+	if len(filter) != 1 || filter["tag_type_visibility"] != cmm.VisibilityTagPublic {
+		t.Errorf("filtro = %v, se esperaban solo los publicos", filter)
+	}
+}

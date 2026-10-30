@@ -79,3 +79,44 @@ func TestPrivilegesDataValidate(t *testing.T) {
 		})
 	}
 }
+
+// Solo se prueban los casos que no consultan MongoDB
+func TestOptionalAuthDataValidate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sin token sigue como anonimo", func(t *testing.T) {
+		t.Parallel()
+
+		req := cmm.SetInRequestContext(httptest.NewRequest(http.MethodGet, "/", nil), "sessionToken", "")
+		rec := httptest.NewRecorder()
+		spy := &testutil.NextSpy{}
+
+		dv.OptionalAuthDataValidate(spy).ServeHTTP(rec, req)
+
+		if !spy.Called {
+			t.Fatalf("next no fue llamado (body: %s)", rec.Body.String())
+		}
+		session, err := cmm.GetFromRequestContext[*models.SessionsModelType](spy.Request, "authSession")
+		testutil.RequireEmptyError(t, err)
+		if session != nil {
+			t.Errorf("authSession = %+v, se esperaba nil para el usuario sin registro", session)
+		}
+	})
+
+	t.Run("sin cmm.OptionalAuthenticateRequestMiddleware", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		spy := &testutil.NextSpy{}
+
+		dv.OptionalAuthDataValidate(spy).ServeHTTP(rec, req)
+
+		if spy.Called {
+			t.Fatal("el middleware dejo pasar una peticion sin sessionToken en el contexto")
+		}
+		if res := testutil.DecodeResponse(t, rec); res.Tracking != "DVAUT023" {
+			t.Errorf("tracking = %s, se esperaba DVAUT023", res.Tracking)
+		}
+	})
+}

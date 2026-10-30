@@ -79,6 +79,47 @@ func AuthDataValidate(next http.Handler) http.Handler {
 	})
 }
 
+// OptionalAuthDataValidate para rutas abiertas a usuarios sin registro, va despues de
+// cmm.OptionalAuthenticateRequestMiddleware. Sin token la peticion sigue como anonima y authSession queda nil en el
+// contexto; con token la sesion debe existir y no estar vencida para que el cliente sepa que debe iniciar sesion de nuevo
+func OptionalAuthDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		token, err := cmm.GetFromRequestContext[string](r, "sessionToken")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVAUT023", nil, err)
+			return
+		}
+
+		// Usuario sin registro
+		if token == "" {
+			var anonymous *models.SessionsModelType
+			r = cmm.SetInRequestContext(r, "authSession", anonymous)
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		session, err := services.GetActiveSessionService(services.HashSessionTokenService(token), time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if session.ID.IsZero() {
+			res.Send(http.StatusUnauthorized, "FAIL", "La sesion no existe o expiro, inicie sesion nuevamente", "DVAUT024", nil)
+			return
+		}
+		// Sesiones abiertas antes de guardar el usuario en la sesion
+		if session.IDUser.IsZero() || session.TagTypePrivilege == "" {
+			res.Send(http.StatusUnauthorized, "FAIL", "La sesion no es valida, inicie sesion nuevamente", "DVAUT025", nil)
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "authSession", &session)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // PrivilegesDataValidate deja pasar solo peticiones cuyo usuario de la sesion tenga un privilegio (tag del catalogo
 // USER_PRIVILEGES) de allowedTags, ej: PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag). Va despues de AuthDataValidate
 func PrivilegesDataValidate(allowedTags ...string) func(http.Handler) http.Handler {

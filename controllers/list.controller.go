@@ -32,8 +32,13 @@ func ListOportunitiesController() http.HandlerFunc {
 			return
 		}
 
-		// Solo las oportunidades que puede ver el usuario de la sesion
-		opportunities, page, err := services.GetOpportunitiesService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, authSession.IDUser)
+		// Sin sesion (usuario sin registro) se usa el id cero y solo se listan las oportunidades publicas
+		idUser := primitive.NilObjectID
+		if authSession != nil {
+			idUser = authSession.IDUser
+		}
+
+		opportunities, page, err := services.GetOpportunitiesService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, idUser)
 		// Verificamos si hay error de parseo
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)

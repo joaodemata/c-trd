@@ -53,7 +53,7 @@ func GetTriggerService(idTrigger primitive.ObjectID) (models.TriggersModelType, 
 
 // Obtener listado de oportunidades
 // GetOpportunitiesService obtiene un listado paginado de las oportunidades que puede ver idUser: las publicas, las
-// suyas y las de lista blanca donde esta en allowed_users
+// suyas y las de lista blanca donde esta en allowed_users. Con idUser cero (usuario sin registro) solo las publicas
 
 // Retorna: el arreglo de datos, el total de documentos encontrados (para paginación) y el error handler
 func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, idUser primitive.ObjectID) ([]models.OpportunitiesModelType, int64, *cmm.ErrorHandler) {
