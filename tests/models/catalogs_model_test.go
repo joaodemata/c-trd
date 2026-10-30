@@ -24,7 +24,7 @@ var testOwner = models.RecordOwnerData{
 // testVisibility visibilidad publica fija de las pruebas. allowed_users es nil para validar que se guarde como []
 var testVisibility = models.RecordVisibilityData{
 	IDTypeVisibility:   primitive.NewObjectID(),
-	TagTypeVisibility:  cmm.VisibilityTagPublic,
+	TagTypeVisibility:  cmm.VisibilityPublic.Tag,
 	NameTypeVisibility: "Publica",
 }
 
@@ -51,13 +51,13 @@ func TestNewRecordVisibilityData(t *testing.T) {
 		wantTracking string
 		wantUsers    int
 	}{
-		{name: "privada", tag: cmm.VisibilityTagPrivate},
-		{name: "publica con usuarios vacios", tag: cmm.VisibilityTagPublic, allowedUsers: []primitive.ObjectID{}},
-		{name: "lista blanca con usuarios", tag: cmm.VisibilityTagWhitelist, allowedUsers: users, wantUsers: 2},
-		{name: "tag no soportado", tag: "VISIBILITY-TEAM", wantTracking: "MCATE001"},
-		{name: "lista blanca sin usuarios", tag: cmm.VisibilityTagWhitelist, wantTracking: "MCATE002"},
-		{name: "privada con usuarios", tag: cmm.VisibilityTagPrivate, allowedUsers: users, wantTracking: "MCATE003"},
-		{name: "publica con usuarios", tag: cmm.VisibilityTagPublic, allowedUsers: users, wantTracking: "MCATE003"},
+		{name: "privada", tag: cmm.VisibilityPrivate.Tag},
+		{name: "publica con usuarios vacios", tag: cmm.VisibilityPublic.Tag, allowedUsers: []primitive.ObjectID{}},
+		{name: "lista blanca con usuarios", tag: cmm.VisibilityWhitelist.Tag, allowedUsers: users, wantUsers: 2},
+		{name: "tag no soportado", tag: "VISIBILITY_TEAM", wantTracking: "MCATE001"},
+		{name: "lista blanca sin usuarios", tag: cmm.VisibilityWhitelist.Tag, wantTracking: "MCATE002"},
+		{name: "privada con usuarios", tag: cmm.VisibilityPrivate.Tag, allowedUsers: users, wantTracking: "MCATE003"},
+		{name: "publica con usuarios", tag: cmm.VisibilityPublic.Tag, allowedUsers: users, wantTracking: "MCATE003"},
 	}
 
 	for _, tt := range tests {
@@ -96,13 +96,13 @@ func TestVisibleToUserFilter(t *testing.T) {
 	if !ok || len(or) != 3 {
 		t.Fatalf("filtro = %v, se esperaba un $or con 3 opciones", filter)
 	}
-	if or[0]["tag_type_visibility"] != cmm.VisibilityTagPublic || len(or[0]) != 1 {
+	if or[0]["tag_type_visibility"] != cmm.VisibilityPublic.Tag || len(or[0]) != 1 {
 		t.Errorf("$or[0] = %v, se esperaban las publicas", or[0])
 	}
 	if or[1]["id_user"] != idUser || len(or[1]) != 1 {
 		t.Errorf("$or[1] = %v, se esperaban las del usuario", or[1])
 	}
-	if or[2]["tag_type_visibility"] != cmm.VisibilityTagWhitelist || or[2]["allowed_users"] != idUser || len(or[2]) != 2 {
+	if or[2]["tag_type_visibility"] != cmm.VisibilityWhitelist.Tag || or[2]["allowed_users"] != idUser || len(or[2]) != 2 {
 		t.Errorf("$or[2] = %v, se esperaban las de lista blanca con el usuario", or[2])
 	}
 }
@@ -172,7 +172,7 @@ func TestVisibleToUserFilter_Anonymous(t *testing.T) {
 
 	filter := models.VisibleToUserFilter(primitive.NilObjectID)
 
-	if len(filter) != 1 || filter["tag_type_visibility"] != cmm.VisibilityTagPublic {
+	if len(filter) != 1 || filter["tag_type_visibility"] != cmm.VisibilityPublic.Tag {
 		t.Errorf("filtro = %v, se esperaban solo los publicos", filter)
 	}
 }

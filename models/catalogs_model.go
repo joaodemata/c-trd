@@ -45,7 +45,7 @@ type RecordVisibilityData struct {
 var CatalogsModel *mongo.Collection
 
 // Tags de TYPE_VISIBILITY que se saben filtrar
-var knownVisibilityTags = []string{cmm.VisibilityTagPrivate, cmm.VisibilityTagPublic, cmm.VisibilityTagWhitelist}
+var knownVisibilityTags = []string{cmm.VisibilityPrivate.Tag, cmm.VisibilityPublic.Tag, cmm.VisibilityWhitelist.Tag}
 
 // NewRecordVisibilityData copia la visibilidad del catalogo al registro. La lista blanca necesita al menos un usuario
 // y las demas visibilidades no pueden tener usuarios. allowedUsers nil se guarda como []
@@ -62,11 +62,11 @@ func NewRecordVisibilityData(visibility CatalogsModelType, allowedUsers []primit
 		return result, cmm.NewErrorHandler(fmt.Errorf("tag_type_visibility %s", visibility.Tag), "La visibilidad enviada no esta soportada", cmm.LevelError, "MCATE001")
 	}
 
-	if visibility.Tag == cmm.VisibilityTagWhitelist && len(allowedUsers) == 0 {
+	if visibility.Tag == cmm.VisibilityWhitelist.Tag && len(allowedUsers) == 0 {
 		return result, cmm.NewErrorHandler(fmt.Errorf("allowed_users vacio"), "La visibilidad de lista blanca necesita al menos un usuario en allowedUsers", cmm.LevelError, "MCATE002")
 	}
 
-	if visibility.Tag != cmm.VisibilityTagWhitelist && len(allowedUsers) > 0 {
+	if visibility.Tag != cmm.VisibilityWhitelist.Tag && len(allowedUsers) > 0 {
 		return result, cmm.NewErrorHandler(fmt.Errorf("allowed_users con %d usuarios", len(allowedUsers)), "Solo la visibilidad de lista blanca puede tener allowedUsers", cmm.LevelError, "MCATE003")
 	}
 
@@ -81,13 +81,13 @@ func NewRecordVisibilityData(visibility CatalogsModelType, allowedUsers []primit
 // lista blanca donde esta en allowed_users. Con idUser cero (usuario sin registro) solo los publicos
 func VisibleToUserFilter(idUser primitive.ObjectID) bson.M {
 	if idUser.IsZero() {
-		return bson.M{"tag_type_visibility": cmm.VisibilityTagPublic}
+		return bson.M{"tag_type_visibility": cmm.VisibilityPublic.Tag}
 	}
 
 	return bson.M{"$or": []bson.M{
-		{"tag_type_visibility": cmm.VisibilityTagPublic},
+		{"tag_type_visibility": cmm.VisibilityPublic.Tag},
 		{"id_user": idUser},
-		{"tag_type_visibility": cmm.VisibilityTagWhitelist, "allowed_users": idUser},
+		{"tag_type_visibility": cmm.VisibilityWhitelist.Tag, "allowed_users": idUser},
 	}}
 }
 
