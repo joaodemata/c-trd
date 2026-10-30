@@ -39,11 +39,11 @@ var (
 )
 
 // TYPE_VISIBILITY. Quien puede ver un trigger, condicion u oportunidad: solo su usuario, todos o el usuario y los de
-// allowed_users. Se filtra por tag, los catalogos deben existir con estos tags
-const (
-	VisibilityTagPrivate   = "VISIBILITY-PRIVATE"
-	VisibilityTagPublic    = "VISIBILITY-PUBLIC"
-	VisibilityTagWhitelist = "VISIBILITY-WHITELIST"
+// allowed_users. Las consultas filtran por el tag
+var (
+	VisibilityPrivate   = CatalogStatus{ID: mustParseObjectId("6ae515f8b1bb56b09f96ce26"), Tag: "VISIBILITY_PRIVATE", Name: "Privado"}
+	VisibilityPublic    = CatalogStatus{ID: mustParseObjectId("6ae5164cb1bb56b09f96ce28"), Tag: "VISIBILITY_PUBLIC", Name: "Público"}
+	VisibilityWhitelist = CatalogStatus{ID: mustParseObjectId("6ae5168eb1bb56b09f96ce29"), Tag: "VISIBILITY_WHITELIST", Name: "Lista privada"}
 )
 
 // Valores de type_catalog en la coleccion catalogs
