@@ -34,7 +34,7 @@ func LoginController() http.HandlerFunc {
 			return
 		}
 
-		session, err := models.NewSessionModel(user.ID, tokenHash, now)
+		session, err := models.NewSessionModel(*user, tokenHash, now)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
@@ -78,14 +78,24 @@ func LogoutController() http.HandlerFunc {
 	}
 }
 
-// MeController retorna el usuario de la sesion
+// MeController retorna el usuario de la sesion con todos sus datos, la sesion solo guarda una copia del usuario y su privilegio
 func MeController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
 
-		authUser, err := cmm.GetFromRequestContext[*models.UsersModelType](r, "authUser")
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authUser, err := services.GetUserService(authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if authUser.ID.IsZero() || !authUser.IsActive {
+			res.Send(http.StatusUnauthorized, "FAIL", "Usuario no disponible", "CAUTE001", nil)
 			return
 		}
 
@@ -105,7 +115,7 @@ func CreateUserController() http.HandlerFunc {
 			return
 		}
 
-		authUser, err := cmm.GetFromRequestContext[*models.UsersModelType](r, "authUser")
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
@@ -127,7 +137,7 @@ func CreateUserController() http.HandlerFunc {
 			Email:       payload.Email,
 			Name:        payload.Name,
 			LastName:    payload.LastName,
-			IDCreatedBy: &authUser.ID,
+			IDCreatedBy: &authSession.IDUser,
 		})
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
@@ -187,7 +197,7 @@ func UpdatePasswordController() http.HandlerFunc {
 			return
 		}
 
-		session, err := models.NewSessionModel(authUser.ID, tokenHash, now)
+		session, err := models.NewSessionModel(*authUser, tokenHash, now)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return

@@ -49,6 +49,10 @@ type ConditionsModelType struct {
 	TagStatus string             `bson:"tag_status" json:"tagStatus" description:"Tag estatus de la condicion"`
 	Status    string             `bson:"status" json:"status"`
 
+	// Usuario que la creo y quienes pueden verla
+	RecordOwnerData      `bson:",inline"`
+	RecordVisibilityData `bson:",inline"`
+
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
 	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
@@ -91,27 +95,31 @@ func NewConditionModel(
 	idApi primitive.ObjectID,
 	// --- Cronjob ---
 	cronjob ConditionCronjobData,
+	// --- Usuario y visibilidad ---
+	owner RecordOwnerData, visibility RecordVisibilityData,
 ) (ConditionsModelType, *cmm.ErrorHandler) {
 	now := time.Now().UTC()
 
 	condition := ConditionsModelType{
-		ID:                 primitive.NewObjectID(),
-		Tag:                tag,
-		Name:               name,
-		Description:        description,
-		IDProvider:         idProvider,
-		NameProvider:       nameProvider,
-		IDTypeCondition:    typeCondition.ID,
-		NameTypeCondition:  typeCondition.Name,
-		TagTypeCondition:   typeCondition.Tag,
-		Metadata:           map[string]any{},
-		ParametersCallback: map[string]any{},
-		IsWebhookOnly:      false,
-		IsProcessing:       false,
-		IDApi:              idApi,
-		IDStatus:           cmm.GenericStatusInactive.ID,
-		TagStatus:          cmm.GenericStatusInactive.Tag,
-		Status:             cmm.GenericStatusInactive.Name,
+		ID:                   primitive.NewObjectID(),
+		Tag:                  tag,
+		Name:                 name,
+		Description:          description,
+		IDProvider:           idProvider,
+		NameProvider:         nameProvider,
+		IDTypeCondition:      typeCondition.ID,
+		NameTypeCondition:    typeCondition.Name,
+		TagTypeCondition:     typeCondition.Tag,
+		Metadata:             map[string]any{},
+		ParametersCallback:   map[string]any{},
+		IsWebhookOnly:        false,
+		IsProcessing:         false,
+		IDApi:                idApi,
+		IDStatus:             cmm.GenericStatusInactive.ID,
+		TagStatus:            cmm.GenericStatusInactive.Tag,
+		Status:               cmm.GenericStatusInactive.Name,
+		RecordOwnerData:      owner,
+		RecordVisibilityData: recordVisibilityWithAllowedUsers(visibility),
 
 		// Auditoría
 		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),

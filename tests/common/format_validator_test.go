@@ -469,3 +469,37 @@ func TestFormatValidateMiddlewareWithKey_InvalidQuery(t *testing.T) {
 		t.Fatalf("tracking = %s, se esperaba CC004 (body: %s)", res.Tracking, rec.Body.String())
 	}
 }
+
+// TestFormatValidateMiddlewareWithKey_SameBody dos format validates de la misma ruta leen el mismo body
+func TestFormatValidateMiddlewareWithKey_SameBody(t *testing.T) {
+	t.Parallel()
+
+	type extraPayload struct {
+		Note string `json:"note" validate:"required"`
+	}
+
+	idTrigger := primitive.NewObjectID().Hex()
+	body := `{"idTrigger":"` + idTrigger + `","qty":3,"note":"segundo"}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	spy := &testutil.NextSpy{}
+
+	handler := cmm.FormatValidateMiddleware[samplePayload](cmm.FormatValidateMiddlewareWithKey[extraPayload]("extra")(spy))
+	handler.ServeHTTP(rec, req)
+
+	if !spy.Called {
+		t.Fatalf("next no fue llamado (body: %s)", rec.Body.String())
+	}
+
+	payload, err := cmm.GetFromRequestContext[*samplePayload](spy.Request, "payload")
+	testutil.RequireEmptyError(t, err)
+	if payload.IDTrigger != idTrigger || payload.Qty != 3 {
+		t.Errorf("payload = %+v, se esperaba idTrigger %s y qty 3", *payload, idTrigger)
+	}
+
+	extra, err := cmm.GetFromRequestContext[*extraPayload](spy.Request, "extra")
+	testutil.RequireEmptyError(t, err)
+	if extra.Note != "segundo" {
+		t.Errorf("extra = %+v, se esperaba note segundo", *extra)
+	}
+}

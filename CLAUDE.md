@@ -64,6 +64,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Tracking codes can not be a parameter of any function, any function with error must have his own tracking code
 - Don't create new files in `services/`. Put new services in `list_service.go` (reads/GETs from the database, tracking codes `SLISE<nnn>`) or `operation_service.go` (inserts, updates and the logic that prepares them, tracking codes `SOPRE<nnn>`). Only use another existing service file when it clearly fits better (e.g. a client of an external API like `alpha_vantage_service.go`)
 - All responses to the frontend or other servers must be in camelCase
+- A middleware can not pass response or request to another function inside, the only exception is NewResponseHandler
 
 ## Gotchas
 

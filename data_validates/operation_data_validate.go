@@ -401,3 +401,62 @@ func CreateConditionDataValidate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// VisibilityDataValidate valida que la visibilidad exista en el catalogo TYPE_VISIBILITY, que allowedUsers corresponda
+// a la visibilidad (solo la lista blanca tiene usuarios) y que esos usuarios existan y esten activos. Va despues de
+// fv.VisibilityFormatValidate y deja la visibilidad en el contexto (visibility)
+func VisibilityDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.VisibilityFormat](r, "visibilityPayload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR024", nil, err)
+			return
+		}
+
+		idTypeVisibility, err := cmm.ParseHexToObjectId(payload.IdTypeVisibility)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		catalog, err := services.GetCatalogService(idTypeVisibility, cmm.CatalogTypeVisibility)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if catalog.ID.IsZero() {
+			res.Error("FAIL", "La visibilidad enviada no existe", "DVOPR022", payload.IdTypeVisibility, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		allowedUsers, err := cmm.ParseHexListToObjectIds(payload.AllowedUsers)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		visibility, err := models.NewRecordVisibilityData(catalog, allowedUsers)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, catalog.Tag, err)
+			return
+		}
+
+		users, err := services.GetActiveUsersByIDsService(allowedUsers)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		// allowedUsers no tiene repetidos (format validate), si falta alguno no existe o esta inactivo
+		missing := models.MissingUsers(allowedUsers, users)
+		if len(missing) > 0 {
+			res.Error("FAIL", "Los usuarios de allowedUsers no existen o estan inactivos", "DVOPR023", missing, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "visibility", &visibility)
+		next.ServeHTTP(w, r)
+	})
+}

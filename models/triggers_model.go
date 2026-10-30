@@ -50,6 +50,9 @@ type TriggersModelType struct {
 	IdReference     *primitive.ObjectID `bson:"id_reference" json:"idReference" description:"Trigger generado a partir de otro trigger"`
 	IdReferenceRoot *primitive.ObjectID `bson:"id_reference_root" json:"idReferenceRoot" description:"Raiz inicial del trigger generado a partir de otro trigger"`
 	PineCode        *string             `bson:"pine_code" json:"pineCode" description:"Codigo de pine utilizado en trading view para el trigger"`
+	// Usuario que lo creo y quienes pueden verlo, las oportunidades del trigger los copian
+	RecordOwnerData      `bson:",inline"`
+	RecordVisibilityData `bson:",inline"`
 
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
@@ -108,6 +111,8 @@ func NewTriggerModel(
 	idAction primitive.ObjectID, tagAction, action string,
 	// --- Candles ---
 	maxCandles int, idTimeframe primitive.ObjectID, tagTimeframe, timeframe string,
+	// --- Usuario y visibilidad ---
+	owner RecordOwnerData, visibility RecordVisibilityData,
 	// --- Opcionales ---
 	opts *TriggerOptionalData,
 ) (TriggersModelType, *cmm.ErrorHandler) {
@@ -133,6 +138,8 @@ func NewTriggerModel(
 		IDCandlestickTimeframe:  idTimeframe,
 		TagCandlestickTimeframe: tagTimeframe,
 		CandlestickTimeframe:    timeframe,
+		RecordOwnerData:         owner,
+		RecordVisibilityData:    recordVisibilityWithAllowedUsers(visibility),
 
 		// Auditoría
 		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),

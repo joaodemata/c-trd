@@ -52,10 +52,11 @@ func GetTriggerService(idTrigger primitive.ObjectID) (models.TriggersModelType, 
 }
 
 // Obtener listado de oportunidades
-// GetOpportunitiesService obtiene un listado paginado de oportunidades basado en filtros
+// GetOpportunitiesService obtiene un listado paginado de las oportunidades que puede ver idUser: las publicas, las
+// suyas y las de lista blanca donde esta en allowed_users. Con idUser cero (usuario sin registro) solo las publicas
 
 // Retorna: el arreglo de datos, el total de documentos encontrados (para paginación) y el error handler
-func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time) ([]models.OpportunitiesModelType, int64, *cmm.ErrorHandler) {
+func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, idUser primitive.ObjectID) ([]models.OpportunitiesModelType, int64, *cmm.ErrorHandler) {
 	// Inicializamos el slice donde guardaremos los resultados (vacío por defecto, no nil)
 	result := make([]models.OpportunitiesModelType, 0)
 
@@ -72,8 +73,8 @@ func GetOpportunitiesService(Limit int, Page int, Search string, StartDate time.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Subimos un poco el timeout para listados
 	defer cancel()
 
-	// 1. Construir el Filtro (Query)
-	filter := bson.M{"logical_delete": false}
+	// 1. Construir el Filtro (Query). La visibilidad va en $and para no chocar con el $or de la busqueda
+	filter := bson.M{"logical_delete": false, "$and": []bson.M{models.VisibleToUserFilter(idUser)}}
 
 	// Filtro por Fechas (ej: sobre created_date)
 	if !StartDate.IsZero() && !EndDate.IsZero() {
@@ -854,6 +855,33 @@ func GetCatalogByTagService(tag string, typeCatalog string) (models.CatalogsMode
 		}
 
 		return result, cmm.NewErrorHandler(err, "Error consultando el catalogo", cmm.LevelDatabase, "SLISE032")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetActiveUsersByIDsService busca los usuarios activos y no borrados de ids, solo trae su id. Los que no existen
+// o estan inactivos no se retornan
+func GetActiveUsersByIDsService(ids []primitive.ObjectID) ([]models.UsersModelType, *cmm.ErrorHandler) {
+	result := make([]models.UsersModelType, 0)
+	if len(ids) == 0 {
+		return result, cmm.NewEmptyErrorHandler()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": bson.M{"$in": ids}, "is_active": true, "logical_delete": false}
+	opts := options.Find().SetProjection(bson.M{"_id": 1})
+
+	cursor, err := models.UsersModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando los usuarios", cmm.LevelDatabase, "SLISE037")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando los usuarios", cmm.LevelDatabase, "SLISE038")
 	}
 
 	return result, cmm.NewEmptyErrorHandler()

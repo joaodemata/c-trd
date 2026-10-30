@@ -95,3 +95,36 @@ func TestParseHexToObjectId(t *testing.T) {
 		testutil.RequireTrackingCode(t, err, "CMMPE001")
 	})
 }
+
+func TestParseHexListToObjectIds(t *testing.T) {
+	t.Parallel()
+
+	first, second := primitive.NewObjectID(), primitive.NewObjectID()
+
+	t.Run("convierte en el mismo orden", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := cmm.ParseHexListToObjectIds([]string{second.Hex(), first.Hex()})
+		testutil.RequireEmptyError(t, err)
+		if len(got) != 2 || got[0] != second || got[1] != first {
+			t.Errorf("ids = %v, se esperaba [%s %s]", got, second.Hex(), first.Hex())
+		}
+	})
+
+	t.Run("lista nil retorna vacia", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := cmm.ParseHexListToObjectIds(nil)
+		testutil.RequireEmptyError(t, err)
+		if got == nil || len(got) != 0 {
+			t.Errorf("ids = %v, se esperaba []", got)
+		}
+	})
+
+	t.Run("hexadecimal invalido", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := cmm.ParseHexListToObjectIds([]string{first.Hex(), "abc"})
+		testutil.RequireTrackingCode(t, err, "CMMPE002")
+	})
+}

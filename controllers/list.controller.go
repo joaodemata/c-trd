@@ -3,6 +3,7 @@ package controllers
 import (
 	cmm "c_trd/common"
 	fv "c_trd/format_validates"
+	"c_trd/models"
 	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
@@ -25,8 +26,19 @@ func ListOportunitiesController() http.HandlerFunc {
 			return
 		}
 
-		// Buscamos el trigger en mongoDB para validar si existe
-		opportunities, page, err := services.GetOpportunitiesService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate)
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE009", nil, err)
+			return
+		}
+
+		// Sin sesion (usuario sin registro) se usa el id cero y solo se listan las oportunidades publicas
+		idUser := primitive.NilObjectID
+		if authSession != nil {
+			idUser = authSession.IDUser
+		}
+
+		opportunities, page, err := services.GetOpportunitiesService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, idUser)
 		// Verificamos si hay error de parseo
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)

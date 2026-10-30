@@ -141,13 +141,14 @@ func TestUsersModel_HidesPassword(t *testing.T) {
 func TestSessionsModel_HidesTokenHash(t *testing.T) {
 	t.Parallel()
 
-	session, err := models.NewSessionModel(primitive.NewObjectID(), "hash-del-token", time.Now())
+	user := models.UsersModelType{ID: primitive.NewObjectID(), Username: "jmata", TagPrivilege: "SUPER_USER"}
+	session, err := models.NewSessionModel(user, "hash-del-token", time.Now())
 	if !err.IsEmtpy() {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
 	requireHiddenKeys(t, jsonKeys(t, session),
 		[]string{"tokenHash", "logicalDelete"},
-		[]string{"id", "idUser", "expiresAt"},
+		[]string{"id", "idUser", "username", "tagTypePrivilege", "expiresAt"},
 	)
 }

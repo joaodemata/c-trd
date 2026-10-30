@@ -38,6 +38,14 @@ var (
 	UserPrivilegeGenericUser = CatalogStatus{ID: mustParseObjectId("6ae38ef3b1bb56b09f96ce14"), Tag: "GENERIC_USER", Name: "Usuario genérico"}
 )
 
+// TYPE_VISIBILITY. Quien puede ver un trigger, condicion u oportunidad: solo su usuario, todos o el usuario y los de
+// allowed_users. Se filtra por tag, los catalogos deben existir con estos tags
+const (
+	VisibilityTagPrivate   = "VISIBILITY-PRIVATE"
+	VisibilityTagPublic    = "VISIBILITY-PUBLIC"
+	VisibilityTagWhitelist = "VISIBILITY-WHITELIST"
+)
+
 // Valores de type_catalog en la coleccion catalogs
 const (
 	CatalogTypeGenericStatus     = "GENERIC_STATUS"
@@ -48,6 +56,7 @@ const (
 	CatalogTypeCancelReason      = "CANCEL_REASON"
 	CatalogTypeCondition         = "TYPE_CONDITION"
 	CatalogTypeUserPrivileges    = "USER_PRIVILEGES"
+	CatalogTypeVisibility        = "TYPE_VISIBILITY"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara
