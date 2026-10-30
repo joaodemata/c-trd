@@ -89,27 +89,35 @@ func TestNewUserModel_OptionalData(t *testing.T) {
 	}
 }
 
-func TestUserIsSuperUser(t *testing.T) {
+func TestUserHasPrivilege(t *testing.T) {
 	t.Parallel()
 
+	superUser := cmm.UserPrivilegeSuperUser.Tag
+	genericUser := cmm.UserPrivilegeGenericUser.Tag
+
 	tests := []struct {
-		name        string
-		idPrivilege primitive.ObjectID
-		want        bool
+		name         string
+		tagPrivilege string
+		allowedTags  []string
+		want         bool
 	}{
-		{"super usuario", cmm.UserPrivilegeSuperUser.ID, true},
-		{"usuario generico", cmm.UserPrivilegeGenericUser.ID, false},
-		{"sin privilegio", primitive.NilObjectID, false},
-		{"privilegio desconocido", primitive.NewObjectID(), false},
+		{"super usuario en ruta de super usuario", superUser, []string{superUser}, true},
+		{"generico en ruta de super usuario", genericUser, []string{superUser}, false},
+		{"generico en ruta de ambos", genericUser, []string{genericUser, superUser}, true},
+		{"super usuario en ruta de ambos", superUser, []string{genericUser, superUser}, true},
+		{"super usuario en ruta de genericos", superUser, []string{genericUser}, false},
+		{"usuario sin privilegio", "", []string{genericUser, superUser}, false},
+		{"tag en minusculas", "super_user", []string{superUser}, false},
+		{"ruta sin tags permitidos", superUser, nil, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			user := models.UsersModelType{IDTypePrivilege: tt.idPrivilege}
-			if got := models.UserIsSuperUser(user); got != tt.want {
-				t.Errorf("UserIsSuperUser = %v, se esperaba %v", got, tt.want)
+			user := models.UsersModelType{TagPrivilege: tt.tagPrivilege}
+			if got := models.UserHasPrivilege(user, tt.allowedTags); got != tt.want {
+				t.Errorf("UserHasPrivilege = %v, se esperaba %v", got, tt.want)
 			}
 		})
 	}

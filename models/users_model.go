@@ -2,6 +2,7 @@ package models
 
 import (
 	"os"
+	"slices"
 	"time"
 
 	cmm "c_trd/common"
@@ -59,9 +60,10 @@ var UsersModel *mongo.Collection
 
 // Helpers
 
-// UserIsSuperUser indica si el usuario tiene el privilegio de super usuario
-func UserIsSuperUser(user UsersModelType) bool {
-	return user.IDTypePrivilege == cmm.UserPrivilegeSuperUser.ID
+// UserHasPrivilege indica si el tag del privilegio del usuario (catalogo USER_PRIVILEGES) esta entre los permitidos.
+// Sin tags permitidos ningun usuario tiene acceso
+func UserHasPrivilege(user UsersModelType, allowedTags []string) bool {
+	return slices.Contains(allowedTags, user.TagPrivilege)
 }
 
 // UserIsLocked indica si el usuario esta bloqueado por intentos fallidos de login en el momento now

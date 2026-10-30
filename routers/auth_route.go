@@ -19,10 +19,10 @@ func authRoutes(server *http.ServeMux) *http.ServeMux {
 	api.Post("/auth/logout", controllers.LogoutController(), dv.AuthDataValidate)
 	api.Get("/auth/me", controllers.MeController(), dv.AuthDataValidate)
 
-	// Solo el super usuario
-	api.Post("/auth/create/user", controllers.CreateUserController(), dv.SuperUserDataValidate, fv.CreateUserFormatValidate, dv.CreateUserDataValidate)
-	api.Put("/auth/update/password", controllers.UpdatePasswordController(), dv.SuperUserDataValidate, fv.UpdatePasswordFormatValidate, dv.UpdatePasswordDataValidate)
-	api.Put("/auth/update/user/password", controllers.ResetUserPasswordController(), dv.SuperUserDataValidate, fv.ResetUserPasswordFormatValidate, dv.ResetUserPasswordDataValidate)
+	// Solo los privilegios enviados a PrivilegesDataValidate (tags del catalogo USER_PRIVILEGES)
+	api.Post("/auth/create/user", controllers.CreateUserController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateUserFormatValidate, dv.CreateUserDataValidate)
+	api.Put("/auth/update/password", controllers.UpdatePasswordController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.UpdatePasswordFormatValidate, dv.UpdatePasswordDataValidate)
+	api.Put("/auth/update/user/password", controllers.ResetUserPasswordController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.ResetUserPasswordFormatValidate, dv.ResetUserPasswordDataValidate)
 
 	return server
 }
