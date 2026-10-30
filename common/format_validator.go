@@ -117,6 +117,8 @@ func formatValidateHandler[T any](next http.Handler, key string, queryFields map
 				res.Error("FAIL", "No se pudo leer el body de la petición", "CC005", nil, NewEmptyErrorHandler())
 				return
 			}
+			// Se deja el body como estaba para que otro format validate de la ruta pueda leerlo
+			r.Body = io.NopCloser(bytes.NewReader(body))
 
 			// Los numeros y booleanos enviados como texto ("900", "true") se aceptan en los campos de ese tipo
 			body = numericTextsToNumbers(body, reflect.TypeFor[T]())

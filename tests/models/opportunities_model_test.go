@@ -20,6 +20,7 @@ func newTestOpportunity(t *testing.T, maxCandles int, tagTimeframe string, opts 
 		primitive.NewObjectID(), "ASSET-BTC", "Bitcoin",
 		primitive.NewObjectID(), "ACTION-BUY", "Compra",
 		maxCandles, primitive.NewObjectID(), tagTimeframe, tagTimeframe,
+		testOwner, testVisibility,
 		opts,
 	)
 	testutil.RequireEmptyError(t, err)

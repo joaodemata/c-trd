@@ -50,3 +50,17 @@ func ParseHexToObjectId(id string) (primitive.ObjectID, *ErrorHandler) {
 
 	return objectId, NewEmptyErrorHandler()
 }
+
+// ParseHexListToObjectIds convierte una lista de hexadecimales en objectIds. Una lista vacia o nil retorna []
+func ParseHexListToObjectIds(ids []string) ([]primitive.ObjectID, *ErrorHandler) {
+	result := make([]primitive.ObjectID, 0, len(ids))
+	for _, id := range ids {
+		objectId, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			return result, NewErrorHandler(err, err.Error(), LevelFatal, "CMMPE002")
+		}
+		result = append(result, objectId)
+	}
+
+	return result, NewEmptyErrorHandler()
+}

@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -89,7 +90,7 @@ func TestNewUserModel_OptionalData(t *testing.T) {
 	}
 }
 
-func TestUserHasPrivilege(t *testing.T) {
+func TestSessionHasPrivilege(t *testing.T) {
 	t.Parallel()
 
 	superUser := cmm.UserPrivilegeSuperUser.Tag
@@ -115,9 +116,9 @@ func TestUserHasPrivilege(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			user := models.UsersModelType{TagPrivilege: tt.tagPrivilege}
-			if got := models.UserHasPrivilege(user, tt.allowedTags); got != tt.want {
-				t.Errorf("UserHasPrivilege = %v, se esperaba %v", got, tt.want)
+			session := models.SessionsModelType{RecordOwnerData: models.RecordOwnerData{TagTypePrivilege: tt.tagPrivilege}}
+			if got := models.SessionHasPrivilege(session, tt.allowedTags); got != tt.want {
+				t.Errorf("SessionHasPrivilege = %v, se esperaba %v", got, tt.want)
 			}
 		})
 	}
@@ -157,18 +158,69 @@ func TestNewSessionModel(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.FixedZone("UTC-5", -5*3600))
-	idUser := primitive.NewObjectID()
+	user, err := models.NewUserModel("jmata", genericPrivilege(), "hash", nil)
+	testutil.RequireEmptyError(t, err)
 
-	session, err := models.NewSessionModel(idUser, "hash-del-token", now)
+	session, err := models.NewSessionModel(user, "hash-del-token", now)
 
 	testutil.RequireEmptyError(t, err)
-	if session.ID.IsZero() || session.IDUser != idUser || session.TokenHash != "hash-del-token" {
-		t.Errorf("sesion = %+v, se esperaba el usuario %s con su hash", session, idUser.Hex())
+	if session.ID.IsZero() || session.IDUser != user.ID || session.TokenHash != "hash-del-token" {
+		t.Errorf("sesion = %+v, se esperaba el usuario %s con su hash", session, user.ID.Hex())
+	}
+	// La sesion guarda la copia del usuario y su privilegio para autenticar con una sola consulta
+	if session.Username != user.Username || session.RecordOwnerData != models.NewRecordOwnerData(user) {
+		t.Errorf("usuario de la sesion = %s %+v, se esperaba la copia de %s", session.Username, session.RecordOwnerData, user.Username)
 	}
 	if want := now.UTC().Add(cmm.SessionTTL); !session.ExpiresAt.Equal(want) || session.ExpiresAt.Location() != time.UTC {
 		t.Errorf("expiresAt = %v, se esperaba %v en UTC", session.ExpiresAt, want)
 	}
 	if session.LogicalDelete {
 		t.Error("la sesion no debe nacer borrada")
+	}
+}
+
+// TestNewRecordOwnerData se copia el usuario con su privilegio al registro que crea
+func TestNewRecordOwnerData(t *testing.T) {
+	t.Parallel()
+
+	user, err := models.NewUserModel("jmata", genericPrivilege(), "hash", nil)
+	testutil.RequireEmptyError(t, err)
+
+	owner := models.NewRecordOwnerData(user)
+
+	if owner.IDUser != user.ID {
+		t.Errorf("id_user = %s, se esperaba %s", owner.IDUser.Hex(), user.ID.Hex())
+	}
+	if owner.IDTypePrivilege != user.IDTypePrivilege || owner.TagTypePrivilege != user.TagPrivilege ||
+		owner.NameTypePrivilege != user.NamePrivilege || owner.DescriptionTypePrivilege != user.DescriptionPrivilege {
+		t.Errorf("privilegio = %+v, se esperaba la copia del privilegio de %+v", owner, user)
+	}
+}
+
+func TestMissingUsers(t *testing.T) {
+	t.Parallel()
+
+	first, second, third := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+
+	tests := []struct {
+		name     string
+		expected []primitive.ObjectID
+		found    []models.UsersModelType
+		want     []string
+	}{
+		{"todos encontrados", []primitive.ObjectID{first, second}, []models.UsersModelType{{ID: second}, {ID: first}}, []string{}},
+		{"sin usuarios", nil, nil, []string{}},
+		{"faltan en el orden enviado", []primitive.ObjectID{third, first, second}, []models.UsersModelType{{ID: first}}, []string{third.Hex(), second.Hex()}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := models.MissingUsers(tt.expected, tt.found)
+			if got == nil || !slices.Equal(got, tt.want) {
+				t.Errorf("MissingUsers = %v, se esperaba %v", got, tt.want)
+			}
+		})
 	}
 }

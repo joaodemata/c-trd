@@ -16,7 +16,8 @@ type GoogleTrendsSeriesFormat struct {
 	IdAsset string `json:"idAsset" validate:"required,mongodb"`
 }
 
-// CreateTriggerFormat datos para registrar un trigger. Conditions es opcional y no puede repetir ids
+// CreateTriggerFormat datos para registrar un trigger. Conditions es opcional y no puede repetir ids.
+// La visibilidad se valida aparte con VisibilityFormatValidate
 type CreateTriggerFormat struct {
 	Tag                    string   `json:"tag" validate:"required"`
 	Name                   string   `json:"name" validate:"required"`
@@ -49,7 +50,8 @@ var UpdateTriggerFormatValidate = common.FormatValidateMiddleware[UpdateTriggerF
 // CreateConditionFormat datos para registrar una condicion sobre una API. Los valores de los parametros se envian
 // como texto y se validan contra el tipo de dato de la API en el data validate. Solo se crean condiciones que evalua
 // el cronjob: isWebhookOnly es opcional y si se envia debe ser false. El intervalo minimo es el del ticker (60s).
-// parametersCallback sigue las mismas reglas que parameters pero contra los parametros del callback
+// parametersCallback sigue las mismas reglas que parameters pero contra los parametros del callback.
+// La visibilidad se valida aparte con VisibilityFormatValidate
 type CreateConditionFormat struct {
 	Tag                string            `json:"tag" validate:"required"`
 	Name               string            `json:"name" validate:"required"`
@@ -64,6 +66,16 @@ type CreateConditionFormat struct {
 }
 
 var CreateConditionFormatValidate = common.FormatValidateMiddleware[CreateConditionFormat]
+
+// VisibilityFormat visibilidad (catalogo TYPE_VISIBILITY) de un trigger o condicion, viene en el mismo body.
+// allowedUsers solo se envia si la visibilidad es lista blanca
+type VisibilityFormat struct {
+	IdTypeVisibility string   `json:"idTypeVisibility" validate:"required,mongodb"`
+	AllowedUsers     []string `json:"allowedUsers" validate:"omitempty,unique,dive,mongodb"`
+}
+
+// Se inyecta en "visibilityPayload" porque "payload" lo ocupa el format validate de la ruta
+var VisibilityFormatValidate = common.FormatValidateMiddlewareWithKey[VisibilityFormat]("visibilityPayload")
 
 // El CSV llega en el campo "file" (maximo 1 MB)
 var GoogleTrendsUploadFormatValidate = common.FileFormatValidateMiddleware[GoogleTrendsUploadFormat](common.FileUploadConfig{

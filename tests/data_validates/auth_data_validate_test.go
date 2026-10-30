@@ -7,52 +7,75 @@ import (
 
 	cmm "c_trd/common"
 	dv "c_trd/data_validates"
+	"c_trd/models"
 	"c_trd/tests/testutil"
 )
 
-// Solo se prueban los casos que fallan antes de consultar MongoDB (header Authorization sin token)
-func TestAuthMiddlewares_RejectWithoutToken(t *testing.T) {
+// Solo se prueban los casos que no consultan MongoDB: sin token en el contexto (falta cmm.AuthenticateRequestMiddleware)
+func TestAuthDataValidate_WithoutToken(t *testing.T) {
 	t.Parallel()
 
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	spy := &testutil.NextSpy{}
+
+	dv.AuthDataValidate(spy).ServeHTTP(rec, req)
+
+	if spy.Called {
+		t.Fatal("el middleware dejo pasar una peticion sin token")
+	}
+	if res := testutil.DecodeResponse(t, rec); res.Tracking != "DVAUT020" {
+		t.Errorf("tracking = %s, se esperaba DVAUT020", res.Tracking)
+	}
+}
+
+// El privilegio se valida con la copia del usuario que trae la sesion, sin consultar MongoDB
+func TestPrivilegesDataValidate(t *testing.T) {
+	t.Parallel()
+
+	superUser := cmm.UserPrivilegeSuperUser.Tag
+	genericUser := cmm.UserPrivilegeGenericUser.Tag
+
 	tests := []struct {
-		name          string
-		authorization string
+		name         string
+		tagPrivilege *string // nil: sin sesion en el contexto
+		allowedTags  []string
+		wantNext     bool
+		wantStatus   int
+		wantTracking string
 	}{
-		{"sin header", ""},
-		{"sin Bearer", "Token abc"},
-		{"Bearer en minusculas", "bearer abc"},
-		{"Bearer vacio", "Bearer   "},
+		{name: "super usuario", tagPrivilege: &superUser, allowedTags: []string{superUser}, wantNext: true},
+		{name: "generico en ruta de ambos", tagPrivilege: &genericUser, allowedTags: []string{genericUser, superUser}, wantNext: true},
+		{name: "generico en ruta de super usuario", tagPrivilege: &genericUser, allowedTags: []string{superUser}, wantStatus: http.StatusForbidden, wantTracking: "DVAUT006"},
+		{name: "sin sesion en el contexto", allowedTags: []string{superUser}, wantStatus: http.StatusBadRequest, wantTracking: "DVAUT022"},
 	}
 
-	middlewares := map[string]func(http.Handler) http.Handler{
-		"AuthDataValidate":       dv.AuthDataValidate,
-		"PrivilegesDataValidate": dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag),
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	for middlewareName, middleware := range middlewares {
-		for _, tt := range tests {
-			t.Run(middlewareName+"/"+tt.name, func(t *testing.T) {
-				t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.tagPrivilege != nil {
+				session := models.SessionsModelType{RecordOwnerData: models.RecordOwnerData{TagTypePrivilege: *tt.tagPrivilege}}
+				req = cmm.SetInRequestContext(req, "authSession", &session)
+			}
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
 
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
-				if tt.authorization != "" {
-					req.Header.Set("Authorization", tt.authorization)
-				}
-				rec := httptest.NewRecorder()
-				spy := &testutil.NextSpy{}
+			dv.PrivilegesDataValidate(tt.allowedTags...)(spy).ServeHTTP(rec, req)
 
-				middleware(spy).ServeHTTP(rec, req)
-
-				if spy.Called {
-					t.Fatal("el middleware dejo pasar una peticion sin token")
-				}
-				if rec.Code != http.StatusUnauthorized {
-					t.Errorf("status = %d, se esperaba %d", rec.Code, http.StatusUnauthorized)
-				}
-				if res := testutil.DecodeResponse(t, rec); res.Tracking != "DVAUT001" {
-					t.Errorf("tracking = %s, se esperaba DVAUT001", res.Tracking)
-				}
-			})
-		}
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+			if tt.wantNext {
+				return
+			}
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, se esperaba %d", rec.Code, tt.wantStatus)
+			}
+			if res := testutil.DecodeResponse(t, rec); res.Tracking != tt.wantTracking {
+				t.Errorf("tracking = %s, se esperaba %s", res.Tracking, tt.wantTracking)
+			}
+		})
 	}
 }

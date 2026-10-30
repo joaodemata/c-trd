@@ -91,6 +91,9 @@ func TradingViewHookController() http.HandlerFunc {
 				triggerData.IDCandlestickTimeframe,
 				triggerData.TagCandlestickTimeframe,
 				triggerData.CandlestickTimeframe,
+				// La oportunidad es del usuario del trigger y la ven los mismos que ven el trigger
+				triggerData.RecordOwnerData,
+				triggerData.RecordVisibilityData,
 				&models.OpportunityOptionalData{
 					StopLoss:       newRiskManagement(payload.StopLoss),
 					TakeProfit:     newRiskManagement(payload.TakeProfit),

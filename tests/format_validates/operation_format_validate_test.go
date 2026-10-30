@@ -248,3 +248,68 @@ func TestCreateConditionFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+// TestVisibilityFormatValidate la visibilidad viene en el mismo body del trigger o la condicion y se inyecta en visibilityPayload
+func TestVisibilityFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	repeatedID := primitive.NewObjectID().Hex()
+
+	tests := []struct {
+		name         string
+		edit         func(body map[string]any)
+		wantNext     bool
+		wantTracking string
+		wantUsers    int
+	}{
+		{name: "sin usuarios permitidos", edit: func(map[string]any) {}, wantNext: true},
+		{name: "con usuarios permitidos", wantNext: true, wantUsers: 2, edit: func(b map[string]any) {
+			b["allowedUsers"] = []string{primitive.NewObjectID().Hex(), primitive.NewObjectID().Hex()}
+		}},
+		{name: "sin visibilidad", edit: func(b map[string]any) { delete(b, "idTypeVisibility") }, wantTracking: "CC003"},
+		{name: "visibilidad que no es ObjectID", edit: func(b map[string]any) { b["idTypeVisibility"] = "PUBLIC" }, wantTracking: "CC003"},
+		{name: "usuario permitido que no es ObjectID", edit: func(b map[string]any) { b["allowedUsers"] = []string{"jmata"} }, wantTracking: "CC003"},
+		{name: "usuario permitido repetido", edit: func(b map[string]any) { b["allowedUsers"] = []string{repeatedID, repeatedID} }, wantTracking: "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Body completo de un trigger con su visibilidad, como lo envia el frontend
+			body := validTriggerBody()
+			body["idTypeVisibility"] = primitive.NewObjectID().Hex()
+			tt.edit(body)
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(encoded)))
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.CreateTriggerFormatValidate(fv.VisibilityFormatValidate(spy)).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != tt.wantTracking {
+					t.Errorf("tracking = %s, se esperaba %s", res.Tracking, tt.wantTracking)
+				}
+				return
+			}
+
+			visibility, errCtx := cmm.GetFromRequestContext[*fv.VisibilityFormat](spy.Request, "visibilityPayload")
+			testutil.RequireEmptyError(t, errCtx)
+			if visibility.IdTypeVisibility != body["idTypeVisibility"] || len(visibility.AllowedUsers) != tt.wantUsers {
+				t.Errorf("visibilidad = %+v, se esperaba %v con %d usuarios", visibility, body["idTypeVisibility"], tt.wantUsers)
+			}
+			// El payload del trigger sigue disponible para su data validate
+			_, errCtx = cmm.GetFromRequestContext[*fv.CreateTriggerFormat](spy.Request, "payload")
+			testutil.RequireEmptyError(t, errCtx)
+		})
+	}
+}

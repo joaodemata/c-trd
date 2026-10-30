@@ -27,6 +27,7 @@ func newTestCondition(intervalSeconds int, parametersCallback map[string]any) (m
 		typeCondition,
 		primitive.NewObjectID(),
 		models.ConditionCronjobData{HttpRequest: request, CallbackFunction: "ProcessAlphaVantageData", ParametersCallback: parametersCallback, IntervalSeconds: intervalSeconds},
+		testOwner, testVisibility,
 	)
 }
 

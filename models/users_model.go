@@ -2,7 +2,6 @@ package models
 
 import (
 	"os"
-	"slices"
 	"time"
 
 	cmm "c_trd/common"
@@ -55,15 +54,47 @@ type UsersModelType struct {
 	SchemaDB      string    `bson:"schema_db" json:"-" description:"Versionado de la Base de datos"`
 }
 
+// RecordOwnerData usuario que creo el registro con su privilegio al momento de crearlo. Se embebe en los triggers,
+// las condiciones, las oportunidades y las sesiones (bson inline)
+type RecordOwnerData struct {
+	IDUser                   primitive.ObjectID `bson:"id_user" json:"idUser" description:"Usuario que creo el registro"`
+	IDTypePrivilege          primitive.ObjectID `bson:"id_type_privilege" json:"idTypePrivilege" description:"Id del privilegio del usuario (catalogo USER_PRIVILEGES)"`
+	TagTypePrivilege         string             `bson:"tag_type_privilege" json:"tagTypePrivilege"`
+	NameTypePrivilege        string             `bson:"name_type_privilege" json:"nameTypePrivilege"`
+	DescriptionTypePrivilege string             `bson:"description_type_privilege" json:"descriptionTypePrivilege"`
+}
+
 // Model pointer
 var UsersModel *mongo.Collection
 
+// NewRecordOwnerData copia el usuario y su privilegio al registro que crea
+func NewRecordOwnerData(user UsersModelType) RecordOwnerData {
+	return RecordOwnerData{
+		IDUser:                   user.ID,
+		IDTypePrivilege:          user.IDTypePrivilege,
+		TagTypePrivilege:         user.TagPrivilege,
+		NameTypePrivilege:        user.NamePrivilege,
+		DescriptionTypePrivilege: user.DescriptionPrivilege,
+	}
+}
+
 // Helpers
 
-// UserHasPrivilege indica si el tag del privilegio del usuario (catalogo USER_PRIVILEGES) esta entre los permitidos.
-// Sin tags permitidos ningun usuario tiene acceso
-func UserHasPrivilege(user UsersModelType, allowedTags []string) bool {
-	return slices.Contains(allowedTags, user.TagPrivilege)
+// MissingUsers retorna en hexadecimal los ids de expected que no estan en found, en el mismo orden de expected
+func MissingUsers(expected []primitive.ObjectID, found []UsersModelType) []string {
+	foundIDs := make(map[primitive.ObjectID]bool, len(found))
+	for _, user := range found {
+		foundIDs[user.ID] = true
+	}
+
+	missing := []string{}
+	for _, id := range expected {
+		if !foundIDs[id] {
+			missing = append(missing, id.Hex())
+		}
+	}
+
+	return missing
 }
 
 // UserIsLocked indica si el usuario esta bloqueado por intentos fallidos de login en el momento now

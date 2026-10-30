@@ -74,6 +74,10 @@ type OpportunitiesModelType struct {
 
 	Metadata interface{} `bson:"metadata" json:"metadata" description:"Objeto opcional para guardar data"`
 
+	// Usuario y visibilidad copiados del trigger que creo la oportunidad
+	RecordOwnerData      `bson:",inline"`
+	RecordVisibilityData `bson:",inline"`
+
 	// Common
 	LastUpdatedAt time.Time `bson:"last_updated_at" json:"lastUpdatedAt" description:"Ultima Actualizacion"`
 	CreatedDate   time.Time `bson:"created_date" json:"createdDate" description:"Fecha de Creacion"`
@@ -112,6 +116,8 @@ func NewOpportunityModel(
 	idAction primitive.ObjectID, tagAction, action string,
 	// --- Candles & Expiration ---
 	maxCandles int, idTimeframe primitive.ObjectID, tagTimeframe, timeframe string,
+	// --- Usuario y visibilidad ---
+	owner RecordOwnerData, visibility RecordVisibilityData,
 	// --- Opcionales (omitempty) ---
 	opts *OpportunityOptionalData,
 ) (OpportunitiesModelType, *cmm.ErrorHandler) {
@@ -153,6 +159,8 @@ func NewOpportunityModel(
 		ExpirationDate:          calculatedExpiration,
 		StopLoss:                stopLoss,
 		TakeProfit:              takeProfit,
+		RecordOwnerData:         owner,
+		RecordVisibilityData:    recordVisibilityWithAllowedUsers(visibility),
 
 		// Auditoría
 		CoreDB:      os.Getenv("JM_CTRD_MDB_NAME"),

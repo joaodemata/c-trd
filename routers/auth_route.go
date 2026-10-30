@@ -16,13 +16,14 @@ func authRoutes(server *http.ServeMux) *http.ServeMux {
 	api := cmm.NewRouter(server)
 	// Routes
 	api.Post("/auth/login", controllers.LoginController(), fv.LoginFormatValidate, dv.LoginDataValidate)
-	api.Post("/auth/logout", controllers.LogoutController(), dv.AuthDataValidate)
-	api.Get("/auth/me", controllers.MeController(), dv.AuthDataValidate)
+	api.Post("/auth/logout", controllers.LogoutController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate)
+	api.Get("/auth/me", controllers.MeController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate)
 
-	// Solo los privilegios enviados a PrivilegesDataValidate (tags del catalogo USER_PRIVILEGES)
-	api.Post("/auth/create/user", controllers.CreateUserController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateUserFormatValidate, dv.CreateUserDataValidate)
-	api.Put("/auth/update/password", controllers.UpdatePasswordController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.UpdatePasswordFormatValidate, dv.UpdatePasswordDataValidate)
-	api.Put("/auth/update/user/password", controllers.ResetUserPasswordController(), dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.ResetUserPasswordFormatValidate, dv.ResetUserPasswordDataValidate)
+	// Sesion (cmm.AuthenticateRequestMiddleware y dv.AuthDataValidate) y solo los privilegios enviados a
+	// PrivilegesDataValidate (tags del catalogo USER_PRIVILEGES)
+	api.Post("/auth/create/user", controllers.CreateUserController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateUserFormatValidate, dv.CreateUserDataValidate)
+	api.Put("/auth/update/password", controllers.UpdatePasswordController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.UpdatePasswordFormatValidate, dv.UpdatePasswordDataValidate)
+	api.Put("/auth/update/user/password", controllers.ResetUserPasswordController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.ResetUserPasswordFormatValidate, dv.ResetUserPasswordDataValidate)
 
 	return server
 }

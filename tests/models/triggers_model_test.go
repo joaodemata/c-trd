@@ -22,6 +22,7 @@ func newTestTrigger(t *testing.T, opts *models.TriggerOptionalData) models.Trigg
 		primitive.NewObjectID(), "ASSET-BTC", "Bitcoin",
 		primitive.NewObjectID(), "ACTION-BUY", "Compra",
 		6, primitive.NewObjectID(), "4-HOURS", "4 Horas",
+		testOwner, testVisibility,
 		opts,
 	)
 	testutil.RequireEmptyError(t, err)

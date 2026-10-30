@@ -15,7 +15,8 @@ func listRoutes(server *http.ServeMux) *http.ServeMux  {
 	api := cmm.NewRouter(server)
 
 	// Routes
-	api.Get("/list/opportunities", c.ListOportunitiesController(), cmm.PaginationFormatValidate)
+	// Solo con sesion: se listan las oportunidades publicas, las del usuario y las de lista blanca donde esta el usuario
+	api.Get("/list/opportunities", c.ListOportunitiesController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, cmm.PaginationFormatValidate)
 	// Creacion de condiciones: se listan las APIs y luego los callbacks del response_format de la API elegida
 	api.Get("/list/apis", c.ListApisController(), cmm.PaginationFormatValidate)
 	api.Get("/list/callbacks", c.ListCallbacksController(), fv.ListCallbacksFormatValidate)

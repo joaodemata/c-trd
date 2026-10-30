@@ -18,7 +18,8 @@ func CreateOportunityController() http.HandlerFunc {
 	}
 }
 
-// CreateTriggerController registra un trigger nuevo con los datos ya validados en el data validate
+// CreateTriggerController registra un trigger nuevo con los datos ya validados en el data validate. Guarda el usuario
+// de la sesion (copiado en la sesion) y la visibilidad validada
 func CreateTriggerController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
@@ -53,11 +54,24 @@ func CreateTriggerController() http.HandlerFunc {
 			return
 		}
 
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		visibility, err := cmm.GetFromRequestContext[*models.RecordVisibilityData](r, "visibility")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
 		trigger, err := models.NewTriggerModel(
 			payload.Tag, payload.Name, payload.Description,
 			asset.ID, asset.Tag, asset.Name,
 			action.ID, action.Tag, action.Name,
 			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
+			authSession.RecordOwnerData, *visibility,
 			&models.TriggerOptionalData{Conditions: conditions},
 		)
 		if !err.IsEmtpy() {
@@ -126,12 +140,13 @@ func UpdateTriggerController() http.HandlerFunc {
 		idReferenceRoot := models.TriggerReferenceRoot(*previousTrigger)
 		idWebhook := models.TriggerWebhookID(*previousTrigger)
 
-		// El pine_code no se envia en la peticion, se conserva el del trigger anterior
+		// El pine_code, el usuario y la visibilidad no se envian en la peticion, se conservan los del trigger anterior
 		trigger, err := models.NewTriggerModel(
 			payload.Tag, payload.Name, payload.Description,
 			asset.ID, asset.Tag, asset.Name,
 			action.ID, action.Tag, action.Name,
 			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
+			previousTrigger.RecordOwnerData, previousTrigger.RecordVisibilityData,
 			&models.TriggerOptionalData{
 				Conditions:      conditions,
 				IdWebhook:       &idWebhook,
@@ -225,7 +240,8 @@ func GoogleTrendsSeriesController() http.HandlerFunc {
 	}
 }
 
-// CreateConditionController registra una condicion nueva con la API, el proveedor y la peticion validados en el data validate
+// CreateConditionController registra una condicion nueva con la API, el proveedor y la peticion validados en el data validate.
+// Guarda el usuario de la sesion y la visibilidad validada
 func CreateConditionController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
@@ -266,6 +282,18 @@ func CreateConditionController() http.HandlerFunc {
 			return
 		}
 
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		visibility, err := cmm.GetFromRequestContext[*models.RecordVisibilityData](r, "visibility")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
 		condition, err := models.NewConditionModel(
 			payload.Tag, payload.Name, payload.Description,
 			provider.ID, provider.Name,
@@ -277,6 +305,7 @@ func CreateConditionController() http.HandlerFunc {
 				ParametersCallback: parametersCallback,
 				IntervalSeconds:    payload.IntervalSeconds,
 			},
+			authSession.RecordOwnerData, *visibility,
 		)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)

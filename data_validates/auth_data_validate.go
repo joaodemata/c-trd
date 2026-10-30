@@ -18,42 +18,6 @@ const invalidCredentialsMessage = "Usuario o contraseña inválidos"
 // Hash con formato valido que se verifica cuando el usuario no existe, asi el login tarda lo mismo exista o no
 var dummyPasswordHash = fmt.Sprintf("pbkdf2_sha256$%d$%s$%s", cmm.PasswordHashIterations, strings.Repeat("A", 22), strings.Repeat("A", 43))
 
-// authenticateRequest busca la sesion del token del header Authorization (Bearer) y valida que el usuario exista
-// y este activo. Si falla responde al cliente y retorna false
-func authenticateRequest(res *cmm.ResponseHandler, r *http.Request) (models.UsersModelType, models.SessionsModelType, bool) {
-	var emptyUser models.UsersModelType
-	var emptySession models.SessionsModelType
-
-	token, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	token = strings.TrimSpace(token)
-	if !found || token == "" {
-		res.Send(http.StatusUnauthorized, "FAIL", "Debe iniciar sesion", "DVAUT001", nil)
-		return emptyUser, emptySession, false
-	}
-
-	session, err := services.GetActiveSessionService(services.HashSessionTokenService(token), time.Now().UTC())
-	if !err.IsEmtpy() {
-		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return emptyUser, emptySession, false
-	}
-	if session.ID.IsZero() {
-		res.Send(http.StatusUnauthorized, "FAIL", "La sesion no existe o expiro, inicie sesion nuevamente", "DVAUT002", nil)
-		return emptyUser, emptySession, false
-	}
-
-	user, err := services.GetUserService(session.IDUser)
-	if !err.IsEmtpy() {
-		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return emptyUser, emptySession, false
-	}
-	if user.ID.IsZero() || !user.IsActive {
-		res.Send(http.StatusUnauthorized, "FAIL", "Usuario no disponible", "DVAUT003", nil)
-		return emptyUser, emptySession, false
-	}
-
-	return user, session, true
-}
-
 // validateUserIsUnique valida que el username y el email (si viene) no los use otro usuario. Si falla responde al cliente
 func validateUserIsUnique(res *cmm.ResponseHandler, username string, email *string) bool {
 	existing, err := services.GetUserByUsernameService(username)
@@ -83,42 +47,56 @@ func validateUserIsUnique(res *cmm.ResponseHandler, username string, email *stri
 	return true
 }
 
-// AuthDataValidate deja pasar solo peticiones con una sesion valida. Deja en el contexto el usuario (authUser) y la sesion (authSession)
+// AuthDataValidate busca la sesion no vencida del token que dejo cmm.AuthenticateRequestMiddleware. La sesion trae la
+// copia del usuario y su privilegio, asi se autentica con una sola consulta. Deja la sesion en el contexto (authSession)
 func AuthDataValidate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
 
-		user, session, ok := authenticateRequest(res, r)
-		if !ok {
+		token, err := cmm.GetFromRequestContext[string](r, "sessionToken")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVAUT020", nil, err)
 			return
 		}
 
-		r = cmm.SetInRequestContext(r, "authUser", &user)
+		session, err := services.GetActiveSessionService(services.HashSessionTokenService(token), time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if session.ID.IsZero() {
+			res.Send(http.StatusUnauthorized, "FAIL", "La sesion no existe o expiro, inicie sesion nuevamente", "DVAUT002", nil)
+			return
+		}
+		// Sesiones abiertas antes de guardar el usuario en la sesion
+		if session.IDUser.IsZero() || session.TagTypePrivilege == "" {
+			res.Send(http.StatusUnauthorized, "FAIL", "La sesion no es valida, inicie sesion nuevamente", "DVAUT021", nil)
+			return
+		}
+
 		r = cmm.SetInRequestContext(r, "authSession", &session)
 		next.ServeHTTP(w, r)
 	})
 }
 
-// PrivilegesDataValidate deja pasar solo peticiones con sesion valida de un usuario cuyo privilegio (tag del catalogo
-// USER_PRIVILEGES) este en allowedTags, ej: PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag). Deja en el
-// contexto el usuario (authUser) y la sesion (authSession)
+// PrivilegesDataValidate deja pasar solo peticiones cuyo usuario de la sesion tenga un privilegio (tag del catalogo
+// USER_PRIVILEGES) de allowedTags, ej: PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag). Va despues de AuthDataValidate
 func PrivilegesDataValidate(allowedTags ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			res := cmm.NewResponseHandler(w)
 
-			user, session, ok := authenticateRequest(res, r)
-			if !ok {
+			authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, "DVAUT022", nil, err)
 				return
 			}
 
-			if !models.UserHasPrivilege(user, allowedTags) {
+			if !models.SessionHasPrivilege(*authSession, allowedTags) {
 				res.Send(http.StatusForbidden, "FAIL", "No tiene permisos para esta operacion", "DVAUT006", nil)
 				return
 			}
 
-			r = cmm.SetInRequestContext(r, "authUser", &user)
-			r = cmm.SetInRequestContext(r, "authSession", &session)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -215,7 +193,7 @@ func CreateUserDataValidate(next http.Handler) http.Handler {
 	})
 }
 
-// UpdatePasswordDataValidate valida la contraseña actual del usuario de la sesion
+// UpdatePasswordDataValidate valida la contraseña actual del usuario de la sesion. Deja el usuario en el contexto (authUser)
 func UpdatePasswordDataValidate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		res := cmm.NewResponseHandler(w)
@@ -226,9 +204,20 @@ func UpdatePasswordDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		authUser, err := cmm.GetFromRequestContext[*models.UsersModelType](r, "authUser")
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, "DVAUT016", nil, err)
+			return
+		}
+
+		// El hash de la contraseña no esta en la sesion
+		authUser, err := services.GetUserService(authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if authUser.ID.IsZero() || !authUser.IsActive {
+			res.Send(http.StatusUnauthorized, "FAIL", "Usuario no disponible", "DVAUT003", nil)
 			return
 		}
 
@@ -242,6 +231,7 @@ func UpdatePasswordDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
+		r = cmm.SetInRequestContext(r, "authUser", &authUser)
 		next.ServeHTTP(w, r)
 	})
 }
