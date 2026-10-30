@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	cmm "c_trd/common"
 	dv "c_trd/data_validates"
 	"c_trd/tests/testutil"
 )
@@ -24,8 +25,8 @@ func TestAuthMiddlewares_RejectWithoutToken(t *testing.T) {
 	}
 
 	middlewares := map[string]func(http.Handler) http.Handler{
-		"AuthDataValidate":      dv.AuthDataValidate,
-		"SuperUserDataValidate": dv.SuperUserDataValidate,
+		"AuthDataValidate":       dv.AuthDataValidate,
+		"PrivilegesDataValidate": dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag),
 	}
 
 	for middlewareName, middleware := range middlewares {

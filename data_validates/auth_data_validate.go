@@ -99,26 +99,29 @@ func AuthDataValidate(next http.Handler) http.Handler {
 	})
 }
 
-// SuperUserDataValidate deja pasar solo peticiones del super usuario con sesion valida. Deja en el contexto el
-// usuario (authUser) y la sesion (authSession)
-func SuperUserDataValidate(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		res := cmm.NewResponseHandler(w)
+// PrivilegesDataValidate deja pasar solo peticiones con sesion valida de un usuario cuyo privilegio (tag del catalogo
+// USER_PRIVILEGES) este en allowedTags, ej: PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag). Deja en el
+// contexto el usuario (authUser) y la sesion (authSession)
+func PrivilegesDataValidate(allowedTags ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			res := cmm.NewResponseHandler(w)
 
-		user, session, ok := authenticateRequest(res, r)
-		if !ok {
-			return
-		}
+			user, session, ok := authenticateRequest(res, r)
+			if !ok {
+				return
+			}
 
-		if !models.UserIsSuperUser(user) {
-			res.Send(http.StatusForbidden, "FAIL", "No tiene permisos para esta operacion", "DVAUT006", nil)
-			return
-		}
+			if !models.UserHasPrivilege(user, allowedTags) {
+				res.Send(http.StatusForbidden, "FAIL", "No tiene permisos para esta operacion", "DVAUT006", nil)
+				return
+			}
 
-		r = cmm.SetInRequestContext(r, "authUser", &user)
-		r = cmm.SetInRequestContext(r, "authSession", &session)
-		next.ServeHTTP(w, r)
-	})
+			r = cmm.SetInRequestContext(r, "authUser", &user)
+			r = cmm.SetInRequestContext(r, "authSession", &session)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // LoginDataValidate valida las credenciales. Si la contraseña es incorrecta suma un intento fallido y al llegar al
