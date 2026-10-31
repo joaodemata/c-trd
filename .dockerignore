@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+.env
+API_KEY.txt
+tmp
+data
+postman
+deploy
+cover.out
+*.exe

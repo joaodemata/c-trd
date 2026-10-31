@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -93,4 +94,10 @@ func AppConfigConstructor(srv *http.Server, mongoDatabase *mongo.Database, mongo
 		MongoClient:   mongoClient,
 		config:        config,
 	}
+}
+
+// CronjobsEnabledFromEnv indica si este entorno corre los cronjobs. Solo JM_CTRD_CRON_ENABLED=false los apaga,
+// asi los entornos de prueba no gastan las cuotas de las APIs externas
+func CronjobsEnabledFromEnv() bool {
+	return !strings.EqualFold(strings.TrimSpace(os.Getenv("JM_CTRD_CRON_ENABLED")), "false")
 }

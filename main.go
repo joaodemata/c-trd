@@ -39,8 +39,13 @@ func main() {
 	ctxCronjob, cancelCronjob := context.WithCancel(context.Background())
 	defer cancelCronjob()
 
-	fmt.Println("Initializing cronjobs...")
-	cronjobs.InitCronjobs(ctxCronjob)
+	// Los cronjobs se pueden apagar por entorno con JM_CTRD_CRON_ENABLED=false
+	if cmm.CronjobsEnabledFromEnv() {
+		fmt.Println("Initializing cronjobs...")
+		cronjobs.InitCronjobs(ctxCronjob)
+	} else {
+		fmt.Println("Cronjobs disabled by JM_CTRD_CRON_ENABLED")
+	}
 
 	// 3. Setup HTTP server
 	fmt.Println("Initializing server...")

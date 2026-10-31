@@ -1,0 +1,45 @@
+# Despliega en el VPS cada push a una rama de entorno. Corre en el runner self-hosted del VPS.
+# Solo se usa "push": nunca agregar pull_request aqui, un fork podria ejecutar codigo en el servidor
+name: Deploy
+
+on:
+  push:
+    branches: [develop, qa, sandbox, production]
+
+# Un despliegue a la vez por rama; uno nuevo cancela el anterior que siga en cola
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, ctrd-vps]
+    defaults:
+      run:
+        working-directory: deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolver entorno
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            develop)    env=dev ;;
+            qa)         env=qa ;;
+            sandbox)    env=sandbox ;;
+            production) env=prod ;;
+            *) echo "Rama sin entorno: ${GITHUB_REF_NAME}"; exit 1 ;;
+          esac
+          echo "SERVICE=ctrd-${env}" >> "$GITHUB_ENV"
+
+      # La imagen corre go vet y go test; si fallan, el despliegue se detiene aqui
+      - name: Construir imagen
+        run: docker compose build "$SERVICE"
+
+      - name: Levantar servicio
+        run: docker compose up -d "$SERVICE" caddy
+
+      - name: Recargar Caddy
+        run: docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+
+      - name: Limpiar imagenes viejas
+        run: docker image prune -f
