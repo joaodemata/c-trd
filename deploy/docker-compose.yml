@@ -35,6 +35,8 @@ services:
     volumes:
       # Se monta la carpeta (no el archivo) para que un git checkout nuevo se vea al recargar
       - ./caddy:/etc/caddy:ro
+      # Build del frontend F-CTRD, una carpeta por entorno
+      - /opt/ctrd/web:/srv/f-ctrd:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
