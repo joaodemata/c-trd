@@ -6,3 +6,4 @@ c_trd.exe
 /data
 cover.out
 /postman
+deploy/env/*.env

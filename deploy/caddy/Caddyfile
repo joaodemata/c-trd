@@ -1,0 +1,22 @@
+# CTRD_DOMAIN y CTRD_ACME_EMAIL vienen de /opt/ctrd/env/caddy.env
+# Caddy obtiene y renueva los certificados HTTPS solo. Agrega X-Forwarded-For, por eso
+# LocalOnlyMiddleware rechaza cualquier peticion que llegue desde afuera
+{
+	email {$CTRD_ACME_EMAIL}
+}
+
+api.{$CTRD_DOMAIN} {
+	reverse_proxy ctrd-prod:8080
+}
+
+sandbox.api.{$CTRD_DOMAIN} {
+	reverse_proxy ctrd-sandbox:8080
+}
+
+qa.api.{$CTRD_DOMAIN} {
+	reverse_proxy ctrd-qa:8080
+}
+
+dev.api.{$CTRD_DOMAIN} {
+	reverse_proxy ctrd-dev:8080
+}

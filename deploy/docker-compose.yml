@@ -1,0 +1,81 @@
+# Nombre fijo del proyecto: los volumenes (datos de Mongo, certificados) sobreviven entre despliegues
+name: ctrd
+
+# Configuracion comun de los 4 entornos de la API
+x-ctrd: &ctrd
+  build:
+    context: ..
+  restart: unless-stopped
+  depends_on:
+    - mongo
+  networks:
+    - internal
+
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    env_file: /opt/ctrd/env/mongo.env
+    volumes:
+      - mongo-data:/data/db
+    # Solo accesible desde el propio VPS (o por tunel SSH), nunca desde internet
+    ports:
+      - "127.0.0.1:27017:27017"
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    env_file: /opt/ctrd/env/caddy.env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Se monta la carpeta (no el archivo) para que un git checkout nuevo se vea al recargar
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+
+  ctrd-dev:
+    <<: *ctrd
+    image: ctrd:dev
+    env_file: /opt/ctrd/env/dev.env
+    volumes:
+      - trends-dev:/app/data/google_trends
+
+  ctrd-qa:
+    <<: *ctrd
+    image: ctrd:qa
+    env_file: /opt/ctrd/env/qa.env
+    volumes:
+      - trends-qa:/app/data/google_trends
+
+  ctrd-sandbox:
+    <<: *ctrd
+    image: ctrd:sandbox
+    env_file: /opt/ctrd/env/sandbox.env
+    volumes:
+      - trends-sandbox:/app/data/google_trends
+
+  ctrd-prod:
+    <<: *ctrd
+    image: ctrd:prod
+    env_file: /opt/ctrd/env/prod.env
+    volumes:
+      - trends-prod:/app/data/google_trends
+
+networks:
+  internal:
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:
+  trends-dev:
+  trends-qa:
+  trends-sandbox:
+  trends-prod:
