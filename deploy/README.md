@@ -48,6 +48,15 @@ the VPS: it builds the image (which runs `go vet` and `go test`) and restarts on
    ```
    Set `JM_CTRD_CRON_ENABLED=false` in `dev.env` and `qa.env` so they don't spend the external API quotas.
    Set `JM_CTRD_CORS_ORIGINS` to the frontend of the same environment (e.g. `https://qa.app.<domain>` in `qa.env`).
+   Every `JM_CTRD_MDB_HOST` must end in `&replicaSet=rs0` (see [MongoDB replica set](#mongodb-replica-set)).
+   The generator also creates the replica set key file `/opt/ctrd/mongo/keyfile`. To create it by hand:
+   ```bash
+   sudo mkdir -p /opt/ctrd/mongo
+   openssl rand -base64 756 | sudo tee /opt/ctrd/mongo/keyfile > /dev/null
+   sudo chown 999:999 /opt/ctrd/mongo/keyfile && sudo chmod 400 /opt/ctrd/mongo/keyfile
+   ```
+   It must exist before the first `up`. If it is missing, Docker creates an empty folder in its place
+   and mongod does not start.
 6. **Frontend folder**, written by the F-CTRD runner and served by Caddy:
    ```bash
    sudo mkdir -p /opt/ctrd/web && sudo chown github-runner:github-runner /opt/ctrd/web
@@ -77,14 +86,44 @@ On Windows, from the repo root:
 .\scripts\generate_env_files.ps1 -Domain <domain> -AcmeEmail <email> | Set-Clipboard
 ```
 
-Paste the output in the VPS SSH terminal: it creates the six files in `/opt/ctrd/env/` and, at the end,
-prints the root password and the `db.createUser(...)` lines for the Mongo users. Each run generates
+Paste the output in the VPS SSH terminal: it creates the six files in `/opt/ctrd/env/`, the replica set
+key file `/opt/ctrd/mongo/keyfile` (only if it does not exist yet) and, at the end, prints the root password and the `db.createUser(...)` lines for the Mongo users. Each run generates
 new Mongo passwords, so paste the output of a single run and keep the `db.createUser` lines for the
 next step (outside the repo, e.g. a password manager). The output contains secrets: never commit it.
 
 The script copies `JM_CTRD_STOCK_API_URL`, `JM_CTRD_API_KEY` and every `JM_CTRD_SECRET_*` to all
 environments, turns the cronjobs off in dev and qa, and sets `JM_CTRD_CORS_ORIGINS` to the frontend
 of each environment. Sandbox and prod share the API keys and both run the cronjobs.
+
+## MongoDB replica set
+
+The services use transactions (`session.WithTransaction`), and those only work on a replica set.
+On a standalone instance they fail with
+`Transaction numbers are only allowed on a replica set member or mongos`. The `mongo` service in
+`docker-compose.yml` therefore runs as a one-node replica set:
+
+- `--replSet rs0`, plus `--keyFile /etc/mongo/keyfile` because a replica set with authentication
+  requires one (the file is mounted from `/opt/ctrd/mongo/keyfile`).
+- The healthcheck runs `rs.initiate` the first time with the member `mongo:27017` (the name the API
+  containers resolve in the `internal` network). It does nothing on later runs and only reports
+  healthy once the node is PRIMARY. The API containers wait for that (`condition: service_healthy`).
+- The API URIs (`JM_CTRD_MDB_HOST`) include `replicaSet=rs0`.
+
+Check it from the `deploy/` folder:
+
+```bash
+sudo docker compose ps mongo     # STATUS must say (healthy)
+sudo docker compose exec mongo mongosh -u root -p '<root password>' --authenticationDatabase admin \
+  --quiet --eval "rs.status().members.map(m => m.name + ' ' + m.stateStr)"
+# [ 'mongo:27017 PRIMARY' ]
+```
+
+Connections from outside the Docker network (SSH tunnel, Compass) must use `directConnection=true`.
+Without it the client discovers the member `mongo:27017`, which only resolves inside the VPS.
+
+If Mongo was already started standalone, the `mongo-data` volume can be kept: create the key file,
+then deploy again or run `sudo docker compose up -d mongo`. The healthcheck initiates the replica set
+on the existing data.
 
 ## First deploy
 
@@ -100,8 +139,11 @@ containers and Caddy would load the Caddyfile of whichever started it last.
 2. **Trigger the deploy**: any push or merged PR into `develop` deploys dev. Jobs that waited for a
    runner expire after 24 h; re-run them from the Actions tab (_Re-run jobs_) or with
    `gh run rerun <run-id> -R joaodemata/c-trd`. No new PR is needed.
-3. **Mongo users**: the first `up` starts Mongo empty with the root user from `mongo.env`. Until the
-   environment users exist, `ctrd-<env>` fails to connect and keeps restarting; that is expected.
+3. **Mongo users**: the first `up` starts Mongo empty with the root user from `mongo.env` and the
+   healthcheck initiates the replica set `rs0` (the API container waits until Mongo is _healthy_).
+   If the deploy fails with `dependency failed to start: container ctrd-mongo-1 is unhealthy`, check
+   `sudo docker compose logs mongo` (usually a missing key file or one with wrong permissions).
+   Until the environment users exist, `ctrd-<env>` fails to connect and keeps restarting; that is expected.
    Create them with the lines printed by the generator:
    ```bash
    cd /home/github-runner/actions-runner/_work/c-trd/c-trd/deploy
@@ -155,7 +197,7 @@ their passwords from `db.createUser`). Use a different super user password in pr
 
 ```powershell
 # a) Cargar catalogos y datos de configuracion (renombra <localdb>.* a ctrd_dev.*)
-mongorestore --uri "mongodb://ctrd_dev:<dev password>@localhost:27018/?authSource=admin" `
+mongorestore --uri "mongodb://ctrd_dev:<dev password>@localhost:27018/?authSource=admin&directConnection=true" `
   --archive=ref.archive --nsFrom "<localdb>.*" --nsTo "ctrd_dev.*"
 
 # b) Super usuario (la contrasena no queda en el historial)
@@ -164,7 +206,7 @@ $secure = Read-Host "Password super user" -AsSecureString
 $env:CTRD_SUPER_USER_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
 $env:JM_CTRD_MDB_USER = "ctrd_dev"
 
-mongosh "mongodb://ctrd_dev:<dev password>@localhost:27018/ctrd_dev?authSource=admin" --file scripts/create_super_user.js
+mongosh "mongodb://ctrd_dev:<dev password>@localhost:27018/ctrd_dev?authSource=admin&directConnection=true" --file scripts/create_super_user.js
 
 Remove-Item Env:CTRD_SUPER_USER_PASSWORD
 ```
