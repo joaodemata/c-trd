@@ -100,7 +100,7 @@ foreach ($environment in $environments) {
     $mongoUsers += "db.createUser({ user: `"$db`", pwd: `"$password`", roles: [{ role: `"readWrite`", db: `"$db`" }] })"
 
     $lines = @(
-        (Format-Value "JM_CTRD_MDB_HOST" "mongodb://$($db):$($password)@mongo:27017/$($db)?authSource=admin"),
+        (Format-Value "JM_CTRD_MDB_HOST" "mongodb://$($db):$($password)@mongo:27017/$($db)?authSource=admin&replicaSet=rs0"),
         (Format-Value "JM_CTRD_MDB_NAME" $db),
         (Format-Value "JM_CTRD_MDB_USER" $db),
         (Format-Value "JM_CTRD_CORS_ORIGINS" "https://$($environment.Front)"),
@@ -117,6 +117,13 @@ foreach ($environment in $environments) {
 
 Write-Output "sudo chmod 640 /opt/ctrd/env/*.env"
 Write-Output "id github-runner >/dev/null 2>&1 && sudo chgrp -R github-runner /opt/ctrd/env"
+Write-Output ""
+
+# keyFile del replica set rs0 (obligatorio con autenticacion). Solo se crea si no existe;
+# 999 es el usuario mongodb dentro de la imagen oficial
+Write-Output "sudo mkdir -p /opt/ctrd/mongo"
+Write-Output "[ -f /opt/ctrd/mongo/keyfile ] || openssl rand -base64 756 | sudo tee /opt/ctrd/mongo/keyfile > /dev/null"
+Write-Output "sudo chown 999:999 /opt/ctrd/mongo/keyfile && sudo chmod 400 /opt/ctrd/mongo/keyfile"
 Write-Output ""
 Write-Output "# ---------------------------------------------------------------------------"
 Write-Output "# Despues del primer 'docker compose up -d mongo', crear los usuarios de cada entorno:"

@@ -7,7 +7,8 @@ x-ctrd: &ctrd
     context: ..
   restart: unless-stopped
   depends_on:
-    - mongo
+    mongo:
+      condition: service_healthy
   networks:
     - internal
 
@@ -15,9 +16,27 @@ services:
   mongo:
     image: mongo:8.0
     restart: unless-stopped
+    # Replica set de un nodo (rs0): las transacciones no funcionan en una instancia standalone.
+    # Con autenticacion activa, un replica set exige keyFile
+    command: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
     env_file: /opt/ctrd/env/mongo.env
     volumes:
       - mongo-data:/data/db
+      # Creado en el VPS por scripts/generate_env_files.ps1 (dueño 999, permisos 400)
+      - /opt/ctrd/mongo/keyfile:/etc/mongo/keyfile:ro
+    # Inicia el replica set la primera vez (idempotente) y solo queda healthy cuando es PRIMARY.
+    # El host "mongo:27017" es el que los contenedores de la API resuelven en la red interna
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD"
+          --authenticationDatabase admin
+          --eval "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) }; quit(db.hello().isWritablePrimary ? 0 : 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
     # Solo accesible desde el propio VPS (o por tunel SSH), nunca desde internet
     ports:
       - "127.0.0.1:27017:27017"
