@@ -56,7 +56,7 @@ func main() {
 	routers.SetupRouter(mux, hub)
 
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":8080", // TODO: :cambiar a variable de entorno
 		Handler:      cmm.CorsMiddleware(cmm.CorsOriginsFromEnv())(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
