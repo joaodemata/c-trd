@@ -94,11 +94,11 @@ runs Docker Compose from its `deploy/` folder. Never clone the repo again somewh
 `docker compose` there: the project name is fixed (`ctrd`), so both copies would manage the same
 containers and Caddy would load the Caddyfile of whichever started it last.
 
-1. **Runners online**: GitHub → repo → Settings → Actions → Runners must show the runner as *Idle*
-   (in both repos). If it shows *Offline*, the service is not running; see
+1. **Runners online**: GitHub → repo → Settings → Actions → Runners must show the runner as _Idle_
+   (in both repos). If it shows _Offline_, the service is not running; see
    [Troubleshooting](#troubleshooting).
 2. **Trigger the deploy**: any push or merged PR into `develop` deploys dev. Jobs that waited for a
-   runner expire after 24 h; re-run them from the Actions tab (*Re-run jobs*) or with
+   runner expire after 24 h; re-run them from the Actions tab (_Re-run jobs_) or with
    `gh run rerun <run-id> -R joaodemata/c-trd`. No new PR is needed.
 3. **Mongo users**: the first `up` starts Mongo empty with the root user from `mongo.env`. Until the
    environment users exist, `ctrd-<env>` fails to connect and keeps restarting; that is expected.
