@@ -25,6 +25,9 @@ func listRoutes(server *http.ServeMux) *http.ServeMux  {
 	api.Get("/list/catalogs", c.ListCatalogsController(), fv.ListCatalogsFormatValidate)
 	api.Get("/list/conditions", c.ListConditionsController(), cmm.PaginationFormatValidate)
 	api.Get("/list/triggers", c.ListTriggersController(), cmm.PaginationFormatValidate, fv.ListTriggersFormatValidate, dv.ListTriggersDataValidate)
+	// Agentes: cola de tesis (FIFO) y corridas para que el super usuario las revise
+	api.Get("/list/agent_theses", c.ListAgentThesesController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListAgentThesesFormatValidate)
+	api.Get("/list/agent_runs", c.ListAgentRunsController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListAgentRunsFormatValidate)
 	
 	return server
 

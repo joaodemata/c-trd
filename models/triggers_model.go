@@ -2,6 +2,7 @@ package models
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	cmm "c_trd/common"
@@ -97,7 +98,10 @@ type TriggerOptionalData struct {
 	IdWebhook       *primitive.ObjectID   // Si no viene se genera uno nuevo
 	IdReference     *primitive.ObjectID
 	IdReferenceRoot *primitive.ObjectID
-	PineCode        *string
+	// El placeholder {{ID_WEBHOOK}} del codigo se reemplaza por el id del webhook del trigger
+	PineCode *string
+	// Status inicial. Si no viene: pendiente de aprobacion si el dueño es un agente, si no activo
+	Status *cmm.CatalogStatus
 }
 
 // NewTriggerModel crea un trigger nuevo con status activo. El id del webhook se genera si no viene en opts. Los arreglos opcionales se guardan como []
@@ -152,6 +156,13 @@ func NewTriggerModel(
 		LogicalDelete: false,
 	}
 
+	// Lo crea un agente: el hook no lo dispara hasta que el super usuario lo apruebe
+	if IsAgentOwner(owner) {
+		trigger.IDStatus = cmm.GenericStatusPendingForApprove.ID
+		trigger.TagStatus = cmm.GenericStatusPendingForApprove.Tag
+		trigger.Status = cmm.GenericStatusPendingForApprove.Name
+	}
+
 	if opts != nil {
 		for _, condition := range opts.Conditions {
 			trigger.Conditions = append(trigger.Conditions, conditionTriggers{
@@ -167,7 +178,15 @@ func NewTriggerModel(
 		}
 		trigger.IdReference = opts.IdReference
 		trigger.IdReferenceRoot = opts.IdReferenceRoot
-		trigger.PineCode = opts.PineCode
+		if opts.PineCode != nil {
+			code := strings.ReplaceAll(*opts.PineCode, cmm.TriggerCodeWebhookPlaceholder, trigger.IDWebhook.Hex())
+			trigger.PineCode = &code
+		}
+		if opts.Status != nil {
+			trigger.IDStatus = opts.Status.ID
+			trigger.TagStatus = opts.Status.Tag
+			trigger.Status = opts.Status.Name
+		}
 	}
 
 	return trigger, cmm.NewEmptyErrorHandler()

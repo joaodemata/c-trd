@@ -608,6 +608,7 @@ func GetConditionsService(Limit int, Page int, Search string) ([]models.Conditio
 			"tag_status":          1,
 			"status":              1,
 			"created_date":        1,
+			"id_user":             1,
 		})
 
 	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)
@@ -770,6 +771,9 @@ func GetTriggersService(Limit int, Page int, Search string, StartDate time.Time,
 	if !ShowReferences {
 		filter["logical_delete"] = false
 		filter["tag_status"] = cmm.GenericStatusActive.Tag
+		if TagStatus == cmm.GenericStatusPendingForApprove.Tag || TagStatus == cmm.GenericStatusNotApproved.Tag {
+			filter["tag_status"] = TagStatus
+		}
 	} else if TagStatus != "" {
 		filter["tag_status"] = TagStatus
 	}
@@ -885,4 +889,168 @@ func GetActiveUsersByIDsService(ids []primitive.ObjectID) ([]models.UsersModelTy
 	}
 
 	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetAgentThesesService lista paginadas las tesis de la cola de los agentes, las mas antiguas primero (orden FIFO).
+// tagStatus vacio lista todas
+func GetAgentThesesService(Limit int, Page int, Search string, TagStatus string) ([]models.AgentThesesModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.AgentThesesModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if TagStatus != "" {
+		filter["tag_status"] = TagStatus
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"thesis": regexPattern},
+			{"tag_asset": regexPattern},
+			{"asset": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.AgentThesesModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las tesis", cmm.LevelDatabase, "SLISE039")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "created_date", Value: 1}, {Key: "_id", Value: 1}})
+
+	cursor, err := models.AgentThesesModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las tesis", cmm.LevelDatabase, "SLISE040")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las tesis", cmm.LevelDatabase, "SLISE041")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetAgentThesisService busca una tesis no borrada por su ID. Si no existe retorna la tesis vacia sin error
+func GetAgentThesisService(idThesis primitive.ObjectID) (models.AgentThesesModelType, *cmm.ErrorHandler) {
+	var result models.AgentThesesModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	err := models.AgentThesesModel.FindOne(ctx, bson.M{"_id": idThesis, "logical_delete": false}).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE042")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetAgentRunsService lista paginadas las corridas de los agentes, las mas recientes primero. idThesis cero lista todas
+func GetAgentRunsService(Limit int, Page int, Search string, TagStatus string, IdThesis primitive.ObjectID) ([]models.AgentRunsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.AgentRunsModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if TagStatus != "" {
+		filter["tag_status"] = TagStatus
+	}
+	if !IdThesis.IsZero() {
+		filter["id_thesis"] = IdThesis
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"thesis": regexPattern},
+			{"tag_asset": regexPattern},
+			{"asset": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.AgentRunsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las corridas", cmm.LevelDatabase, "SLISE043")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "started_at", Value: -1}, {Key: "_id", Value: -1}})
+
+	cursor, err := models.AgentRunsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las corridas", cmm.LevelDatabase, "SLISE044")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las corridas", cmm.LevelDatabase, "SLISE045")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetAgentRunService busca una corrida no borrada por su ID. Si no existe retorna la corrida vacia sin error
+func GetAgentRunService(idRun primitive.ObjectID) (models.AgentRunsModelType, *cmm.ErrorHandler) {
+	var result models.AgentRunsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	err := models.AgentRunsModel.FindOne(ctx, bson.M{"_id": idRun, "logical_delete": false}).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE046")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// CountTriggersByConditionService cuenta los triggers no borrados ni rechazados que usan la condicion
+func CountTriggersByConditionService(idCondition primitive.ObjectID) (int64, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"conditions.id_condition": idCondition,
+		"tag_status":              bson.M{"$ne": cmm.GenericStatusNotApproved.Tag},
+		"logical_delete":          false,
+	}
+	total, err := models.TriggersModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, cmm.NewErrorHandler(err, "Error contando los triggers de la condicion", cmm.LevelDatabase, "SLISE047")
+	}
+
+	return total, cmm.NewEmptyErrorHandler()
 }

@@ -14,7 +14,7 @@ type ListOpportunitiesFormat struct {
 	Metadata json.RawMessage `json:"metadatos,omitempty"`
 }
 
-var ListOpportunitiesFormatValidate = common.FormatValidateMiddleware[TradingViewTriggerFormat]
+var ListOpportunitiesFormatValidate = common.FormatValidateMiddleware[TriggerHookFormat]
 
 // ListCallbacksFormat formato de respuesta de la API seleccionada (ej: GOOGLE_TRENDS_SERIES)
 type ListCallbacksFormat struct {
@@ -41,3 +41,20 @@ type ListTriggersFormat struct {
 
 // Se inyecta en "filters" porque "payload" lo ocupa la paginacion
 var ListTriggersFormatValidate = common.FormatValidateMiddlewareWithKey[ListTriggersFormat]("filters")
+
+// ListAgentThesesFormat filtro propio del listado de tesis, se concatena con cmm.PaginationFormatValidate
+type ListAgentThesesFormat struct {
+	TagStatus string `json:"tagStatus" in:"query" validate:"omitempty,oneof=THESIS-PENDING THESIS-PROCESSING THESIS-PROCESSED"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListAgentThesesFormatValidate = common.FormatValidateMiddlewareWithKey[ListAgentThesesFormat]("filters")
+
+// ListAgentRunsFormat filtros propios del listado de corridas, se concatena con cmm.PaginationFormatValidate
+type ListAgentRunsFormat struct {
+	TagStatus string `json:"tagStatus" in:"query" validate:"omitempty,oneof=RUN-RUNNING RUN-SUCCESS RUN-NEEDS-INPUT RUN-FAILED"`
+	IdThesis  string `json:"idThesis" in:"query" validate:"omitempty,mongodb"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListAgentRunsFormatValidate = common.FormatValidateMiddlewareWithKey[ListAgentRunsFormat]("filters")

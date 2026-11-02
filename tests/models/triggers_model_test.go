@@ -176,3 +176,37 @@ func TestTriggerWebhookID(t *testing.T) {
 		t.Errorf("idWebhook = %s, se esperaba el ID %s del trigger sin id_webhook", got.Hex(), legacy.ID.Hex())
 	}
 }
+
+func TestNewTriggerModel_AgentPendingAndCode(t *testing.T) {
+	t.Parallel()
+
+	newAgentTrigger := func(opts *models.TriggerOptionalData) models.TriggersModelType {
+		trigger, err := models.NewTriggerModel(
+			"TRIGGER-AGENT", "Agente", "Creado por el agente",
+			primitive.NewObjectID(), "ASSET-BTC", "Bitcoin",
+			primitive.NewObjectID(), "ACTION-BUY", "Compra",
+			30, primitive.NewObjectID(), "1-DAY", "1 Dia",
+			agentOwner, testVisibility,
+			opts,
+		)
+		testutil.RequireEmptyError(t, err)
+		return trigger
+	}
+
+	code := `alert("{\"idWebhook\":\"{{ID_WEBHOOK}}\"}") // {{ID_WEBHOOK}}`
+	trigger := newAgentTrigger(&models.TriggerOptionalData{PineCode: &code})
+	if trigger.TagStatus != cmm.GenericStatusPendingForApprove.Tag {
+		t.Errorf("status = %s, el trigger de un agente nace pendiente de aprobacion", trigger.TagStatus)
+	}
+	want := `alert("{\"idWebhook\":\"` + trigger.IDWebhook.Hex() + `\"}") // ` + trigger.IDWebhook.Hex()
+	if trigger.PineCode == nil || *trigger.PineCode != want {
+		t.Errorf("code = %v, se esperaba el placeholder reemplazado: %s", trigger.PineCode, want)
+	}
+
+	// El super usuario actualiza el trigger del agente: queda activo y conserva el dueño
+	active := cmm.GenericStatusActive
+	updated := newAgentTrigger(&models.TriggerOptionalData{Status: &active})
+	if updated.TagStatus != cmm.GenericStatusActive.Tag || updated.IDUser != agentOwner.IDUser {
+		t.Errorf("trigger actualizado = %s de %s, debe quedar activo y conservar el dueño", updated.TagStatus, updated.IDUser.Hex())
+	}
+}

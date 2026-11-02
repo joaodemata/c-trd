@@ -35,8 +35,11 @@ func ListTriggersDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		// Los triggers inactivos y reemplazados solo se listan con showReferences
-		if status.Tag != cmm.GenericStatusActive.Tag && !filters.ShowReferences {
+		// Los triggers inactivos y reemplazados solo se listan con showReferences. Los pendientes de aprobacion y los no
+		// aprobados si, para revisar lo que crearon los agentes
+		reviewable := status.Tag == cmm.GenericStatusPendingForApprove.Tag || status.Tag == cmm.GenericStatusNotApproved.Tag
+		listable := status.Tag == cmm.GenericStatusActive.Tag || reviewable
+		if !listable && !filters.ShowReferences {
 			res.Error("FAIL", "Para listar triggers inactivos o reemplazados se debe enviar showReferences=true", "DVLIS003", filters.TagStatus, cmm.NewEmptyErrorHandler())
 			return
 		}

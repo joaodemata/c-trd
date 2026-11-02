@@ -18,33 +18,30 @@ const invalidCredentialsMessage = "Usuario o contraseña inválidos"
 // Hash con formato valido que se verifica cuando el usuario no existe, asi el login tarda lo mismo exista o no
 var dummyPasswordHash = fmt.Sprintf("pbkdf2_sha256$%d$%s$%s", cmm.PasswordHashIterations, strings.Repeat("A", 22), strings.Repeat("A", 43))
 
-// validateUserIsUnique valida que el username y el email (si viene) no los use otro usuario. Si falla responde al cliente
-func validateUserIsUnique(res *cmm.ResponseHandler, username string, email *string) bool {
+// validateUserIsUnique valida que el username y el email (si viene) no los use otro usuario. El middleware responde el
+// error retornado
+func validateUserIsUnique(username string, email *string) *cmm.ErrorHandler {
 	existing, err := services.GetUserByUsernameService(username)
 	if !err.IsEmtpy() {
-		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return false
+		return err
 	}
 	if !existing.ID.IsZero() {
-		res.Error("FAIL", "Ya existe un usuario con el username enviado", "DVAUT004", username, cmm.NewEmptyErrorHandler())
-		return false
+		return cmm.NewErrorHandler(fmt.Errorf("username %s", username), fmt.Sprintf("Ya existe un usuario con el username enviado: %s", username), cmm.LevelError, "DVAUT004")
 	}
 
 	if email == nil {
-		return true
+		return cmm.NewEmptyErrorHandler()
 	}
 
 	existing, err = services.GetUserByEmailService(*email)
 	if !err.IsEmtpy() {
-		res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
-		return false
+		return err
 	}
 	if !existing.ID.IsZero() {
-		res.Error("FAIL", "Ya existe un usuario con el email enviado", "DVAUT005", *email, cmm.NewEmptyErrorHandler())
-		return false
+		return cmm.NewErrorHandler(fmt.Errorf("email %s", *email), fmt.Sprintf("Ya existe un usuario con el email enviado: %s", *email), cmm.LevelError, "DVAUT005")
 	}
 
-	return true
+	return cmm.NewEmptyErrorHandler()
 }
 
 // AuthDataValidate busca la sesion no vencida del token que dejo cmm.AuthenticateRequestMiddleware. La sesion trae la
@@ -212,8 +209,9 @@ func CreateUserDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		privilege, ok := findCatalog(res, payload.IdTypePrivilege, cmm.CatalogTypeUserPrivileges)
-		if !ok {
+		privilege, err := findCatalog(payload.IdTypePrivilege, cmm.CatalogTypeUserPrivileges)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
 		}
 		if privilege.ID.IsZero() {
@@ -225,7 +223,9 @@ func CreateUserDataValidate(next http.Handler) http.Handler {
 			return
 		}
 
-		if !validateUserIsUnique(res, payload.Username, payload.Email) {
+		err = validateUserIsUnique(payload.Username, payload.Email)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
 		}
 
