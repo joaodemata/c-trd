@@ -6,6 +6,7 @@ import (
 	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
+	"time"
 
 	cmm "c_trd/common"
 
@@ -72,7 +73,7 @@ func CreateTriggerController() http.HandlerFunc {
 			action.ID, action.Tag, action.Name,
 			payload.MaxCandlestickQty, timeframe.ID, timeframe.Tag, timeframe.Name,
 			authSession.RecordOwnerData, *visibility,
-			&models.TriggerOptionalData{Conditions: conditions},
+			&models.TriggerOptionalData{Conditions: conditions, PineCode: payload.Code},
 		)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
@@ -140,7 +141,14 @@ func UpdateTriggerController() http.HandlerFunc {
 		idReferenceRoot := models.TriggerReferenceRoot(*previousTrigger)
 		idWebhook := models.TriggerWebhookID(*previousTrigger)
 
-		// El pine_code, el usuario y la visibilidad no se envian en la peticion, se conservan los del trigger anterior
+		// El usuario y la visibilidad no se envian en la peticion, se conservan los del trigger anterior.
+		// El codigo se conserva solo si no se envia uno nuevo
+		code := previousTrigger.PineCode
+		if payload.Code != nil {
+			code = payload.Code
+		}
+		// El super usuario es quien aprueba: si edita un trigger pendiente de un agente, queda activo
+		active := cmm.GenericStatusActive
 		trigger, err := models.NewTriggerModel(
 			payload.Tag, payload.Name, payload.Description,
 			asset.ID, asset.Tag, asset.Name,
@@ -152,7 +160,8 @@ func UpdateTriggerController() http.HandlerFunc {
 				IdWebhook:       &idWebhook,
 				IdReference:     &idReference,
 				IdReferenceRoot: &idReferenceRoot,
-				PineCode:        previousTrigger.PineCode,
+				PineCode:        code,
+				Status:          &active,
 			},
 		)
 		if !err.IsEmtpy() {
@@ -323,5 +332,207 @@ func CreateConditionController() http.HandlerFunc {
 		}
 
 		res.Send(http.StatusCreated, "SUCCESS", "Condicion creada exitosamente", "COPR004", data)
+	}
+}
+
+// ---------- Agentes ----------
+
+// CreateAgentThesisController agrega una tesis al final de la cola de los agentes
+func CreateAgentThesisController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateAgentThesisFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		action, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "action")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		thesis, err := models.NewAgentThesisModel(
+			payload.Thesis,
+			asset.ID, asset.Tag, asset.Name,
+			action.ID, action.Tag, action.Name,
+			authSession.RecordOwnerData,
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idThesis, err := services.CreateAgentThesisService(thesis)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Tesis agregada a la cola de los agentes", "COPR006", map[string]any{"idThesis": idThesis})
+	}
+}
+
+// DeleteAgentThesisController saca de la cola una tesis pendiente (borrado logico)
+func DeleteAgentThesisController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		thesis, err := cmm.GetFromRequestContext[*models.AgentThesesModelType](r, "thesis")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.DeleteAgentThesisService(thesis.ID, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Tesis borrada de la cola", "COPR007", map[string]any{"idThesis": thesis.ID.Hex()})
+	}
+}
+
+// agentRunStart corrida creada y la tesis que debe procesar el runner
+type agentRunStart struct {
+	IDRun  string                      `json:"idRun"`
+	Thesis models.AgentThesesModelType `json:"thesis"`
+}
+
+// StartAgentRunController toma las tesis mas antiguas de la cola (maximo cmm.AgentThesesPerRun) y crea una corrida por
+// cada una a nombre del usuario agente. Sin tesis pendientes responde la lista vacia
+func StartAgentRunController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		theses, err := services.ClaimAgentThesesService(time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		runs := make([]agentRunStart, 0, len(theses))
+		for _, thesis := range theses {
+			run, err := models.NewAgentRunModel(thesis, authSession.RecordOwnerData)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+
+			idRun, err := services.CreateAgentRunService(run)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+			runs = append(runs, agentRunStart{IDRun: idRun, Thesis: thesis})
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Corridas iniciadas", "COPR008", map[string]any{"runs": runs})
+	}
+}
+
+// FinishAgentRunController cierra la corrida con sus pasos y deja la tesis procesada o de vuelta en la cola
+func FinishAgentRunController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		finish, err := cmm.GetFromRequestContext[*services.AgentRunFinish](r, "runFinish")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.FinishAgentRunService(*finish, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Corrida cerrada", "COPR009", map[string]any{"idRun": finish.IDRun.Hex()})
+	}
+}
+
+// ReviewConditionController aprueba o rechaza una condicion pendiente de aprobacion
+func ReviewConditionController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.ReviewConditionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		condition, err := cmm.GetFromRequestContext[*models.ConditionsModelType](r, "condition")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		approve := payload.Decision == fv.ReviewDecisionApprove
+		err = services.ReviewConditionService(condition.ID, approve, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{"idCondition": condition.ID.Hex(), "decision": payload.Decision}
+		res.Send(http.StatusOK, "SUCCESS", "Condicion revisada", "COPR010", data)
+	}
+}
+
+// ReviewTriggerController aprueba o rechaza un trigger pendiente de aprobacion. Al aprobarlo tambien aprueba sus
+// condiciones pendientes
+func ReviewTriggerController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.ReviewTriggerFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		trigger, err := cmm.GetFromRequestContext[*models.TriggersModelType](r, "trigger")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idConditions := make([]primitive.ObjectID, 0, len(trigger.Conditions))
+		for _, condition := range trigger.Conditions {
+			idConditions = append(idConditions, condition.IDCondition)
+		}
+
+		approve := payload.Decision == fv.ReviewDecisionApprove
+		err = services.ReviewTriggerService(trigger.ID, approve, idConditions, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{"idTrigger": trigger.ID.Hex(), "decision": payload.Decision}
+		res.Send(http.StatusOK, "SUCCESS", "Trigger revisado", "COPR011", data)
 	}
 }

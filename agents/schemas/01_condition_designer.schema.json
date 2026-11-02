@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConditionDesignerOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "reusedConditions", "conditions", "technicalHints", "missingCallbacks", "questions"],
+  "properties": {
+    "status": { "type": "string", "enum": ["OK", "NEEDS_INPUT"] },
+    "reusedConditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["idCondition", "rationale"],
+        "properties": {
+          "idCondition": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tag", "name", "description", "idTypeCondition", "idApi", "parameters",
+                     "callbackFunction", "parametersCallback", "intervalSeconds",
+                     "idTypeVisibility", "allowedUsers", "rationale", "directionCheck"],
+        "properties": {
+          "tag": { "type": "string", "pattern": "^[A-Z0-9-]{3,60}$" },
+          "name": { "type": "string", "maxLength": 80 },
+          "description": { "type": "string", "maxLength": 300 },
+          "idTypeCondition": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "idApi": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+          "callbackFunction": { "type": "string" },
+          "parametersCallback": { "type": "object", "additionalProperties": { "type": "string" } },
+          "intervalSeconds": { "type": "integer", "minimum": 900 },
+          "idTypeVisibility": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "allowedUsers": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-f0-9]{24}$" } },
+          "rationale": { "type": "string" },
+          "directionCheck": { "type": "string", "enum": ["SUPPORTS_ACTION", "RISK_FILTER"] }
+        }
+      }
+    },
+    "technicalHints": { "type": "array", "items": { "type": "string" } },
+    "missingCallbacks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proposedId", "provider", "dataNeeded", "evaluationRule", "parameters"],
+        "properties": {
+          "proposedId": { "type": "string" },
+          "provider": { "type": "string" },
+          "dataNeeded": { "type": "string" },
+          "evaluationRule": { "type": "string" },
+          "parameters": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "questions": { "type": "array", "items": { "type": "string" } }
+  }
+}

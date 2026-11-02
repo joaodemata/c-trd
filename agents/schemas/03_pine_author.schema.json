@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PineAuthorOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pineIndicator", "pineStrategy", "riskLogic", "alertSetup", "changes"],
+  "properties": {
+    "pineIndicator": { "type": "string", "description": "Pine v6 indicator() that calls alert() with the webhook JSON" },
+    "pineStrategy": { "type": "string", "description": "Pine v6 strategy() twin with identical logic, for backtesting" },
+    "riskLogic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stopLossMethod", "takeProfitMethod", "plannedRR"],
+      "properties": {
+        "stopLossMethod": { "type": "string" },
+        "takeProfitMethod": { "type": "string" },
+        "plannedRR": { "type": "number", "minimum": 2 }
+      }
+    },
+    "alertSetup": {
+      "type": "string",
+      "description": "Short instructions for creating the alert in TradingView (condition, frequency, webhook URL)"
+    },
+    "changes": { "type": "array", "items": { "type": "string" } }
+  }
+}

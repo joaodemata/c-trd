@@ -15,9 +15,9 @@ func hookRoutes(server *http.ServeMux) *http.ServeMux  {
 	api := cmm.NewRouter(server)
 	// Routes
 
-	// Ruta para recibir los triggers de trading view 
+	// Ruta generica para recibir los triggers de sistemas externos (TradingView u otros)
 	// Controller, format, data, etc
-	api.Post("/hook/trading_view", c.TradingViewHookController(),  fv.TradingViewTriggerFormatValidate, dv.TradingViewHookDataValidate)
+	api.Post("/hook/trigger", c.TriggerHookController(),  fv.TriggerHookFormatValidate, dv.TriggerHookDataValidate)
 	
 	return server
 

@@ -15,10 +15,22 @@ func operationRoutes(server *http.ServeMux) *http.ServeMux {
 	// Routes
 	api.Post("/operation/create/oportunity", controllers.CreateOportunityController())
 	// Sesion -> privilegio -> format validates (trigger y visibilidad del mismo body) -> data validates
-	api.Post("/operation/create/trigger", controllers.CreateTriggerController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateTriggerFormatValidate, fv.VisibilityFormatValidate, dv.VisibilityDataValidate, dv.CreateTriggerDataValidate)
+	// El agente tambien crea triggers y condiciones: nacen pendientes de revision del super usuario
+	api.Post("/operation/create/trigger", controllers.CreateTriggerController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag, cmm.UserPrivilegeAgent.Tag), fv.CreateTriggerFormatValidate, fv.VisibilityFormatValidate, dv.VisibilityDataValidate, dv.CreateTriggerDataValidate)
 	// Reemplaza el trigger: el anterior queda borrado e inactivo y el nuevo apunta a el (id_reference e id_reference_root)
 	api.Put("/operation/update/trigger", controllers.UpdateTriggerController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.UpdateTriggerFormatValidate, dv.UpdateTriggerDataValidate)
-	api.Post("/operation/create/condition", controllers.CreateConditionController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateConditionFormatValidate, fv.VisibilityFormatValidate, dv.VisibilityDataValidate, dv.CreateConditionDataValidate)
+	api.Post("/operation/create/condition", controllers.CreateConditionController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag, cmm.UserPrivilegeAgent.Tag), fv.CreateConditionFormatValidate, fv.VisibilityFormatValidate, dv.VisibilityDataValidate, dv.CreateConditionDataValidate)
+
+	// Revision del super usuario de lo que crean los agentes. Rechazar borra logicamente; aprobar un trigger aprueba sus condiciones
+	api.Put("/operation/review/condition", controllers.ReviewConditionController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.ReviewConditionFormatValidate, dv.ReviewConditionDataValidate)
+	api.Put("/operation/review/trigger", controllers.ReviewTriggerController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.ReviewTriggerFormatValidate, dv.ReviewTriggerDataValidate)
+
+	// Cola de tesis de los agentes (super usuario)
+	api.Post("/operation/create/agent_thesis", controllers.CreateAgentThesisController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateAgentThesisFormatValidate, dv.CreateAgentThesisDataValidate)
+	api.Put("/operation/delete/agent_thesis", controllers.DeleteAgentThesisController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.DeleteAgentThesisFormatValidate, dv.DeleteAgentThesisDataValidate)
+	// Corridas del runner de los viernes (usuario agente): toma hasta 5 tesis FIFO y cierra cada corrida
+	api.Post("/operation/agent/start_run", controllers.StartAgentRunController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeAgent.Tag))
+	api.Put("/operation/agent/finish_run", controllers.FinishAgentRunController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeAgent.Tag), fv.FinishAgentRunFormatValidate, dv.FinishAgentRunDataValidate)
 
 	// CSV de Google Trends por asset: se sube manualmente y las condiciones lo leen desde el mismo servidor
 	api.Post("/operation/google_trends/upload", controllers.GoogleTrendsUploadController(), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.GoogleTrendsUploadFormatValidate, dv.GoogleTrendsUploadDataValidate)

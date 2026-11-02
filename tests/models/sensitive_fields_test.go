@@ -109,6 +109,8 @@ func TestModels_JSONKeysCamelCase(t *testing.T) {
 		{"triggers", models.TriggersModelType{}},
 		{"users", models.UsersModelType{}},
 		{"sessions", models.SessionsModelType{}},
+		{"agent_theses", models.AgentThesesModelType{}},
+		{"agent_runs", models.AgentRunsModelType{Steps: []models.AgentRunStep{{}}}},
 	}
 
 	for _, tt := range tests {

@@ -9,14 +9,15 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func TradingViewHookDataValidate(next http.Handler) http.Handler {
+// TriggerHookDataValidate valida el trigger del webhook y deja en el contexto los datos para el controller
+func TriggerHookDataValidate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Creamos el response
 		res := cmm.NewResponseHandler(w)
 
 		// Extraemos el payload
-		// payload, ok := r.Context().Value("payload").(*fv.TradingViewTriggerFormat)
-		payload, err := cmm.GetFromRequestContext[*fv.TradingViewTriggerFormat](r, "payload")
+		// payload, ok := r.Context().Value("payload").(*fv.TriggerHookFormat)
+		payload, err := cmm.GetFromRequestContext[*fv.TriggerHookFormat](r, "payload")
 
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, "DVHOOK001", nil, err)
@@ -40,6 +41,16 @@ func TradingViewHookDataValidate(next http.Handler) http.Handler {
 
 		if triggerData.ID.IsZero() {
 			res.Error("FAIL", "El trigger enviado no existe", "DVHOOK002", payload.IdWebhook, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		// Un trigger creado por un agente no dispara oportunidades hasta que el super usuario lo apruebe
+		if triggerData.TagStatus == cmm.GenericStatusPendingForApprove.Tag {
+			res.Error("FAIL", "El trigger esta pendiente de aprobacion", "DVHOOK005", payload.IdWebhook, cmm.NewEmptyErrorHandler())
+			return
+		}
+		if triggerData.TagStatus == cmm.GenericStatusNotApproved.Tag {
+			res.Error("FAIL", "El trigger no fue aprobado", "DVHOOK006", payload.IdWebhook, cmm.NewEmptyErrorHandler())
 			return
 		}
 

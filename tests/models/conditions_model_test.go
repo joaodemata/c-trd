@@ -102,3 +102,28 @@ func TestNewConditionModel_MinInterval(t *testing.T) {
 	_, err := newTestCondition(cmm.ConditionMinIntervalSeconds-1, nil)
 	testutil.RequireTrackingCode(t, err, "MCONE001")
 }
+
+func TestNewConditionModel_AgentPendingForApprove(t *testing.T) {
+	t.Parallel()
+
+	request := providers.HTTPRequestConfig{URL: "https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest", Method: "GET"}
+	condition, err := models.NewConditionModel(
+		"FNG-BELOW-25", "Miedo extremo", "Fear and Greed menor a 25",
+		primitive.NewObjectID(), "CoinMarketCap",
+		typeCondition,
+		primitive.NewObjectID(),
+		models.ConditionCronjobData{HttpRequest: request, CallbackFunction: "FearAndGreedBelow", IntervalSeconds: 3600},
+		agentOwner, testVisibility,
+	)
+	testutil.RequireEmptyError(t, err)
+
+	if condition.IDStatus != cmm.GenericStatusPendingForApprove.ID || condition.TagStatus != cmm.GenericStatusPendingForApprove.Tag {
+		t.Errorf("status = %s, la condicion de un agente nace pendiente de aprobacion", condition.TagStatus)
+	}
+
+	superUser, err := newTestCondition(3600, nil)
+	testutil.RequireEmptyError(t, err)
+	if superUser.TagStatus != cmm.GenericStatusInactive.Tag {
+		t.Errorf("status = %s, la condicion del super usuario nace inactiva", superUser.TagStatus)
+	}
+}

@@ -42,6 +42,8 @@ func GetCronjobConditionsService() ([]models.ConditionsModelType, *cmm.ErrorHand
 		"is_webhook_only": false,
 		"is_processing":   false,
 		"logical_delete":  false,
+		// Las condiciones pendientes de aprobacion o no aprobadas no se evaluan (no consumen APIs externas)
+		"tag_status": bson.M{"$nin": []string{cmm.GenericStatusPendingForApprove.Tag, cmm.GenericStatusNotApproved.Tag}},
 	}
 
 	// Opciones del Query
@@ -91,6 +93,12 @@ func GetConditionsByIDsService(ids []primitive.ObjectID) ([]models.ConditionsMod
 		"id_status":     1,
 		"tag_status":    1,
 		"status":        1,
+		// Para validar combinaciones imposibles del trigger
+		"id_api":              1,
+		"http_request":        1,
+		"callback_function":   1,
+		"parameters_callback": 1,
+		"interval_seconds":    1,
 	})
 
 	cursor, err := models.ConditionsModel.Find(ctx, filter, opts)
