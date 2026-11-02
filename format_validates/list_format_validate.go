@@ -42,6 +42,16 @@ type ListTriggersFormat struct {
 // Se inyecta en "filters" porque "payload" lo ocupa la paginacion
 var ListTriggersFormatValidate = common.FormatValidateMiddlewareWithKey[ListTriggersFormat]("filters")
 
+// ListConditionsFormat filtro opcional por status del listado de condiciones, se concatena con
+// cmm.PaginationFormatValidate. Se envia idStatus o tagStatus, no ambos; tagStatus es solo para el super usuario
+type ListConditionsFormat struct {
+	IdStatus  string `json:"idStatus" in:"query" validate:"omitempty,mongodb,excluded_with=TagStatus"`
+	TagStatus string `json:"tagStatus" in:"query" validate:"omitempty,max=64"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListConditionsFormatValidate = common.FormatValidateMiddlewareWithKey[ListConditionsFormat]("filters")
+
 // ListAgentThesesFormat filtro propio del listado de tesis, se concatena con cmm.PaginationFormatValidate
 type ListAgentThesesFormat struct {
 	TagStatus string `json:"tagStatus" in:"query" validate:"omitempty,oneof=THESIS-PENDING THESIS-PROCESSING THESIS-PROCESSED"`

@@ -157,7 +157,14 @@ func ListConditionsController() http.HandlerFunc {
 			return
 		}
 
-		conditions, total, err := services.GetConditionsService(payload.Limit, payload.Page, payload.Search)
+		// Status permitidos segun el privilegio y el filtro, los arma ListConditionsDataValidate
+		idStatuses, err := cmm.GetFromRequestContext[[]primitive.ObjectID](r, "idStatuses")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE014", nil, err)
+			return
+		}
+
+		conditions, total, err := services.GetConditionsService(payload.Limit, payload.Page, payload.Search, idStatuses)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return

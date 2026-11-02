@@ -546,9 +546,9 @@ func GetCatalogsByTypeService(typeCatalog string) ([]models.CatalogsModelType, *
 
 // GetConditionsService lista paginadas las condiciones no borradas, las mas recientes primero. No retorna la peticion
 // (http_request) ni los campos internos del cronjob. La busqueda es literal (sin regex) sobre el nombre, la descripcion,
-// el proveedor y el callback.
+// el proveedor y el callback. Con idStatuses solo se listan las condiciones con alguno de esos status; vacio no filtra.
 // Retorna: las condiciones de la pagina, el total de documentos encontrados (para paginación) y el error handler
-func GetConditionsService(Limit int, Page int, Search string) ([]models.ConditionsModelType, int64, *cmm.ErrorHandler) {
+func GetConditionsService(Limit int, Page int, Search string, idStatuses []primitive.ObjectID) ([]models.ConditionsModelType, int64, *cmm.ErrorHandler) {
 	result := make([]models.ConditionsModelType, 0)
 
 	// Validaciones de seguridad para la paginación
@@ -563,6 +563,9 @@ func GetConditionsService(Limit int, Page int, Search string) ([]models.Conditio
 	defer cancel()
 
 	filter := bson.M{"logical_delete": false}
+	if len(idStatuses) > 0 {
+		filter["id_status"] = bson.M{"$in": idStatuses}
+	}
 	if Search != "" {
 		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
 		filter["$or"] = []bson.M{
