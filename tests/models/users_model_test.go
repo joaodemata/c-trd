@@ -224,3 +224,22 @@ func TestMissingUsers(t *testing.T) {
 		})
 	}
 }
+
+// agentOwner usuario agente (claude) de las pruebas
+var agentOwner = models.RecordOwnerData{
+	IDUser:            primitive.NewObjectID(),
+	IDTypePrivilege:   cmm.UserPrivilegeAgent.ID,
+	TagTypePrivilege:  cmm.UserPrivilegeAgent.Tag,
+	NameTypePrivilege: cmm.UserPrivilegeAgent.Name,
+}
+
+func TestIsAgentOwner(t *testing.T) {
+	t.Parallel()
+
+	if !models.IsAgentOwner(agentOwner) {
+		t.Error("el usuario con privilegio AGENT debe reconocerse como agente")
+	}
+	if models.IsAgentOwner(testOwner) {
+		t.Error("el super usuario no es un agente")
+	}
+}

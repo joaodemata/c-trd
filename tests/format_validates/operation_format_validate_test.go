@@ -14,6 +14,20 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// requireCode valida el codigo del trigger: nil si no se envio
+func requireCode(t *testing.T, got *string, want *string) {
+	t.Helper()
+	if want == nil {
+		if got != nil {
+			t.Errorf("code = %q, se esperaba nil", *got)
+		}
+		return
+	}
+	if got == nil || *got != *want {
+		t.Errorf("code = %v, se esperaba %q", got, *want)
+	}
+}
+
 // validTriggerBody body valido para crear un trigger, cada caso modifica un campo
 func validTriggerBody() map[string]any {
 	return map[string]any{
@@ -31,6 +45,7 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 	t.Parallel()
 
 	repeatedID := primitive.NewObjectID().Hex()
+	pineCode := "//@version=6\nindicator(\"RSI\")"
 
 	tests := []struct {
 		name           string
@@ -38,6 +53,7 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 		wantNext       bool
 		wantTracking   string
 		wantConditions int
+		wantCode       *string
 	}{
 		{name: "sin condiciones", edit: func(map[string]any) {}, wantNext: true},
 		{name: "condiciones vacias", edit: func(b map[string]any) { b["conditions"] = []string{} }, wantNext: true},
@@ -56,6 +72,9 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 		{name: "velas como texto no numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "seis" }, wantTracking: "CC001"},
 		{name: "condicion que no es ObjectID", edit: func(b map[string]any) { b["conditions"] = []string{"abc"} }, wantTracking: "CC003"},
 		{name: "condicion repetida", edit: func(b map[string]any) { b["conditions"] = []string{repeatedID, repeatedID} }, wantTracking: "CC003"},
+		{name: "con codigo", edit: func(b map[string]any) { b["code"] = pineCode }, wantNext: true, wantCode: &pineCode},
+		{name: "codigo muy largo", edit: func(b map[string]any) { b["code"] = strings.Repeat("a", 65537) }, wantTracking: "CC003"},
+		{name: "codigo que no es texto", edit: func(b map[string]any) { b["code"] = 5 }, wantTracking: "CC001"},
 	}
 
 	for _, tt := range tests {
@@ -94,6 +113,7 @@ func TestCreateTriggerFormatValidate(t *testing.T) {
 			if len(payload.Conditions) != tt.wantConditions {
 				t.Errorf("conditions = %d, se esperaban %d", len(payload.Conditions), tt.wantConditions)
 			}
+			requireCode(t, payload.Code, tt.wantCode)
 		})
 	}
 }
@@ -102,12 +122,14 @@ func TestUpdateTriggerFormatValidate(t *testing.T) {
 	t.Parallel()
 
 	idTrigger := primitive.NewObjectID().Hex()
+	pineCode := "//@version=6"
 
 	tests := []struct {
 		name         string
 		edit         func(body map[string]any)
 		wantNext     bool
 		wantTracking string
+		wantCode     *string
 	}{
 		{name: "valido", edit: func(map[string]any) {}, wantNext: true},
 		{name: "con condiciones", wantNext: true, edit: func(b map[string]any) {
@@ -120,6 +142,7 @@ func TestUpdateTriggerFormatValidate(t *testing.T) {
 		{name: "cero velas", edit: func(b map[string]any) { b["maxCandlestickQty"] = 0 }, wantTracking: "CC003"},
 		{name: "velas como texto numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "6" }, wantNext: true},
 		{name: "velas como texto no numerico", edit: func(b map[string]any) { b["maxCandlestickQty"] = "seis" }, wantTracking: "CC001"},
+		{name: "con codigo", edit: func(b map[string]any) { b["code"] = pineCode }, wantNext: true, wantCode: &pineCode},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +180,7 @@ func TestUpdateTriggerFormatValidate(t *testing.T) {
 			if payload.IdTrigger != idTrigger || payload.Tag != "TRIGGER-RSI" || payload.MaxCandlestickQty != 6 {
 				t.Errorf("payload = %+v, se esperaba el trigger %s con tag TRIGGER-RSI y 6 velas", payload, idTrigger)
 			}
+			requireCode(t, payload.Code, tt.wantCode)
 		})
 	}
 }
@@ -310,6 +334,151 @@ func TestVisibilityFormatValidate(t *testing.T) {
 			// El payload del trigger sigue disponible para su data validate
 			_, errCtx = cmm.GetFromRequestContext[*fv.CreateTriggerFormat](spy.Request, "payload")
 			testutil.RequireEmptyError(t, errCtx)
+		})
+	}
+}
+
+// runFormatValidate envia el body al middleware y retorna si llamo a next y el tracking de la respuesta
+func runFormatValidate(t *testing.T, middleware func(http.Handler) http.Handler, body map[string]any) (*testutil.NextSpy, string) {
+	t.Helper()
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(encoded)))
+	rec := httptest.NewRecorder()
+	spy := &testutil.NextSpy{}
+	middleware(spy).ServeHTTP(rec, req)
+	if spy.Called {
+		return spy, ""
+	}
+	return spy, testutil.DecodeResponse(t, rec).Tracking
+}
+
+func TestCreateAgentThesisFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	valid := func() map[string]any {
+		return map[string]any{
+			"idAsset":  primitive.NewObjectID().Hex(),
+			"idAction": primitive.NewObjectID().Hex(),
+			"thesis":   "BTC en miedo extremo sobre el soporte semanal, horizonte 3 meses",
+		}
+	}
+
+	tests := []struct {
+		name         string
+		edit         func(body map[string]any)
+		wantTracking string
+	}{
+		{"valida", func(map[string]any) {}, ""},
+		{"sin tesis", func(b map[string]any) { delete(b, "thesis") }, "CC003"},
+		{"tesis corta", func(b map[string]any) { b["thesis"] = "comprar" }, "CC003"},
+		{"tesis larga", func(b map[string]any) { b["thesis"] = strings.Repeat("a", 2001) }, "CC003"},
+		{"asset que no es ObjectID", func(b map[string]any) { b["idAsset"] = "BTC" }, "CC003"},
+		{"sin accion", func(b map[string]any) { delete(b, "idAction") }, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			body := valid()
+			tt.edit(body)
+			_, tracking := runFormatValidate(t, fv.CreateAgentThesisFormatValidate, body)
+			if tracking != tt.wantTracking {
+				t.Errorf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
+		})
+	}
+}
+
+func TestFinishAgentRunFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	valid := func() map[string]any {
+		return map[string]any{
+			"idRun":     primitive.NewObjectID().Hex(),
+			"tagStatus": "RUN-SUCCESS",
+			"steps": []map[string]any{{
+				"agent": "CONDITION_DESIGNER", "attempt": 1, "problems": []string{},
+				"output": map[string]any{"status": "OK", "conditions": []any{map[string]any{"intervalSeconds": "3600", "parametersCallback": map[string]any{"threshold": "25"}}}},
+			}},
+			"conditions": []string{primitive.NewObjectID().Hex()},
+			"idTrigger":  primitive.NewObjectID().Hex(),
+		}
+	}
+
+	tests := []struct {
+		name         string
+		edit         func(body map[string]any)
+		wantTracking string
+	}{
+		{"valida", func(map[string]any) {}, ""},
+		{"sin pasos ni trigger", func(b map[string]any) { delete(b, "steps"); delete(b, "idTrigger"); delete(b, "conditions") }, ""},
+		{"con requeue", func(b map[string]any) { b["tagStatus"] = "RUN-FAILED"; b["requeue"] = true; b["error"] = "sin uso" }, ""},
+		{"status en ejecucion", func(b map[string]any) { b["tagStatus"] = "RUN-RUNNING" }, "CC003"},
+		{"agente desconocido", func(b map[string]any) {
+			b["steps"] = []map[string]any{{"agent": "OTRO", "attempt": 1}}
+		}, "CC003"},
+		{"intento cero", func(b map[string]any) {
+			b["steps"] = []map[string]any{{"agent": "PINE_AUTHOR", "attempt": 0}}
+		}, "CC003"},
+		{"condicion repetida", func(b map[string]any) {
+			id := primitive.NewObjectID().Hex()
+			b["conditions"] = []string{id, id}
+		}, "CC003"},
+		{"error muy largo", func(b map[string]any) { b["error"] = strings.Repeat("e", 4001) }, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			body := valid()
+			tt.edit(body)
+			spy, tracking := runFormatValidate(t, fv.FinishAgentRunFormatValidate, body)
+			if tracking != tt.wantTracking {
+				t.Fatalf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
+			if tt.name != "valida" {
+				return
+			}
+
+			// La salida del agente se guarda tal cual, sin convertir los textos numericos
+			payload, errCtx := cmm.GetFromRequestContext[*fv.FinishAgentRunFormat](spy.Request, "payload")
+			testutil.RequireEmptyError(t, errCtx)
+			conditions := payload.Steps[0].Output["conditions"].([]any)
+			if conditions[0].(map[string]any)["intervalSeconds"] != "3600" {
+				t.Errorf("output = %v, se esperaba conservar el texto", payload.Steps[0].Output)
+			}
+		})
+	}
+}
+
+func TestReviewFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		middleware   func(http.Handler) http.Handler
+		body         map[string]any
+		wantTracking string
+	}{
+		{"aprobar condicion", fv.ReviewConditionFormatValidate, map[string]any{"idCondition": primitive.NewObjectID().Hex(), "decision": "APPROVE"}, ""},
+		{"rechazar trigger", fv.ReviewTriggerFormatValidate, map[string]any{"idTrigger": primitive.NewObjectID().Hex(), "decision": "REJECT"}, ""},
+		{"decision desconocida", fv.ReviewTriggerFormatValidate, map[string]any{"idTrigger": primitive.NewObjectID().Hex(), "decision": "PENDING"}, "CC003"},
+		{"sin condicion", fv.ReviewConditionFormatValidate, map[string]any{"decision": "APPROVE"}, "CC003"},
+		{"borrar tesis", fv.DeleteAgentThesisFormatValidate, map[string]any{"idThesis": primitive.NewObjectID().Hex()}, ""},
+		{"borrar tesis sin id", fv.DeleteAgentThesisFormatValidate, map[string]any{}, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, tracking := runFormatValidate(t, tt.middleware, tt.body)
+			if tracking != tt.wantTracking {
+				t.Errorf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
 		})
 	}
 }
