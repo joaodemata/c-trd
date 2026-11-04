@@ -18,7 +18,7 @@ func ListOportunitiesController() http.HandlerFunc {
 		res := cmm.NewResponseHandler(w)
 
 		// Extraemos el payload
-		// payload, ok := r.Context().Value("payload").(*fv.TradingViewTriggerFormat)
+		// payload, ok := r.Context().Value("payload").(*fv.TriggerHookFormat)
 		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
 
 		if !err.IsEmtpy() {
@@ -157,7 +157,14 @@ func ListConditionsController() http.HandlerFunc {
 			return
 		}
 
-		conditions, total, err := services.GetConditionsService(payload.Limit, payload.Page, payload.Search)
+		// Status permitidos segun el privilegio y el filtro, los arma ListConditionsDataValidate
+		idStatuses, err := cmm.GetFromRequestContext[[]primitive.ObjectID](r, "idStatuses")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE014", nil, err)
+			return
+		}
+
+		conditions, total, err := services.GetConditionsService(payload.Limit, payload.Page, payload.Search, idStatuses)
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return
@@ -212,5 +219,68 @@ func ListTriggersController() http.HandlerFunc {
 		}
 
 		res.Send(http.StatusOK, "SUCCESS", "Listado de triggers.", "CLIS007", data)
+	}
+}
+
+// ListAgentThesesController lista la cola de tesis de los agentes en orden FIFO
+func ListAgentThesesController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE010", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListAgentThesesFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE011", nil, err)
+			return
+		}
+
+		theses, total, err := services.GetAgentThesesService(payload.Limit, payload.Page, payload.Search, filters.TagStatus)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de tesis.", "CLIS008", map[string]any{"theses": theses, "page": total})
+	}
+}
+
+// ListAgentRunsController lista las corridas de los agentes, las mas recientes primero, con los pasos de cada agente
+func ListAgentRunsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE012", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListAgentRunsFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE013", nil, err)
+			return
+		}
+
+		var idThesis primitive.ObjectID
+		if filters.IdThesis != "" {
+			idThesis, err = cmm.ParseHexToObjectId(filters.IdThesis)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+
+		runs, total, err := services.GetAgentRunsService(payload.Limit, payload.Page, payload.Search, filters.TagStatus, idThesis)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de corridas.", "CLIS009", map[string]any{"runs": runs, "page": total})
 	}
 }

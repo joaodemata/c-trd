@@ -12,7 +12,8 @@ type RiskManagementFormat struct {
 	Probability *float64 `json:"probability,omitempty" validate:"omitempty,gte=0"`
 }
 
-type TradingViewTriggerFormat struct {
+// TriggerHookFormat alerta que envia un sistema externo (TradingView u otro) al disparar un trigger
+type TriggerHookFormat struct {
 	// Id del webhook del trigger, se mantiene aunque el trigger se actualice
 	IdWebhook string `json:"idWebhook" validate:"required,mongodb"`
 	// Precio del asset cuando se disparo la alerta (en TradingView: "price": {{close}}). Se guarda en price_triggered
@@ -27,4 +28,4 @@ type TradingViewTriggerFormat struct {
 	TakeProfit []RiskManagementFormat `json:"takeProfit,omitempty" validate:"omitempty,dive"`
 }
 
-var TradingViewTriggerFormatValidate = common.FormatValidateMiddleware[TradingViewTriggerFormat]
+var TriggerHookFormatValidate = common.FormatValidateMiddleware[TriggerHookFormat]

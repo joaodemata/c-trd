@@ -154,3 +154,52 @@ func TestListTriggersFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestListConditionsFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	const idStatus = "6a8423ce9687e916f29f233a"
+
+	tests := []struct {
+		name     string
+		query    string
+		wantNext bool
+		want     fv.ListConditionsFormat
+	}{
+		{"sin filtros", "", true, fv.ListConditionsFormat{}},
+		{"por idStatus", "?idStatus=" + idStatus, true, fv.ListConditionsFormat{IdStatus: idStatus}},
+		{"por tagStatus", "?tagStatus=" + cmm.GenericStatusPendingForApprove.Tag, true, fv.ListConditionsFormat{TagStatus: cmm.GenericStatusPendingForApprove.Tag}},
+		{"idStatus invalido", "?idStatus=no-es-un-id", false, fv.ListConditionsFormat{}},
+		{"ambos filtros", "?idStatus=" + idStatus + "&tagStatus=STATUS-ACTIVE", false, fv.ListConditionsFormat{}},
+		{"tagStatus demasiado largo", "?tagStatus=" + strings.Repeat("A", 65), false, fv.ListConditionsFormat{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/list/conditions"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.ListConditionsFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != "CC003" {
+					t.Errorf("tracking = %s, se esperaba CC003", res.Tracking)
+				}
+				return
+			}
+
+			filters, errCtx := cmm.GetFromRequestContext[*fv.ListConditionsFormat](spy.Request, "filters")
+			testutil.RequireEmptyError(t, errCtx)
+			if *filters != tt.want {
+				t.Errorf("filters = %+v, want %+v", *filters, tt.want)
+			}
+		})
+	}
+}

@@ -21,6 +21,12 @@ type CatalogStatus struct {
 var (
 	GenericStatusActive   = CatalogStatus{ID: mustParseObjectId("6a8423ce9687e916f29f233a"), Tag: "STATUS-ACTIVE", Name: "Activo"}
 	GenericStatusInactive = CatalogStatus{ID: mustParseObjectId("6a84242c9687e916f29f233d"), Tag: "STATUS-INACTIVE", Name: "Inactivo"}
+	// Condiciones y triggers que crea un agente: el cronjob no evalua la condicion y el hook no dispara el trigger hasta
+	// que el super usuario los apruebe. Quien aprueba es el super usuario (solo existe uno) y cuando, last_updated_at
+	GenericStatusPendingForApprove = CatalogStatus{ID: mustParseObjectId("6ae86ce7898915eb801dc41c"), Tag: "STATUS-PENDING-FOR-APPROVE", Name: "Pendiente de aprobacion"}
+	// Rechazado por el super usuario: se conserva (sin borrado logico) pero el cronjob y el hook lo ignoran y ningun
+	// trigger nuevo o aprobado puede usar la condicion
+	GenericStatusNotApproved = CatalogStatus{ID: mustParseObjectId("6ae86ce7fbb7528939b5cf50"), Tag: "STATUS-NOT-APPROVED", Name: "No aprobado"}
 )
 
 // OPPORTUNITY_STATUS
@@ -36,6 +42,33 @@ var (
 var (
 	UserPrivilegeSuperUser   = CatalogStatus{ID: mustParseObjectId("6ae38e7bb1bb56b09f96ce13"), Tag: "SUPER_USER", Name: "Super user"}
 	UserPrivilegeGenericUser = CatalogStatus{ID: mustParseObjectId("6ae38ef3b1bb56b09f96ce14"), Tag: "GENERIC_USER", Name: "Usuario genérico"}
+	// Usuario de los agentes (claude): crea condiciones y triggers que quedan pendientes de revision del super usuario
+	UserPrivilegeAgent = CatalogStatus{ID: mustParseObjectId("6ae86ce7b01de16516693815"), Tag: "AGENT", Name: "Agente"}
+)
+
+// AGENT_THESIS_STATUS. Cola de tesis que procesan los agentes cada viernes (FIFO)
+var (
+	AgentThesisStatusPending    = CatalogStatus{ID: mustParseObjectId("6ae86ce77e2d74e73ec913ad"), Tag: "THESIS-PENDING", Name: "Pendiente"}
+	AgentThesisStatusProcessing = CatalogStatus{ID: mustParseObjectId("6ae86ce7c12c85f41a662e00"), Tag: "THESIS-PROCESSING", Name: "Procesando"}
+	AgentThesisStatusProcessed  = CatalogStatus{ID: mustParseObjectId("6ae86ce7fae9f7626bd4c1d3"), Tag: "THESIS-PROCESSED", Name: "Procesada"}
+)
+
+// AGENT_RUN_STATUS. Resultado de la corrida de los agentes sobre una tesis
+var (
+	AgentRunStatusRunning    = CatalogStatus{ID: mustParseObjectId("6ae86ce7a7ffe76272b20232"), Tag: "RUN-RUNNING", Name: "En ejecucion"}
+	AgentRunStatusSuccess    = CatalogStatus{ID: mustParseObjectId("6ae86ce79edfa79e7137a41c"), Tag: "RUN-SUCCESS", Name: "Exitosa"}
+	AgentRunStatusNeedsInput = CatalogStatus{ID: mustParseObjectId("6ae86ce799e020873803db97"), Tag: "RUN-NEEDS-INPUT", Name: "Requiere informacion"}
+	AgentRunStatusFailed     = CatalogStatus{ID: mustParseObjectId("6ae86ce704d146a72e6afe00"), Tag: "RUN-FAILED", Name: "Fallida"}
+)
+
+// Agentes
+const (
+	// Tesis que toma cada corrida, las mas antiguas primero. El resto espera a la siguiente semana
+	AgentThesesPerRun = 5
+	// Una tesis en PROCESSING por mas de este tiempo se considera abandonada (el runner fallo) y se vuelve a tomar
+	AgentThesisClaimTimeout = 12 * time.Hour
+	// Placeholder del codigo del trigger que se reemplaza por el id_webhook al guardarlo
+	TriggerCodeWebhookPlaceholder = "{{ID_WEBHOOK}}"
 )
 
 // TYPE_VISIBILITY. Quien puede ver un trigger, condicion u oportunidad: solo su usuario, todos o el usuario y los de
@@ -57,6 +90,8 @@ const (
 	CatalogTypeCondition         = "TYPE_CONDITION"
 	CatalogTypeUserPrivileges    = "USER_PRIVILEGES"
 	CatalogTypeVisibility        = "TYPE_VISIBILITY"
+	CatalogTypeAgentThesisStatus = "AGENT_THESIS_STATUS"
+	CatalogTypeAgentRunStatus    = "AGENT_RUN_STATUS"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara

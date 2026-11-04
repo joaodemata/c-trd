@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinancialJudgeOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "score", "summary", "reasons", "requiredChanges"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["APPROVED", "REJECTED", "CHANGES_REQUESTED"] },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "summary": { "type": "string" },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric", "value", "impact", "comment"],
+        "properties": {
+          "metric": { "type": "string" },
+          "value": { "type": "string" },
+          "impact": { "type": "string", "enum": ["POSITIVE", "NEGATIVE", "NEUTRAL"] },
+          "comment": { "type": "string" }
+        }
+      }
+    },
+    "requiredChanges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetAgent", "change"],
+        "properties": {
+          "targetAgent": { "type": "string", "enum": ["CONDITION_DESIGNER", "TRIGGER_COMPOSER", "PINE_AUTHOR"] },
+          "change": { "type": "string" }
+        }
+      }
+    }
+  }
+}

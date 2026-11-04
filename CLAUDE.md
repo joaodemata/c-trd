@@ -29,6 +29,8 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - `controllers/`: Handlers of the routes they capture all the business logic using inside services
 - `providers/`: functions to check where a condition is met using external API data
 - `routers/`: route for each API and join all the middlewares and handlers
+- `agents/`: prompts, JSON schemas, gates and runner of the AI agents (Condition Designer, Trigger Composer, Pine Author; Financial Judge pending). Prompts and schemas are embedded in the binary
+- `cmd/agent_runner/`: CLI that the host cron runs on Fridays; calls `claude -p` and the c-trd API as the `claude` user (privilege AGENT). Deploy steps in `deploy/README.md`
 - `tests/`: all unit tests, one folder per package (`tests/providers/`, `tests/common/`, ...) plus `tests/testutil/` with shared helpers. Tests only use the exported API. Testing conventions are in `TESTING.md`
 
 ## Domain notes
@@ -43,6 +45,8 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Timeouts: every DB call uses a context.WithTimeout (5s).
 - An opportunity can have zero or multiple conditions, when all the conditions are met the opportunity changes to status ACTIVE. The life flow of the opportunities are OPPORTUNITY-ONGOING -> OPPORTUNITY-ACTIVE -> OPPORTUNITY-FINISHED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-EXPIRED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-CANCELED
 - An opportunity can only be created with a trigger
+- Conditions and triggers created by the AGENT privilege are born with GENERIC_STATUS `STATUS-PENDING-FOR-APPROVE`: the cron skips them and the hook rejects them until the super user approves them (`/operation/review/*`). Approved conditions go to INACTIVE and triggers to ACTIVE; rejected ones go to `STATUS-NOT-APPROVED` (kept, not logically deleted) and can't be used by new or approved triggers. The approver is always the super user (only one exists), so there are no reviewer fields
+- Agents queue: the super user adds theses (`agent_theses`); each Friday run takes the 5 oldest pending (FIFO) and records the result in `agent_runs`
 - Callbacks functions have to be explicit, do not return function evaluations or compare directly values returned from a function. Also all the functions call have to be in the same level of the function master. Like the controllers logic
 
 ## Conventions
@@ -64,7 +68,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Tracking codes can not be a parameter of any function, any function with error must have his own tracking code
 - Don't create new files in `services/`. Put new services in `list_service.go` (reads/GETs from the database, tracking codes `SLISE<nnn>`) or `operation_service.go` (inserts, updates and the logic that prepares them, tracking codes `SOPRE<nnn>`). Only use another existing service file when it clearly fits better (e.g. a client of an external API like `alpha_vantage_service.go`)
 - All responses to the frontend or other servers must be in camelCase
-- A middleware can not pass response or request to another function inside, the only exception is NewResponseHandler
+- A middleware can not pass response or request to another function inside, the only exception is NewResponseHandler first call do not pass NewResponseHandler
 
 ## Gotchas
 
