@@ -136,6 +136,13 @@ func NewConditionModel(
 		return condition, cmm.NewErrorHandler(fmt.Errorf("interval_seconds %d", cronjob.IntervalSeconds), fmt.Sprintf("El intervalo minimo es de %d segundos", cmm.ConditionMinIntervalSeconds), cmm.LevelError, "MCONE001")
 	}
 
+	// La crea un agente: el cronjob no la evalua hasta que el super usuario la apruebe
+	if IsAgentOwner(owner) {
+		condition.IDStatus = cmm.GenericStatusPendingForApprove.ID
+		condition.TagStatus = cmm.GenericStatusPendingForApprove.Tag
+		condition.Status = cmm.GenericStatusPendingForApprove.Name
+	}
+
 	interval := cronjob.IntervalSeconds
 	condition.HttpRequest = cronjob.HttpRequest
 	condition.CallbackFunction = cronjob.CallbackFunction

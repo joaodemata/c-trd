@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -487,5 +488,77 @@ func TestBuildConditionCallbackParametersService_RegisteredThreshold(t *testing.
 	for _, name := range []string{"FearAndGreedBelow", "BtcDominanceAbove", "UsdtDominanceBelow", "Others3DominanceAbove"} {
 		_, err := services.BuildConditionCallbackParametersService(providers.FunctionRegistry[name], map[string]string{"threshold": "-5"})
 		testutil.RequireTrackingCode(t, err, "SOPRE053")
+	}
+}
+
+// incompatibleCondition condicion guardada; todas leen la misma API y peticion salvo que se cambie
+func incompatibleCondition(callback string, params map[string]any) models.ConditionsModelType {
+	return models.ConditionsModelType{
+		ID: primitive.NewObjectID(), Tag: callback, CallbackFunction: callback, ParametersCallback: params,
+		IDApi:       incompatibleApi,
+		HttpRequest: providers.HTTPRequestConfig{URL: "https://api.example.com/v1", Method: "GET"},
+	}
+}
+
+var incompatibleApi = primitive.NewObjectID()
+
+func TestFindIncompatibleConditionsService(t *testing.T) {
+	t.Parallel()
+
+	fear := incompatibleCondition("FearAndGreedFear", map[string]any{})
+	fearCopy := fear
+	fearCopy.ID = primitive.NewObjectID()
+	fredRising := incompatibleCondition("FredSeriesRising", map[string]any{})
+	fredFallingOther := incompatibleCondition("FredSeriesFalling", map[string]any{})
+	fredFallingOther.HttpRequest.QueryData = map[string]string{"series_id": "DGS10"}
+	fearOtherApi := incompatibleCondition("FearAndGreedGreed", map[string]any{})
+	fearOtherApi.IDApi = primitive.NewObjectID()
+
+	tests := []struct {
+		name       string
+		conditions []models.ConditionsModelType
+		want       string
+	}{
+		{"sin condiciones", nil, ""},
+		{"compatibles", []models.ConditionsModelType{fear, incompatibleCondition("BtcDominanceAbove60", map[string]any{}), fredRising}, ""},
+		{"zonas excluyentes", []models.ConditionsModelType{fear, incompatibleCondition("FearAndGreedGreed", map[string]any{})}, "excluyentes"},
+		{"zonas de otra API", []models.ConditionsModelType{fear, fearOtherApi}, ""},
+		{"misma condicion", []models.ConditionsModelType{fear, fearCopy}, "misma condicion"},
+		{"FED excluyentes", []models.ConditionsModelType{incompatibleCondition("FedNextMeetingCutLikely", map[string]any{}), incompatibleCondition("FedNextMeetingHikeLikely", map[string]any{})}, "excluyentes"},
+		{"FRED misma serie", []models.ConditionsModelType{fredRising, incompatibleCondition("FredSeriesFalling", map[string]any{})}, "excluyentes"},
+		{"FRED otra serie", []models.ConditionsModelType{fredRising, fredFallingOther}, ""},
+		{"umbrales sin rango", []models.ConditionsModelType{
+			incompatibleCondition("FearAndGreedBelow", map[string]any{"threshold": int64(25)}),
+			incompatibleCondition("FearAndGreedAbove", map[string]any{"threshold": 30.0}),
+		}, "> 30 y < 25"},
+		{"umbrales con rango (int32 de Mongo)", []models.ConditionsModelType{
+			incompatibleCondition("FearAndGreedBelow", map[string]any{"threshold": int64(25)}),
+			incompatibleCondition("FearAndGreedAbove", map[string]any{"threshold": int32(20)}),
+		}, ""},
+		{"espejo OTHERS2 sin rango", []models.ConditionsModelType{
+			incompatibleCondition("BtcDominanceAbove60", map[string]any{}),
+			incompatibleCondition("Others2DominanceAbove", map[string]any{"threshold": 45.0}),
+		}, "> 60 y < 55"},
+		{"espejo OTHERS2 con rango", []models.ConditionsModelType{
+			incompatibleCondition("BtcDominanceAbove60", map[string]any{}),
+			incompatibleCondition("Others2DominanceAbove", map[string]any{"threshold": 35.0}),
+		}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			problems := services.FindIncompatibleConditionsService(tt.conditions)
+			if tt.want == "" {
+				if len(problems) != 0 {
+					t.Fatalf("problemas = %v, se esperaba ninguno", problems)
+				}
+				return
+			}
+			if len(problems) != 1 || !strings.Contains(problems[0], tt.want) {
+				t.Fatalf("problemas = %v, se esperaba uno con %q", problems, tt.want)
+			}
+		})
 	}
 }

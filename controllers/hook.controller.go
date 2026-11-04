@@ -10,7 +10,8 @@ import (
 	cmm "c_trd/common"
 )
 
-func TradingViewHookController() http.HandlerFunc {
+// TriggerHookController crea o cancela la oportunidad del trigger que disparo el sistema externo
+func TriggerHookController() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Creamos el response
 		res := cmm.NewResponseHandler(w)
@@ -23,7 +24,7 @@ func TradingViewHookController() http.HandlerFunc {
 			return
 		}
 
-		payload, err := cmm.GetFromRequestContext[*fv.TradingViewTriggerFormat](r, "payload")
+		payload, err := cmm.GetFromRequestContext[*fv.TriggerHookFormat](r, "payload")
 		if !err.IsEmtpy() {
 			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 			return

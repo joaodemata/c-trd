@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func TestTradingViewTriggerFormatValidate(t *testing.T) {
+func TestTriggerHookFormatValidate(t *testing.T) {
 	t.Parallel()
 
 	idWebhook := primitive.NewObjectID().Hex()
@@ -44,11 +44,11 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodPost, "/hook/trading_view", strings.NewReader(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/hook/trigger", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
 			spy := &testutil.NextSpy{}
 
-			fv.TradingViewTriggerFormatValidate(spy).ServeHTTP(rec, req)
+			fv.TriggerHookFormatValidate(spy).ServeHTTP(rec, req)
 
 			if spy.Called != tt.wantNext {
 				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
@@ -61,7 +61,7 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 				return
 			}
 
-			payload, err := cmm.GetFromRequestContext[*fv.TradingViewTriggerFormat](spy.Request, "payload")
+			payload, err := cmm.GetFromRequestContext[*fv.TriggerHookFormat](spy.Request, "payload")
 			testutil.RequireEmptyError(t, err)
 			if payload.Price != tt.wantPrice {
 				t.Errorf("price = %v, se esperaba %v", payload.Price, tt.wantPrice)
@@ -73,7 +73,7 @@ func TestTradingViewTriggerFormatValidate(t *testing.T) {
 	}
 }
 
-func TestTradingViewTriggerFormatValidateRiskManagement(t *testing.T) {
+func TestTriggerHookFormatValidateRiskManagement(t *testing.T) {
 	t.Parallel()
 
 	base := `{"idWebhook":"` + primitive.NewObjectID().Hex() + `","price":100,`
@@ -100,11 +100,11 @@ func TestTradingViewTriggerFormatValidateRiskManagement(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodPost, "/hook/trading_view", strings.NewReader(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/hook/trigger", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
 			spy := &testutil.NextSpy{}
 
-			fv.TradingViewTriggerFormatValidate(spy).ServeHTTP(rec, req)
+			fv.TriggerHookFormatValidate(spy).ServeHTTP(rec, req)
 
 			if spy.Called != tt.wantNext {
 				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
@@ -117,7 +117,7 @@ func TestTradingViewTriggerFormatValidateRiskManagement(t *testing.T) {
 				return
 			}
 
-			payload, err := cmm.GetFromRequestContext[*fv.TradingViewTriggerFormat](spy.Request, "payload")
+			payload, err := cmm.GetFromRequestContext[*fv.TriggerHookFormat](spy.Request, "payload")
 			testutil.RequireEmptyError(t, err)
 			if len(payload.StopLoss) != tt.wantStopLoss {
 				t.Errorf("stopLoss = %d objetivos, se esperaban %d", len(payload.StopLoss), tt.wantStopLoss)

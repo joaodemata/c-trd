@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TriggerComposerOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "trigger", "conditionChoices", "discardedConditions", "requestedConditions",
+               "technicalBrief", "questions"],
+  "properties": {
+    "status": { "type": "string", "enum": ["OK", "NEEDS_INPUT"] },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "name", "description", "idAsset", "idAction", "conditions",
+                   "idCandlestickTimeframe", "maxCandlestickQty", "idTypeVisibility", "allowedUsers"],
+      "properties": {
+        "tag": { "type": "string", "pattern": "^[A-Z0-9-]{3,60}$" },
+        "name": { "type": "string", "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 300 },
+        "idAsset": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+        "idAction": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+        "conditions": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-f0-9]{24}$" }
+        },
+        "idCandlestickTimeframe": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+        "maxCandlestickQty": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "idTypeVisibility": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+        "allowedUsers": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-f0-9]{24}$" } }
+      }
+    },
+    "conditionChoices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["idCondition", "directionCheck", "rationale"],
+        "properties": {
+          "idCondition": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "directionCheck": { "type": "string", "enum": ["SUPPORTS_ACTION", "RISK_FILTER"] },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "discardedConditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["idCondition", "reason"],
+        "properties": {
+          "idCondition": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "requestedConditions": { "type": "array", "items": { "type": "string" } },
+    "technicalBrief": { "type": "string" },
+    "questions": { "type": "array", "items": { "type": "string" } }
+  }
+}

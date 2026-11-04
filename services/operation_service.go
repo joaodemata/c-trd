@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -858,4 +859,414 @@ func toQueryData(data map[string]any) (map[string]string, *cmm.ErrorHandler) {
 	}
 
 	return query, cmm.NewEmptyErrorHandler()
+}
+
+// ---------- Combinaciones imposibles de condiciones: el trigger nunca pasaria a ACTIVE ----------
+
+// exclusiveConditionZones callbacks que leen la misma serie y son excluyentes entre si: mismo grupo y zona distinta
+var exclusiveConditionZones = map[string][2]string{
+	"FearAndGreedExtremeFear":  {"FEAR_AND_GREED", "EXTREME_FEAR"},
+	"FearAndGreedFear":         {"FEAR_AND_GREED", "FEAR"},
+	"FearAndGreedNeutral":      {"FEAR_AND_GREED", "NEUTRAL"},
+	"FearAndGreedGreed":        {"FEAR_AND_GREED", "GREED"},
+	"FearAndGreedExtremeGreed": {"FEAR_AND_GREED", "EXTREME_GREED"},
+	"FedNextMeetingCutLikely":  {"FED_NEXT_MEETING", "CUT"},
+	"FedNextMeetingHoldLikely": {"FED_NEXT_MEETING", "HOLD"},
+	"FedNextMeetingHikeLikely": {"FED_NEXT_MEETING", "HIKE"},
+	"GoogleTrendsHigh":         {"GOOGLE_TRENDS", "HIGH"},
+	"GoogleTrendsLow":          {"GOOGLE_TRENDS", "LOW"},
+	"GoogleTrendsFileHigh":     {"GOOGLE_TRENDS_FILE", "HIGH"},
+	"GoogleTrendsFileLow":      {"GOOGLE_TRENDS_FILE", "LOW"},
+	"GoogleTrendsFileNewMax":   {"GOOGLE_TRENDS_FILE_EXTREME", "MAX"},
+	"GoogleTrendsFileNewMin":   {"GOOGLE_TRENDS_FILE_EXTREME", "MIN"},
+	"FredSeriesRising":         {"FRED_SLOPE", "RISING"},
+	"FredSeriesFalling":        {"FRED_SLOPE", "FALLING"},
+}
+
+// conditionThresholdRule callback de umbral (estricto: > o <). mirror indica que la serie es 100 - serie del grupo
+// (OTHERS2 = 100 - BTC.D), asi "OTHERS2 > x" equivale a "BTC.D < 100 - x"
+type conditionThresholdRule struct {
+	group   string
+	isAbove bool
+	mirror  bool
+	fixed   *float64 // umbral fijo del callback, nil si viene en parameters_callback.threshold
+}
+
+var btcDominanceFixedThreshold = 60.0
+
+var conditionThresholdRules = map[string]conditionThresholdRule{
+	"FearAndGreedAbove":     {group: "FEAR_AND_GREED", isAbove: true},
+	"FearAndGreedBelow":     {group: "FEAR_AND_GREED", isAbove: false},
+	"BtcDominanceAbove":     {group: "BTC_DOMINANCE", isAbove: true},
+	"BtcDominanceBelow":     {group: "BTC_DOMINANCE", isAbove: false},
+	"BtcDominanceAbove60":   {group: "BTC_DOMINANCE", isAbove: true, fixed: &btcDominanceFixedThreshold},
+	"Others2DominanceAbove": {group: "BTC_DOMINANCE", isAbove: true, mirror: true},
+	"Others2DominanceBelow": {group: "BTC_DOMINANCE", isAbove: false, mirror: true},
+	"Others3DominanceAbove": {group: "OTHERS3_DOMINANCE", isAbove: true},
+	"Others3DominanceBelow": {group: "OTHERS3_DOMINANCE", isAbove: false},
+	"UsdtDominanceAbove":    {group: "USDT_DOMINANCE", isAbove: true},
+	"UsdtDominanceBelow":    {group: "USDT_DOMINANCE", isAbove: false},
+}
+
+// conditionBound limite ya normalizado al grupo: value > limit (isAbove) o value < limit
+type conditionBound struct {
+	isAbove bool
+	limit   float64
+}
+
+// FindIncompatibleConditionsService busca pares de condiciones de un trigger que no pueden ser true a la vez (zonas
+// excluyentes de la misma serie o umbrales sin rango) o que estan repetidas. Retorna un texto por par, [] si no hay
+func FindIncompatibleConditionsService(conditions []models.ConditionsModelType) []string {
+	problems := []string{}
+	for i := 0; i < len(conditions); i++ {
+		for j := i + 1; j < len(conditions); j++ {
+			problem := conditionPairProblem(conditions[i], conditions[j])
+			if problem != "" {
+				problems = append(problems, fmt.Sprintf("%s (%s) y %s (%s): %s", conditions[i].Tag, conditions[i].ID.Hex(), conditions[j].Tag, conditions[j].ID.Hex(), problem))
+			}
+		}
+	}
+	return problems
+}
+
+func conditionPairProblem(a, b models.ConditionsModelType) string {
+	if a.CallbackFunction == b.CallbackFunction && sameConditionSource(a, b) && reflect.DeepEqual(a.ParametersCallback, b.ParametersCallback) {
+		return "son la misma condicion"
+	}
+
+	zoneA, okA := exclusiveConditionZones[a.CallbackFunction]
+	zoneB, okB := exclusiveConditionZones[b.CallbackFunction]
+	if okA && okB && zoneA[0] == zoneB[0] && zoneA[1] != zoneB[1] && sameConditionSource(a, b) {
+		return "son excluyentes, nunca se cumplen a la vez"
+	}
+
+	// Las dominancias salen de la misma respuesta (CoinMarketCap global) aunque el callback sea distinto
+	groupA, boundA, okA := conditionThresholdBound(a)
+	groupB, boundB, okB := conditionThresholdBound(b)
+	if !okA || !okB || groupA != groupB || !sameConditionSource(a, b) || boundA.isAbove == boundB.isAbove {
+		return ""
+	}
+	above, below := boundA, boundB
+	if !boundA.isAbove {
+		above, below = boundB, boundA
+	}
+	if below.limit <= above.limit {
+		return fmt.Sprintf("piden un valor > %v y < %v a la vez", above.limit, below.limit)
+	}
+	return ""
+}
+
+// sameConditionSource dos condiciones leen la misma serie si piden lo mismo a la misma API
+func sameConditionSource(a, b models.ConditionsModelType) bool {
+	if a.IDApi != b.IDApi {
+		return false
+	}
+	ra, rb := a.HttpRequest, b.HttpRequest
+	return ra.URL == rb.URL && ra.Method == rb.Method &&
+		reflect.DeepEqual(ra.QueryData, rb.QueryData) && reflect.DeepEqual(ra.BodyData, rb.BodyData)
+}
+
+func conditionThresholdBound(c models.ConditionsModelType) (string, conditionBound, bool) {
+	rule, exists := conditionThresholdRules[c.CallbackFunction]
+	if !exists {
+		return "", conditionBound{}, false
+	}
+
+	threshold, ok := 0.0, true
+	if rule.fixed != nil {
+		threshold = *rule.fixed
+	} else {
+		threshold, ok = numberToFloat(c.ParametersCallback["threshold"])
+	}
+	if !ok {
+		return "", conditionBound{}, false
+	}
+
+	bound := conditionBound{isAbove: rule.isAbove, limit: threshold}
+	if rule.mirror {
+		bound = conditionBound{isAbove: !rule.isAbove, limit: 100 - threshold}
+	}
+	return rule.group, bound, true
+}
+
+// numberToFloat convierte los numeros que guarda parameters_callback (int64/float64 al crear, int32 al leer de Mongo)
+func numberToFloat(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case float32:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	case int32:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	}
+	return 0, false
+}
+
+// ---------- Agentes: cola de tesis, corridas y revision ----------
+
+// CreateAgentThesisService inserta una tesis en la cola de los agentes
+func CreateAgentThesisService(thesis models.AgentThesesModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	result, err := models.AgentThesesModel.InsertOne(ctx, thesis)
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SOPRE054")
+	}
+
+	insertedID, ok := result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return "", cmm.NewErrorHandler(nil, "Error parseando el object ID.", cmm.LevelFatal, "SOPRE055")
+	}
+
+	return insertedID.Hex(), cmm.NewEmptyErrorHandler()
+}
+
+// DeleteAgentThesisService borra logicamente una tesis que sigue pendiente
+func DeleteAgentThesisService(idThesis primitive.ObjectID, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idThesis, "tag_status": cmm.AgentThesisStatusPending.Tag, "logical_delete": false}
+	update := bson.M{"$set": bson.M{"logical_delete": true, "last_updated_at": now}}
+
+	result, err := models.AgentThesesModel.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error borrando la tesis.", cmm.LevelDatabase, "SOPRE056")
+	}
+	if result.MatchedCount == 0 {
+		return cmm.NewErrorHandler(fmt.Errorf("thesis %s", idThesis.Hex()), "La tesis ya fue tomada por una corrida o borrada.", cmm.LevelError, "SOPRE057")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// ClaimAgentThesesService toma hasta AgentThesesPerRun tesis, las mas antiguas primero (FIFO), y las pasa a PROCESSING.
+// Tambien retoma las que quedaron en PROCESSING por mas de AgentThesisClaimTimeout (corridas que fallaron sin cerrar).
+// Cada tesis se toma con un FindOneAndUpdate atomico para que dos corridas no procesen la misma
+func ClaimAgentThesesService(now time.Time) ([]models.AgentThesesModelType, *cmm.ErrorHandler) {
+	claimed := make([]models.AgentThesesModelType, 0, cmm.AgentThesesPerRun)
+
+	filter := bson.M{
+		"logical_delete": false,
+		"$or": []bson.M{
+			{"tag_status": cmm.AgentThesisStatusPending.Tag},
+			{"tag_status": cmm.AgentThesisStatusProcessing.Tag, "claimed_at": bson.M{"$lt": now.Add(-cmm.AgentThesisClaimTimeout)}},
+		},
+	}
+	update := bson.M{"$set": bson.M{
+		"id_status":       cmm.AgentThesisStatusProcessing.ID,
+		"tag_status":      cmm.AgentThesisStatusProcessing.Tag,
+		"status":          cmm.AgentThesisStatusProcessing.Name,
+		"claimed_at":      now,
+		"last_updated_at": now,
+	}}
+	opts := options.FindOneAndUpdate().
+		SetSort(bson.D{{Key: "created_date", Value: 1}, {Key: "_id", Value: 1}}).
+		SetReturnDocument(options.After)
+
+	for len(claimed) < cmm.AgentThesesPerRun {
+		ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+		var thesis models.AgentThesesModelType
+		err := models.AgentThesesModel.FindOneAndUpdate(ctx, filter, update, opts).Decode(&thesis)
+		cancel()
+		if err == mongo.ErrNoDocuments {
+			break
+		}
+		if err != nil {
+			return claimed, cmm.NewErrorHandler(err, "Error tomando las tesis de la cola.", cmm.LevelDatabase, "SOPRE058")
+		}
+		claimed = append(claimed, thesis)
+	}
+
+	return claimed, cmm.NewEmptyErrorHandler()
+}
+
+// CreateAgentRunService inserta la corrida de una tesis
+func CreateAgentRunService(run models.AgentRunsModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	result, err := models.AgentRunsModel.InsertOne(ctx, run)
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SOPRE059")
+	}
+
+	insertedID, ok := result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return "", cmm.NewErrorHandler(nil, "Error parseando el object ID.", cmm.LevelFatal, "SOPRE060")
+	}
+
+	return insertedID.Hex(), cmm.NewEmptyErrorHandler()
+}
+
+// AgentRunFinish resultado con el que se cierra una corrida
+type AgentRunFinish struct {
+	IDRun        primitive.ObjectID
+	IDThesis     primitive.ObjectID
+	Status       cmm.CatalogStatus
+	Steps        []models.AgentRunStep
+	IDConditions []primitive.ObjectID
+	IDTrigger    *primitive.ObjectID
+	Error        *string
+	// La tesis vuelve a la cola (PENDING) en vez de quedar PROCESSED, ej: se acabo el uso del plan de Claude
+	Requeue bool
+}
+
+// FinishAgentRunService cierra la corrida y su tesis en una transaccion
+func FinishAgentRunService(finish AgentRunFinish, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	// Usamos cmm.Database porque cmm.AppConfig puede ser nil al iniciar
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE061")
+	}
+	defer session.EndSession(ctx)
+
+	thesisStatus := cmm.AgentThesisStatusProcessed
+	if finish.Requeue {
+		thesisStatus = cmm.AgentThesisStatusPending
+	}
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// A. Cerramos la corrida si sigue en ejecucion
+		runFilter := bson.M{"_id": finish.IDRun, "tag_status": cmm.AgentRunStatusRunning.Tag, "logical_delete": false}
+		runUpdate := bson.M{"$set": bson.M{
+			"id_status":       finish.Status.ID,
+			"tag_status":      finish.Status.Tag,
+			"status":          finish.Status.Name,
+			"steps":           finish.Steps,
+			"id_conditions":   finish.IDConditions,
+			"id_trigger":      finish.IDTrigger,
+			"error":           finish.Error,
+			"finished_at":     now,
+			"last_updated_at": now,
+		}}
+		result, errUpdate := models.AgentRunsModel.UpdateOne(sessCtx, runFilter, runUpdate)
+		if errUpdate != nil {
+			return nil, cmm.NewErrorHandler(errUpdate, "Error cerrando la corrida.", cmm.LevelDatabase, "SOPRE062")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("run %s", finish.IDRun.Hex()), "La corrida ya fue cerrada.", cmm.LevelError, "SOPRE063")
+		}
+
+		// B. La tesis queda procesada o vuelve a la cola. Si otra corrida ya la retomo no se toca
+		thesisFilter := bson.M{"_id": finish.IDThesis, "tag_status": cmm.AgentThesisStatusProcessing.Tag, "logical_delete": false}
+		thesisSet := bson.M{
+			"id_status":       thesisStatus.ID,
+			"tag_status":      thesisStatus.Tag,
+			"status":          thesisStatus.Name,
+			"last_updated_at": now,
+		}
+		if finish.Requeue {
+			thesisSet["claimed_at"] = nil
+		}
+		if _, errThesis := models.AgentThesesModel.UpdateOne(sessCtx, thesisFilter, bson.M{"$set": thesisSet}); errThesis != nil {
+			return nil, cmm.NewErrorHandler(errThesis, "Error actualizando la tesis.", cmm.LevelDatabase, "SOPRE064")
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return handler
+		}
+		return cmm.NewErrorHandler(err, "Error en la transaccion de la corrida.", cmm.LevelDatabase, "SOPRE065")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// reviewSet campos que cambia la revision. Aprobado queda con el status approvedStatus; rechazado queda NOT-APPROVED
+// (sin borrado logico, se conserva para el historial de los agentes)
+func reviewSet(approve bool, approvedStatus cmm.CatalogStatus, now time.Time) bson.M {
+	status := approvedStatus
+	if !approve {
+		status = cmm.GenericStatusNotApproved
+	}
+	return bson.M{
+		"id_status":       status.ID,
+		"tag_status":      status.Tag,
+		"status":          status.Name,
+		"last_updated_at": now,
+	}
+}
+
+// ReviewConditionService aprueba o rechaza una condicion pendiente de aprobacion. Aprobada pasa a inactiva (aun no se
+// cumple) y el cronjob la evalua en el siguiente ciclo
+func ReviewConditionService(idCondition primitive.ObjectID, approve bool, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idCondition, "tag_status": cmm.GenericStatusPendingForApprove.Tag, "logical_delete": false}
+	set := reviewSet(approve, cmm.GenericStatusInactive, now)
+	set["next_execution_at"] = now
+
+	result, err := models.ConditionsModel.UpdateOne(ctx, filter, bson.M{"$set": set})
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error revisando la condicion.", cmm.LevelDatabase, "SOPRE066")
+	}
+	if result.MatchedCount == 0 {
+		return cmm.NewErrorHandler(fmt.Errorf("condition %s", idCondition.Hex()), "La condicion ya fue revisada o borrada.", cmm.LevelError, "SOPRE067")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// ReviewTriggerService aprueba o rechaza un trigger pendiente de aprobacion en una transaccion. Aprobado queda activo
+// y tambien se aprueban sus condiciones pendientes (idConditions) para que pueda activarse. Rechazado queda NOT-APPROVED
+func ReviewTriggerService(idTrigger primitive.ObjectID, approve bool, idConditions []primitive.ObjectID, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	// Usamos cmm.Database porque cmm.AppConfig puede ser nil al iniciar
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE068")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// A. El trigger
+		filter := bson.M{"_id": idTrigger, "tag_status": cmm.GenericStatusPendingForApprove.Tag, "logical_delete": false}
+		set := reviewSet(approve, cmm.GenericStatusActive, now)
+		result, errUpdate := models.TriggersModel.UpdateOne(sessCtx, filter, bson.M{"$set": set})
+		if errUpdate != nil {
+			return nil, cmm.NewErrorHandler(errUpdate, "Error revisando el trigger.", cmm.LevelDatabase, "SOPRE069")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("trigger %s", idTrigger.Hex()), "El trigger ya fue revisado o borrado.", cmm.LevelError, "SOPRE070")
+		}
+
+		// B. Sus condiciones pendientes, solo al aprobar
+		if !approve || len(idConditions) == 0 {
+			return nil, nil
+		}
+		conditionsFilter := bson.M{"_id": bson.M{"$in": idConditions}, "tag_status": cmm.GenericStatusPendingForApprove.Tag, "logical_delete": false}
+		conditionsSet := reviewSet(true, cmm.GenericStatusInactive, now)
+		conditionsSet["next_execution_at"] = now
+		if _, errConditions := models.ConditionsModel.UpdateMany(sessCtx, conditionsFilter, bson.M{"$set": conditionsSet}); errConditions != nil {
+			return nil, cmm.NewErrorHandler(errConditions, "Error aprobando las condiciones del trigger.", cmm.LevelDatabase, "SOPRE071")
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return handler
+		}
+		return cmm.NewErrorHandler(err, "Error en la transaccion de la revision.", cmm.LevelDatabase, "SOPRE072")
+	}
+
+	return cmm.NewEmptyErrorHandler()
 }

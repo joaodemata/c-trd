@@ -67,6 +67,11 @@ type RecordOwnerData struct {
 // Model pointer
 var UsersModel *mongo.Collection
 
+// IsAgentOwner indica si el registro lo creo un agente: nace pendiente de aprobacion del super usuario
+func IsAgentOwner(owner RecordOwnerData) bool {
+	return owner.TagTypePrivilege == cmm.UserPrivilegeAgent.Tag
+}
+
 // NewRecordOwnerData copia el usuario y su privilegio al registro que crea
 func NewRecordOwnerData(user UsersModelType) RecordOwnerData {
 	return RecordOwnerData{
