@@ -1,6 +1,8 @@
 package common
 
 import (
+	"net"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -63,4 +65,29 @@ func ParseHexListToObjectIds(ids []string) ([]primitive.ObjectID, *ErrorHandler)
 	}
 
 	return result, NewEmptyErrorHandler()
+}
+
+// ParseClientIP devuelve la IP real del cliente. Detras de Caddy RemoteAddr es la IP del proxy (red privada
+// de Docker), por eso solo en ese caso se usa el ultimo valor de X-Forwarded-For, que es el que agrega Caddy.
+// Si RemoteAddr es publica el header se ignora para que un cliente no pueda falsificar su IP
+func ParseClientIP(remoteAddr string, forwardedFor string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+
+	remoteIP := net.ParseIP(host)
+	isProxy := remoteIP != nil && (remoteIP.IsPrivate() || remoteIP.IsLoopback())
+	if !isProxy || forwardedFor == "" {
+		return host
+	}
+
+	forwardedValues := strings.Split(forwardedFor, ",")
+	lastValue := strings.TrimSpace(forwardedValues[len(forwardedValues)-1])
+	forwardedIP := net.ParseIP(lastValue)
+	if forwardedIP == nil {
+		return host
+	}
+
+	return forwardedIP.String()
 }

@@ -215,7 +215,7 @@ It prints `Indices de users y sessions listos.` and `Super usuario <username> cr
 `Authentication failed` means the environment user does not exist yet or its password does not
 match the one in `/opt/ctrd/env/<env>.env`.
 
-## Agents (Friday runner)
+## Agents (Thursday night runner)
 
 The agents (`agents/`) turn the weekly theses queue into conditions and a trigger with its Pine code.
 Everything they create has the status `STATUS-PENDING-FOR-APPROVE`: the cron does not evaluate those
@@ -223,7 +223,7 @@ conditions and the hook ignores those triggers until the super user approves the
 
 The runner is `cmd/agent_runner`. It is built into the API image and each deploy copies it to
 `/opt/ctrd/agents/bin/agent_runner-<env>` together with `deploy/agents/run_agents.sh`. A cron on the
-**host** runs it on Friday night with Claude Code headless (`claude -p`), so it uses the remaining
+**host** runs it on Thursday night with Claude Code headless (`claude -p`), so it uses the remaining
 usage of the Claude plan. The agents have no tools: the runner sends them all the context and makes
 every call to the API as the `claude` user (privilege `AGENT`).
 
@@ -268,23 +268,26 @@ sudo -iu ctrd-agent
 nano /opt/ctrd/agents/env/prod.env && chmod 600 /opt/ctrd/agents/env/prod.env
 ```
 
-**Cron** (as `ctrd-agent`, `crontab -e`). The VPS clock is UTC (`timedatectl`), so this is Friday
-23:00 UTC. Add one line per environment you want to run; each run takes at most 5 theses (FIFO) and
-the rest wait for the next week:
+**Cron** (as `ctrd-agent`, `crontab -e`). The weekly Claude usage resets on Friday at 1am (Spain
+time), so the run starts on Thursday at 21:00 Spain time to spend what is left before the reset. The
+VPS clock is UTC (`timedatectl`) and cron does not follow DST, so the line uses Thursday 20:00 UTC:
+21:00 in winter (CET) and 22:00 in summer (CEST), both with at least 3 hours before the reset. Add one
+line per environment you want to run; each run takes at most 5 theses (FIFO) and the rest wait for
+the next week:
 
 ```
-0 23 * * 5 /opt/ctrd/agents/run_agents.sh prod
+0 20 * * 4 /opt/ctrd/agents/run_agents.sh prod
 ```
 
 **Manual run and logs**: `sudo -iu ctrd-agent /opt/ctrd/agents/run_agents.sh dev`, then
 `tail -f /opt/ctrd/agents/logs/dev-$(date -u +%Y%m%d).log`. If Claude fails (e.g. the plan usage ran
-out) the run stops and the theses go back to the queue for the next Friday.
+out) the run stops and the theses go back to the queue for the next Thursday.
 
 **Weekly flow** (super user):
 
 1. Queue the theses: `POST /operation/create/agent_thesis` (`idAsset`, `idAction`, `thesis`). List them
    with `GET /list/agent_theses` and remove a pending one with `PUT /operation/delete/agent_thesis`.
-2. Friday night the runner processes the 5 oldest.
+2. Thursday night the runner processes the 5 oldest.
 3. Review: `GET /list/agent_runs` (each agent attempt, created condition ids and trigger id), then
    `GET /list/triggers?tagStatus=STATUS-PENDING-FOR-APPROVE`, then `PUT /operation/review/trigger`
    and `PUT /operation/review/condition` with `decision` `APPROVE` or `REJECT`. Approving a trigger

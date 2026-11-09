@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN go vet ./... && go test ./...
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/c_trd .
-# Runner de los agentes: no corre en el contenedor, el deploy lo copia al host donde esta Claude Code (cron de los viernes)
+# Runner de los agentes: no corre en el contenedor, el deploy lo copia al host donde esta Claude Code (cron de los jueves en la noche)
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agent_runner ./cmd/agent_runner
 
 # Etapa 2: imagen final solo con el binario, corre con un usuario sin privilegios

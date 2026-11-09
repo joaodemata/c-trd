@@ -76,7 +76,7 @@ Request pipeline: **router → format validate → data validate → controller*
 | `POST` | `/operation/create/trigger` | Creates a trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (optional) }`. The tag must be unique; asset, action, timeframe and conditions must exist |
 | `POST` | `/operation/google_trends/upload` | Uploads the Google Trends CSV of an asset and replaces the previous one. `multipart/form-data` with the fields `idAsset` and `file` (`.csv`, max 1 MB) |
 | `POST` | `/operation/google_trends/series` | Series of the asset's CSV. Body: `{ "idAsset": "<ObjectID>" }`. Only answers requests from the server itself (used by conditions) |
-| `GET` | `/ws` | Websocket hub |
+| `GET` | `/ws` | Websocket hub. Sends `{"typeEvent":"OPPORTUNITIES-UPDATED","data":null}` when opportunities change; the client reloads its list |
 
 The server listens on `:8080` with 10 s read/write timeouts.
 
@@ -256,7 +256,7 @@ Pipeline de una petición: **router → format validate → data validate → co
 | `POST` | `/operation/create/trigger` | Crea un trigger. Body: `{ "tag", "name", "description", "idAsset", "idAction", "idCandlestickTimeframe", "maxCandlestickQty", "conditions": ["<ObjectID>"] (opcional) }`. El tag debe ser único; el asset, la acción, la temporalidad y las condiciones deben existir |
 | `POST` | `/operation/google_trends/upload` | Sube el CSV de Google Trends de un asset y reemplaza el anterior. `multipart/form-data` con los campos `idAsset` y `file` (`.csv`, máx. 1 MB) |
 | `POST` | `/operation/google_trends/series` | Serie del CSV del asset. Body: `{ "idAsset": "<ObjectID>" }`. Solo responde peticiones del mismo servidor (la usan las condiciones) |
-| `GET` | `/ws` | Hub de websocket |
+| `GET` | `/ws` | Hub de websocket. Envía `{"typeEvent":"OPPORTUNITIES-UPDATED","data":null}` cuando cambian las oportunidades; el cliente recarga su listado |
 
 El servidor escucha en `:8080` con timeouts de lectura/escritura de 10 s.
 

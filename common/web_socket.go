@@ -10,9 +10,16 @@ import (
 
 // Evento representa el payload que enviarás al frontend
 type Event struct {
-	TypeEvent  string  `json:"TypeEvent"`
-	Data interface{}   `json:"Data"`
+	TypeEvent string      `json:"typeEvent"`
+	Data      interface{} `json:"data"`
 }
+
+// EventsHub hub global para publicar eventos desde los cronjobs y controllers. Se asigna en main.go antes de
+// iniciar los cronjobs y el servidor; si es nil los eventos se ignoran
+var EventsHub *Hub
+
+// Eventos en cola para el hub. Si se llena el evento se descarta, asi quien publica nunca se bloquea
+const broadcastBufferSize = 64
 
 // Client envuelve la conexión de un usuario individual
 type Client struct {
@@ -27,19 +34,49 @@ type Hub struct {
 	Broadcast  chan Event
 	Register   chan *Client
 	Unregister chan *Client
+	// Tiempo que se agrupan los eventos antes de enviarlos. Solo se cambia antes de llamar a Run
+	CoalesceWindow time.Duration
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		Clients:    make(map[*Client]bool),
-		Broadcast:  make(chan Event),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
+		Clients:        make(map[*Client]bool),
+		Broadcast:      make(chan Event, broadcastBufferSize),
+		Register:       make(chan *Client),
+		Unregister:     make(chan *Client),
+		CoalesceWindow: EventsCoalesceWindow,
 	}
 }
 
+// Publish envia el evento a todos los clientes conectados sin bloquear. Si el hub es nil o su cola esta llena el
+// evento se descarta: los eventos solo avisan que hay cambios, el siguiente evento o la recarga los recupera
+func (h *Hub) Publish(event Event) {
+	if h == nil {
+		return
+	}
 
+	select {
+	case h.Broadcast <- event:
+	default:
+		log.Printf("Cola de eventos del websocket llena, se descarta el evento %s", event.TypeEvent)
+	}
+}
+
+// PublishEvent publica el evento en el hub global EventsHub
+func PublishEvent(event Event) {
+	EventsHub.Publish(event)
+}
+
+// Run atiende el registro de clientes y agrupa los eventos: el primer evento abre una ventana de CoalesceWindow y al
+// cerrarla se envia una sola vez cada tipo de evento recibido (el ultimo de cada tipo). Asi una rafaga de cambios
+// llega al frontend como un solo evento
 func (h *Hub) Run() {
+	// Eventos pendientes por tipo y el orden en que llego cada tipo
+	pending := make(map[string]Event)
+	order := make([]string, 0)
+	// nil mientras no haya una ventana abierta, un canal nil nunca se selecciona
+	var flush <-chan time.Time
+
 	for {
 		select {
 		// Entra un nuevo cliente
@@ -53,17 +90,38 @@ func (h *Hub) Run() {
 				close(client.Send)
 			}
 
-		// Tu API REST envía un evento para actualizar el listado
+		// Llega un evento, se guarda hasta que cierre la ventana
 		case event := <-h.Broadcast:
-			for client := range h.Clients {
-				select {
-				case client.Send <- event:
-				default:
-					// Si el canal del cliente está bloqueado, asumimos desconexión
-					close(client.Send)
-					delete(h.Clients, client)
-				}
+			if _, exists := pending[event.TypeEvent]; !exists {
+				order = append(order, event.TypeEvent)
 			}
+			pending[event.TypeEvent] = event
+
+			if flush == nil {
+				flush = time.After(h.CoalesceWindow)
+			}
+
+		// Cierra la ventana, se envian los eventos agrupados
+		case <-flush:
+			for _, typeEvent := range order {
+				h.sendToClients(pending[typeEvent])
+			}
+
+			clear(pending)
+			order = order[:0]
+			flush = nil
+		}
+	}
+}
+
+// sendToClients envia el evento a cada cliente. Si el canal del cliente esta lleno, asumimos desconexion
+func (h *Hub) sendToClients(event Event) {
+	for client := range h.Clients {
+		select {
+		case client.Send <- event:
+		default:
+			close(client.Send)
+			delete(h.Clients, client)
 		}
 	}
 }
@@ -74,7 +132,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	//TODO: agregar environment para validar ip del front
 	CheckOrigin: func(r *http.Request) bool {
-		return true 
+		return true
 	},
 }
 
@@ -116,14 +174,14 @@ func (c *Client) readPump() {
 		c.Hub.Unregister <- c
 		c.Conn.Close()
 	}()
-	
+
 	c.Conn.SetReadLimit(512)
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	
+
 	// Si recibimos un pong del frontend, extendemos el tiempo límite de vida
-	c.Conn.SetPongHandler(func(string) error { 
+	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil 
+		return nil
 	})
 
 	for {
@@ -151,7 +209,7 @@ func (c *Client) writePump() {
 		// Llega un nuevo evento desde tu API REST
 		case evento, ok := <-c.Send:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-			
+
 			if !ok {
 				// El Hub cerró el canal
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})

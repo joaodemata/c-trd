@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// AgentThesesModelType idea de inversion que el super usuario deja en la cola de los agentes. Cada viernes la corrida
+// AgentThesesModelType idea de inversion que el super usuario deja en la cola de los agentes. Cada jueves en la noche la corrida
 // toma las AgentThesesPerRun mas antiguas pendientes (FIFO) y el resto espera a la siguiente semana
 type AgentThesesModelType struct {
 	ID     primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
