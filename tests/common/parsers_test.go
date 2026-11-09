@@ -128,3 +128,34 @@ func TestParseHexListToObjectIds(t *testing.T) {
 		testutil.RequireTrackingCode(t, err, "CMMPE002")
 	})
 }
+
+func TestParseClientIP(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		remoteAddr   string
+		forwardedFor string
+		want         string
+	}{
+		{"IP publica sin proxy", "203.0.113.5:40000", "", "203.0.113.5"},
+		{"IP publica ignora el header falsificado", "203.0.113.5:40000", "1.2.3.4", "203.0.113.5"},
+		{"detras de Caddy", "172.18.0.2:50000", "198.51.100.7", "198.51.100.7"},
+		{"detras de Caddy usa el ultimo valor", "172.18.0.2:50000", "1.2.3.4, 198.51.100.7", "198.51.100.7"},
+		{"loopback con header", "127.0.0.1:50000", "198.51.100.7", "198.51.100.7"},
+		{"red privada sin header", "172.18.0.2:50000", "", "172.18.0.2"},
+		{"header invalido usa RemoteAddr", "172.18.0.2:50000", "no-es-ip", "172.18.0.2"},
+		{"IPv6 publica", "[2001:db8::1]:40000", "", "2001:db8::1"},
+		{"RemoteAddr sin puerto", "203.0.113.5", "", "203.0.113.5"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := cmm.ParseClientIP(tt.remoteAddr, tt.forwardedFor); got != tt.want {
+				t.Errorf("ParseClientIP(%q, %q) = %q, se esperaba %q", tt.remoteAddr, tt.forwardedFor, got, tt.want)
+			}
+		})
+	}
+}

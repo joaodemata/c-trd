@@ -41,6 +41,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Tracking codes: they follow <layer><file>E<nnn>, for example SLISE001, PRHTTPE003 and DVHOOK002. Each should be unique.
 - Adding a condition callback: write the function in providers/, then register it in FunctionRegistry in callbacks.go. The DB stores its name in callback_function
 - Condition scheduling fields: is_processing is a lock, next_execution_at and interval_seconds drive the cron, and is_webhook_only conditions are skipped
+- Rate limit: `cmm.RateLimitMiddleware(requests, per)` is an in-memory token bucket per client IP (`cmm.ParseClientIP` reads Caddy's `X-Forwarded-For` only when the peer is private/loopback). The shared limiters live in `routers/index.go` (`generalRateLimit`, `loginRateLimit`, `hookRateLimit`) and go FIRST in every route's chain; LocalOnly routes have none.
 - Logging: Use log for diagnostic errors, info or warnings.
 - Timeouts: every DB call uses a context.WithTimeout (5s).
 - An opportunity can have zero or multiple conditions, when all the conditions are met the opportunity changes to status ACTIVE. The life flow of the opportunities are OPPORTUNITY-ONGOING -> OPPORTUNITY-ACTIVE -> OPPORTUNITY-FINISHED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-EXPIRED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-CANCELED
