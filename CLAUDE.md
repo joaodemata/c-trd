@@ -30,7 +30,7 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - `providers/`: functions to check where a condition is met using external API data
 - `routers/`: route for each API and join all the middlewares and handlers
 - `agents/`: prompts, JSON schemas, gates and runner of the AI agents (Condition Designer, Trigger Composer, Pine Author; Financial Judge pending). Prompts and schemas are embedded in the binary
-- `cmd/agent_runner/`: CLI that the host cron runs on Fridays; calls `claude -p` and the c-trd API as the `claude` user (privilege AGENT). Deploy steps in `deploy/README.md`
+- `cmd/agent_runner/`: CLI that the host cron runs on Thursday night (before the Claude usage resets on Friday 1am); calls `claude -p` and the c-trd API as the `claude` user (privilege AGENT). Deploy steps in `deploy/README.md`
 - `tests/`: all unit tests, one folder per package (`tests/providers/`, `tests/common/`, ...) plus `tests/testutil/` with shared helpers. Tests only use the exported API. Testing conventions are in `TESTING.md`
 
 ## Domain notes
@@ -41,12 +41,13 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - Tracking codes: they follow <layer><file>E<nnn>, for example SLISE001, PRHTTPE003 and DVHOOK002. Each should be unique.
 - Adding a condition callback: write the function in providers/, then register it in FunctionRegistry in callbacks.go. The DB stores its name in callback_function
 - Condition scheduling fields: is_processing is a lock, next_execution_at and interval_seconds drive the cron, and is_webhook_only conditions are skipped
+- Rate limit: `cmm.RateLimitMiddleware(requests, per)` is an in-memory token bucket per client IP (`cmm.ParseClientIP` reads Caddy's `X-Forwarded-For` only when the peer is private/loopback). The shared limiters live in `routers/index.go` (`generalRateLimit`, `loginRateLimit`, `hookRateLimit`) and go FIRST in every route's chain; LocalOnly routes have none.
 - Logging: Use log for diagnostic errors, info or warnings.
 - Timeouts: every DB call uses a context.WithTimeout (5s).
 - An opportunity can have zero or multiple conditions, when all the conditions are met the opportunity changes to status ACTIVE. The life flow of the opportunities are OPPORTUNITY-ONGOING -> OPPORTUNITY-ACTIVE -> OPPORTUNITY-FINISHED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-EXPIRED OR OPPORTUNITY-ONGOING -> OPPORTUNITY-CANCELED
 - An opportunity can only be created with a trigger
 - Conditions and triggers created by the AGENT privilege are born with GENERIC_STATUS `STATUS-PENDING-FOR-APPROVE`: the cron skips them and the hook rejects them until the super user approves them (`/operation/review/*`). Approved conditions go to INACTIVE and triggers to ACTIVE; rejected ones go to `STATUS-NOT-APPROVED` (kept, not logically deleted) and can't be used by new or approved triggers. The approver is always the super user (only one exists), so there are no reviewer fields
-- Agents queue: the super user adds theses (`agent_theses`); each Friday run takes the 5 oldest pending (FIFO) and records the result in `agent_runs`
+- Agents queue: the super user adds theses (`agent_theses`); each Thursday-night run takes the 5 oldest pending (FIFO) and records the result in `agent_runs`
 - Callbacks functions have to be explicit, do not return function evaluations or compare directly values returned from a function. Also all the functions call have to be in the same level of the function master. Like the controllers logic
 
 ## Conventions

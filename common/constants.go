@@ -46,7 +46,7 @@ var (
 	UserPrivilegeAgent = CatalogStatus{ID: mustParseObjectId("6ae86ce7b01de16516693815"), Tag: "AGENT", Name: "Agente"}
 )
 
-// AGENT_THESIS_STATUS. Cola de tesis que procesan los agentes cada viernes (FIFO)
+// AGENT_THESIS_STATUS. Cola de tesis que procesan los agentes cada jueves en la noche (FIFO)
 var (
 	AgentThesisStatusPending    = CatalogStatus{ID: mustParseObjectId("6ae86ce77e2d74e73ec913ad"), Tag: "THESIS-PENDING", Name: "Pendiente"}
 	AgentThesisStatusProcessing = CatalogStatus{ID: mustParseObjectId("6ae86ce7c12c85f41a662e00"), Tag: "THESIS-PROCESSING", Name: "Procesando"}
@@ -69,6 +69,15 @@ const (
 	AgentThesisClaimTimeout = 12 * time.Hour
 	// Placeholder del codigo del trigger que se reemplaza por el id_webhook al guardarlo
 	TriggerCodeWebhookPlaceholder = "{{ID_WEBHOOK}}"
+)
+
+// Eventos del websocket (typeEvent). Solo avisan que algo cambio, sin datos: cada cliente vuelve a consultar su
+// listado, asi no se envian registros a usuarios que no los pueden ver
+const (
+	// Se creo una oportunidad o cambio su status o el de sus condiciones
+	EventOpportunitiesUpdated = "OPPORTUNITIES-UPDATED"
+	// Ventana en la que el hub agrupa los eventos: una rafaga de cambios se envia como un solo evento por tipo
+	EventsCoalesceWindow = 5 * time.Second
 )
 
 // TYPE_VISIBILITY. Quien puede ver un trigger, condicion u oportunidad: solo su usuario, todos o el usuario y los de
@@ -104,7 +113,8 @@ const (
 	ResponseFormatPolymarketFedDecisions   = "POLYMARKET_FED_DECISIONS"
 	ResponseFormatCoinMarketCapFearGreed   = "COINMARKETCAP_FEAR_AND_GREED"
 	ResponseFormatCoinMarketCapGlobal      = "COINMARKETCAP_GLOBAL_METRICS"
-	ResponseFormatCoinMarketCapUsdtQuote   = "COINMARKETCAP_USDT_QUOTE" // /v2/cryptocurrency/quotes/latest con symbol=USDT
+	ResponseFormatCoinMarketCapUsdtQuote   = "COINMARKETCAP_USDT_QUOTE"  // /v2/cryptocurrency/quotes/latest con symbol=USDT
+	ResponseFormatBiquoteEconomicCalendar  = "BIQUOTE_ECONOMIC_CALENDAR" // /api/calendar, arreglo de eventos macroeconomicos
 )
 
 // Tipos de dato de los parametros de una API (data_type). El valor se guarda como string y se valida con este tipo

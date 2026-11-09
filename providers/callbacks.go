@@ -292,6 +292,33 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapUsdtQuote,
 		Parameters:     dominanceThresholdParameters,
 	},
+	"EconomicCalendarHighImpactUpcoming": {
+		ID:             "EconomicCalendarHighImpactUpcoming",
+		Tag:            "ECONOMIC-CALENDAR-HIGH-IMPACT-UPCOMING",
+		Name:           "Publicacion macro de alto impacto proxima",
+		Fn:             EconomicCalendarHighImpactUpcomingCallback,
+		Description:    "Hay al menos una publicacion macroeconomica de importancia alta sin dato real en las proximas horas (volatilidad alta esperada)",
+		ResponseFormat: cmm.ResponseFormatBiquoteEconomicCalendar,
+		Parameters:     economicCalendarUpcomingParameters,
+	},
+	"EconomicCalendarHighImpactCluster": {
+		ID:             "EconomicCalendarHighImpactCluster",
+		Tag:            "ECONOMIC-CALENDAR-HIGH-IMPACT-CLUSTER",
+		Name:           "Acumulacion de publicaciones macro de alto impacto",
+		Fn:             EconomicCalendarHighImpactClusterCallback,
+		Description:    "Hay al menos minReleases publicaciones macroeconomicas de importancia alta (distintas por pais y hora) en las proximas horas",
+		ResponseFormat: cmm.ResponseFormatBiquoteEconomicCalendar,
+		Parameters:     economicCalendarClusterParameters,
+	},
+	"EconomicCalendarHighImpactSurprise": {
+		ID:             "EconomicCalendarHighImpactSurprise",
+		Tag:            "ECONOMIC-CALENDAR-HIGH-IMPACT-SURPRISE",
+		Name:           "Sorpresa en publicacion macro de alto impacto",
+		Fn:             EconomicCalendarHighImpactSurpriseCallback,
+		Description:    "En las ultimas horas salio una publicacion de importancia alta cuyo dato real se aleja del pronostico al menos el porcentaje de la condicion",
+		ResponseFormat: cmm.ResponseFormatBiquoteEconomicCalendar,
+		Parameters:     economicCalendarSurpriseParameters,
+	},
 }
 
 // ListCallbacksByResponseFormat retorna los callbacks que leen el formato de respuesta indicado, ordenados por ID.

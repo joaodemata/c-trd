@@ -31,7 +31,7 @@ const CATALOGS = [
     description: "Rechazado por el super usuario: se conserva, pero el cronjob y el hook lo ignoran." },
 
   { _id: ObjectId("6ae86ce77e2d74e73ec913ad"), type_catalog: "AGENT_THESIS_STATUS", tag: "THESIS-PENDING", name: "Pendiente",
-    description: "En la cola, la toma la siguiente corrida de los viernes." },
+    description: "En la cola, la toma la siguiente corrida de los jueves en la noche." },
   { _id: ObjectId("6ae86ce7c12c85f41a662e00"), type_catalog: "AGENT_THESIS_STATUS", tag: "THESIS-PROCESSING", name: "Procesando",
     description: "Tomada por una corrida en ejecucion." },
   { _id: ObjectId("6ae86ce7fae9f7626bd4c1d3"), type_catalog: "AGENT_THESIS_STATUS", tag: "THESIS-PROCESSED", name: "Procesada",
