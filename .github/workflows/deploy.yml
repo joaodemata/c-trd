@@ -42,7 +42,7 @@ jobs:
       - name: Recargar Caddy
         run: docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
-      # El cron del host ejecuta los agentes los viernes con Claude Code; aqui solo se publica el binario de esta rama.
+      # El cron del host ejecuta los agentes los jueves en la noche con Claude Code; aqui solo se publica el binario de esta rama.
       # Si /opt/ctrd/agents no esta preparado (ver deploy/README.md) solo se avisa, el despliegue de la API no falla
       - name: Publicar runner de los agentes
         run: |

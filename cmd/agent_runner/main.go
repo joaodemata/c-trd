@@ -1,5 +1,5 @@
-// agent_runner ejecuta los agentes de c-trd sobre la cola de tesis. Lo lanza el cron del VPS los viernes en la noche,
-// cuando sobra uso del plan de Claude. Usa Claude Code en modo headless (claude -p), que debe tener la sesion iniciada
+// agent_runner ejecuta los agentes de c-trd sobre la cola de tesis. Lo lanza el cron del VPS los jueves en la noche,
+// antes de que se reinicie el uso semanal del plan de Claude (viernes 1am hora local). Usa Claude Code en modo headless (claude -p), que debe tener la sesion iniciada
 // en el servidor, y la API de c-trd con el usuario agente (claude).
 //
 // Variables de entorno:
