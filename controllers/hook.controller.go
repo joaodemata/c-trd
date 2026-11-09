@@ -50,6 +50,9 @@ func TriggerHookController() http.HandlerFunc {
 				return
 			}
 
+			// Avisamos a los clientes del websocket que recarguen el listado de oportunidades
+			cmm.PublishEvent(cmm.Event{TypeEvent: cmm.EventOpportunitiesUpdated})
+
 			data := map[string]any{
 				"idOpportunity": opportunity.ID.Hex(),
 			}
@@ -121,6 +124,9 @@ func TriggerHookController() http.HandlerFunc {
 				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
 				return
 			}
+
+			// Avisamos a los clientes del websocket que recarguen el listado de oportunidades
+			cmm.PublishEvent(cmm.Event{TypeEvent: cmm.EventOpportunitiesUpdated})
 		} else {
 			idOpportunity = existOpportunity.ID.Hex()
 		}

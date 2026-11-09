@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ejecuta los agentes de c-trd sobre la cola de tesis de un entorno. Lo llama el cron del usuario ctrd-agent los
-# viernes en la noche (ver deploy/README.md, seccion Agents). El deploy copia este script y el binario a /opt/ctrd/agents.
+# jueves en la noche (ver deploy/README.md, seccion Agents). El deploy copia este script y el binario a /opt/ctrd/agents.
 #
 # Uso: run_agents.sh <dev|qa|sandbox|prod>
 set -euo pipefail

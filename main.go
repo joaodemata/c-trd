@@ -35,6 +35,11 @@ func main() {
 	db := cmm.ConnectDB(models.RegistryList)
 	mongoClient := db.Client()
 
+	// Hub del websocket. Se inicia antes de los cronjobs porque ellos publican los eventos
+	hub := cmm.NewHub()
+	cmm.EventsHub = hub
+	go hub.Run()
+
 	// 2. Setup context for cronjobs
 	ctxCronjob, cancelCronjob := context.WithCancel(context.Background())
 	defer cancelCronjob()
@@ -51,8 +56,6 @@ func main() {
 	fmt.Println("Initializing server...")
 	mux := http.NewServeMux()
 
-	// Start web socket
-	hub := cmm.NewHub()
 	routers.SetupRouter(mux, hub)
 
 	srv := &http.Server{
@@ -69,9 +72,6 @@ func main() {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
-
-	// Start websocket
-	go hub.Run()
 
 	// Construimos la variable APP de uso global en la app
 	cmm.AppConfig = cmm.AppConfigConstructor(srv, db, mongoClient, nil)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cmm "c_trd/common"
@@ -26,6 +27,9 @@ type ConditionResult struct {
 // oportunidades en curso y pasa a ACTIVE las oportunidades con todas sus condiciones activas
 func ProcessConditions() {
 	// 1. Obtenemos las condiciones a evaluar
+	// true si se guardo algun cambio de status en las condiciones de las oportunidades en curso
+	conditionsChanged := false
+
 	conditions, err := services.GetCronjobConditionsService()
 	if !err.IsEmtpy() {
 		log.Printf("Error obteniendo las condiciones: %v", err)
@@ -63,18 +67,23 @@ func ProcessConditions() {
 		cancel()
 
 		// 5. Guardamos los resultados en lotes con BulkWrite
-		persistConditionResults(results)
+		conditionsChanged = persistConditionResults(results)
 	}
 
 	// 6. Corregimos las copias de las condiciones en las oportunidades en curso. Una oportunidad creada por el
 	// hook mientras se guardaba un lote puede nacer con un status viejo que el paso 5 ya no le replica
-	syncOpportunitiesConditions()
+	synced := syncOpportunitiesConditions()
 
 	// 7. Activamos las oportunidades con todas sus condiciones activas. Se ejecuta siempre para
 	// recuperar oportunidades que quedaron pendientes por un fallo en una ejecucion anterior
 	activated := activateCompletedOpportunities()
 
 	log.Printf("Condiciones procesadas: %d, oportunidades activadas: %d", len(conditions), activated)
+
+	// Un solo evento por ciclo, asi el frontend recarga el listado una vez
+	if conditionsChanged || synced || activated > 0 {
+		cmm.PublishEvent(cmm.Event{TypeEvent: cmm.EventOpportunitiesUpdated})
+	}
 }
 
 // activateCompletedOpportunities pasa a ACTIVE las oportunidades con todas sus condiciones activas y guarda el precio
@@ -203,10 +212,12 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 	return result
 }
 
-// persistConditionResults guarda los resultados en lotes concurrentes limitados por un semaforo
-func persistConditionResults(results []ConditionResult) {
+// persistConditionResults guarda los resultados en lotes concurrentes limitados por un semaforo.
+// Retorna true si algun lote guardado cambio el status de alguna condicion
+func persistConditionResults(results []ConditionResult) bool {
 	sem := make(chan struct{}, cmm.BulkWriteMaxWorkers)
 	var wg sync.WaitGroup
+	var changed atomic.Bool
 
 	for i := 0; i < len(results); i += cmm.BulkWriteBatchSize {
 		end := min(i+cmm.BulkWriteBatchSize, len(results))
@@ -218,17 +229,22 @@ func persistConditionResults(results []ConditionResult) {
 			sem <- struct{}{}        // Adquirir token
 			defer func() { <-sem }() // Liberar token
 
-			persistConditionBatch(batch)
+			batchChanged := persistConditionBatch(batch)
+			if batchChanged {
+				changed.Store(true)
+			}
 		}(results[i:end])
 	}
 
 	wg.Wait()
+	return changed.Load()
 }
 
 // persistConditionBatch guarda el lote en una transaccion (oportunidades y condiciones).
 // Si la transaccion falla se hace rollback y solo se libera el lock, sin tocar next_execution_at,
-// asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote
-func persistConditionBatch(batch []ConditionResult) {
+// asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote.
+// Retorna true si se guardo algun cambio de status
+func persistConditionBatch(batch []ConditionResult) bool {
 	changes := make([]services.ConditionStatusChange, 0)
 	updates := make([]services.ConditionExecutionUpdate, len(batch))
 
@@ -257,7 +273,10 @@ func persistConditionBatch(batch []ConditionResult) {
 		if err := services.UnlockConditionsService(ids); !err.IsEmtpy() {
 			log.Printf("Error liberando el lock de las condiciones: %v", err)
 		}
+		return false
 	}
+
+	return len(changes) > 0
 }
 
 // NewConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar
@@ -280,12 +299,13 @@ func NewConditionStatus(r ConditionResult) *cmm.CatalogStatus {
 
 // syncOpportunitiesConditions replica el status real de las condiciones en las oportunidades en curso que tengan
 // una copia distinta. Solo el cronjob cambia el status de las condiciones y sus ejecuciones no se solapan, asi
-// que el status leido aqui no cambia antes de escribirlo. Si falla se reintenta en el siguiente ciclo
-func syncOpportunitiesConditions() {
+// que el status leido aqui no cambia antes de escribirlo. Si falla se reintenta en el siguiente ciclo.
+// Retorna true si se sincronizo alguna condicion
+func syncOpportunitiesConditions() bool {
 	opportunities, err := services.GetOngoingOpportunitiesConditionsService()
 	if !err.IsEmtpy() {
 		log.Printf("Error obteniendo las oportunidades en curso: %v", err)
-		return
+		return false
 	}
 
 	idConditions := make([]primitive.ObjectID, 0)
@@ -298,12 +318,12 @@ func syncOpportunitiesConditions() {
 	conditions, err := services.GetConditionsByIDsService(idConditions)
 	if !err.IsEmtpy() {
 		log.Printf("Error obteniendo las condiciones de las oportunidades en curso: %v", err)
-		return
+		return false
 	}
 
 	changes := OutOfSyncConditions(opportunities, conditions)
 	if len(changes) == 0 {
-		return
+		return false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
@@ -311,10 +331,11 @@ func syncOpportunitiesConditions() {
 
 	if err := services.UpdateOpportunitiesConditionsStatusService(ctx, changes); !err.IsEmtpy() {
 		log.Printf("Error sincronizando las condiciones de las oportunidades: %v", err)
-		return
+		return false
 	}
 
 	log.Printf("Condiciones sincronizadas en oportunidades en curso: %d", len(changes))
+	return true
 }
 
 // OutOfSyncConditions retorna el status real de cada condicion que tiene una copia distinta en alguna oportunidad.

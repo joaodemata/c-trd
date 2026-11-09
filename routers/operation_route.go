@@ -28,7 +28,7 @@ func operationRoutes(server *http.ServeMux) *http.ServeMux {
 	// Cola de tesis de los agentes (super usuario)
 	api.Post("/operation/create/agent_thesis", controllers.CreateAgentThesisController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateAgentThesisFormatValidate, dv.CreateAgentThesisDataValidate)
 	api.Put("/operation/delete/agent_thesis", controllers.DeleteAgentThesisController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.DeleteAgentThesisFormatValidate, dv.DeleteAgentThesisDataValidate)
-	// Corridas del runner de los viernes (usuario agente): toma hasta 5 tesis FIFO y cierra cada corrida
+	// Corridas del runner de los jueves en la noche (usuario agente): toma hasta 5 tesis FIFO y cierra cada corrida
 	api.Post("/operation/agent/start_run", controllers.StartAgentRunController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeAgent.Tag))
 	api.Put("/operation/agent/finish_run", controllers.FinishAgentRunController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeAgent.Tag), fv.FinishAgentRunFormatValidate, dv.FinishAgentRunDataValidate)
 

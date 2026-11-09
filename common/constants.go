@@ -71,6 +71,15 @@ const (
 	TriggerCodeWebhookPlaceholder = "{{ID_WEBHOOK}}"
 )
 
+// Eventos del websocket (typeEvent). Solo avisan que algo cambio, sin datos: cada cliente vuelve a consultar su
+// listado, asi no se envian registros a usuarios que no los pueden ver
+const (
+	// Se creo una oportunidad o cambio su status o el de sus condiciones
+	EventOpportunitiesUpdated = "OPPORTUNITIES-UPDATED"
+	// Ventana en la que el hub agrupa los eventos: una rafaga de cambios se envia como un solo evento por tipo
+	EventsCoalesceWindow = 5 * time.Second
+)
+
 // TYPE_VISIBILITY. Quien puede ver un trigger, condicion u oportunidad: solo su usuario, todos o el usuario y los de
 // allowed_users. Las consultas filtran por el tag
 var (
