@@ -1,6 +1,7 @@
 package cronjobs
 
 import (
+	cmm "c_trd/common"
 	"context"
 	"fmt"
 	"log"
@@ -63,6 +64,11 @@ func runCheckOpportunities() {
 	}
 	defer isCheckingOpportunities.Store(false)
 
-	ProcessExpiredOpportunities()
-	ProcessFinishedOpportunities()
+	expired := ProcessExpiredOpportunities()
+	finished := ProcessFinishedOpportunities()
+
+	// Un solo evento por ciclo, asi el frontend recarga el listado una vez
+	if expired+finished > 0 {
+		cmm.PublishEvent(cmm.Event{TypeEvent: cmm.EventOpportunitiesUpdated})
+	}
 }
