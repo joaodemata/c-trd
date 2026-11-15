@@ -562,3 +562,204 @@ func TestFindIncompatibleConditionsService(t *testing.T) {
 		})
 	}
 }
+
+// ---------- Portfolio ----------
+
+// portfolioTx transaccion de un asset para reconstruir posiciones, el dia es el orden de ejecucion
+func portfolioTx(idAsset primitive.ObjectID, status cmm.CatalogStatus, day int, quantity, value, fee float64) models.PortfolioTransactionsModelType {
+	executedAt := time.Date(2026, 10, day, 12, 0, 0, 0, time.UTC)
+	return models.PortfolioTransactionsModelType{
+		ID:                 primitive.NewObjectID(),
+		TagTypeTransaction: status.Tag,
+		IDAsset:            &idAsset,
+		TagAsset:           "ASSET-BTC",
+		NameAsset:          "Bitcoin",
+		Quantity:           quantity,
+		Value:              value,
+		Fee:                fee,
+		ExecutedAt:         executedAt,
+		CreatedDate:        executedAt,
+	}
+}
+
+// requireAmount compara montos en float64 con margen de redondeo
+func requireAmount(t *testing.T, field string, got, want float64) {
+	t.Helper()
+	if diff := got - want; diff > 1e-6 || diff < -1e-6 {
+		t.Errorf("%s = %v, se esperaba %v", field, got, want)
+	}
+}
+
+func TestBuildPortfolioAssetPositionService(t *testing.T) {
+	t.Parallel()
+
+	idAsset := primitive.NewObjectID()
+	buy, sell, dividend := cmm.TransactionTypeBuy, cmm.TransactionTypeSell, cmm.TransactionTypeDividend
+
+	tests := []struct {
+		name         string
+		transactions []models.PortfolioTransactionsModelType
+		quantity     float64
+		averageCost  float64
+		costBasis    float64
+		realizedPnL  float64
+	}{
+		{
+			name:         "una compra con comision",
+			transactions: []models.PortfolioTransactionsModelType{portfolioTx(idAsset, buy, 1, 2, 200, 2)},
+			quantity:     2, averageCost: 101, costBasis: 202,
+		},
+		{
+			name: "dos compras promedian el costo",
+			transactions: []models.PortfolioTransactionsModelType{
+				portfolioTx(idAsset, buy, 1, 1, 100, 0),
+				portfolioTx(idAsset, buy, 2, 1, 200, 0),
+			},
+			quantity: 2, averageCost: 150, costBasis: 300,
+		},
+		{
+			name: "venta parcial realiza ganancia y no cambia el costo promedio",
+			transactions: []models.PortfolioTransactionsModelType{
+				portfolioTx(idAsset, buy, 1, 2, 200, 0),
+				portfolioTx(idAsset, sell, 2, 1, 150, 1),
+			},
+			quantity: 1, averageCost: 100, costBasis: 100, realizedPnL: 49,
+		},
+		{
+			name: "venta total deja la posicion en cero con la ganancia realizada",
+			transactions: []models.PortfolioTransactionsModelType{
+				portfolioTx(idAsset, buy, 1, 0.3, 30, 0),
+				portfolioTx(idAsset, sell, 2, 0.1, 5, 0),
+				portfolioTx(idAsset, sell, 3, 0.2, 10, 0),
+			},
+			quantity: 0, averageCost: 0, costBasis: 0, realizedPnL: -15,
+		},
+		{
+			name: "dividendo suma a la ganancia realizada sin mover la cantidad",
+			transactions: []models.PortfolioTransactionsModelType{
+				portfolioTx(idAsset, buy, 1, 10, 1000, 0),
+				portfolioTx(idAsset, dividend, 2, 0, 25, 0.5),
+			},
+			quantity: 10, averageCost: 100, costBasis: 1000, realizedPnL: 24.5,
+		},
+		{
+			name: "se ordenan por fecha de ejecucion y no por el orden recibido",
+			transactions: []models.PortfolioTransactionsModelType{
+				portfolioTx(idAsset, sell, 5, 1, 300, 0),
+				portfolioTx(idAsset, buy, 1, 1, 100, 0),
+			},
+			quantity: 0, realizedPnL: 200,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			position, exists, err := services.BuildPortfolioAssetPositionService(tt.transactions)
+
+			testutil.RequireEmptyError(t, err)
+			if !exists {
+				t.Fatal("con transacciones el asset debe seguir en el portfolio")
+			}
+			requireAmount(t, "quantity", position.Quantity, tt.quantity)
+			requireAmount(t, "averageCost", position.AverageCost, tt.averageCost)
+			requireAmount(t, "costBasis", position.CostBasis, tt.costBasis)
+			requireAmount(t, "realizedPnl", position.RealizedPnL, tt.realizedPnL)
+			if position.IDAsset != idAsset || position.TagAsset != "ASSET-BTC" {
+				t.Errorf("asset = %s %q, se esperaba el de las transacciones", position.IDAsset.Hex(), position.TagAsset)
+			}
+		})
+	}
+}
+
+func TestBuildPortfolioAssetPositionService_Errors(t *testing.T) {
+	t.Parallel()
+
+	idAsset := primitive.NewObjectID()
+
+	tests := []struct {
+		name         string
+		transactions []models.PortfolioTransactionsModelType
+		wantTracking string
+	}{
+		{"venta sin compras", []models.PortfolioTransactionsModelType{
+			portfolioTx(idAsset, cmm.TransactionTypeSell, 1, 1, 100, 0),
+		}, "SOPRE073"},
+		{"venta mayor a lo disponible en ese momento", []models.PortfolioTransactionsModelType{
+			portfolioTx(idAsset, cmm.TransactionTypeBuy, 1, 1, 100, 0),
+			portfolioTx(idAsset, cmm.TransactionTypeSell, 2, 2, 300, 0),
+			portfolioTx(idAsset, cmm.TransactionTypeBuy, 3, 5, 500, 0),
+		}, "SOPRE073"},
+		{"deposito entre las transacciones del asset", []models.PortfolioTransactionsModelType{
+			portfolioTx(idAsset, cmm.TransactionTypeDeposit, 1, 0, 100, 0),
+		}, "SOPRE074"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := services.BuildPortfolioAssetPositionService(tt.transactions)
+			testutil.RequireTrackingCode(t, err, tt.wantTracking)
+		})
+	}
+}
+
+func TestBuildPortfolioAssetPositionService_NoTransactions(t *testing.T) {
+	t.Parallel()
+
+	_, exists, err := services.BuildPortfolioAssetPositionService(nil)
+
+	testutil.RequireEmptyError(t, err)
+	if exists {
+		t.Error("sin transacciones el asset sale del portfolio")
+	}
+}
+
+func TestSetPortfolioAssetPositionService(t *testing.T) {
+	t.Parallel()
+
+	btc, eth, sol := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	assets := []models.PortfolioAsset{{IDAsset: btc, Quantity: 1}, {IDAsset: eth, Quantity: 2}}
+
+	tests := []struct {
+		name         string
+		idAsset      primitive.ObjectID
+		position     *models.PortfolioAsset
+		wantAssets   []primitive.ObjectID
+		wantQuantity map[primitive.ObjectID]float64
+	}{
+		{"reemplaza en su lugar", btc, &models.PortfolioAsset{IDAsset: btc, Quantity: 5}, []primitive.ObjectID{btc, eth}, map[primitive.ObjectID]float64{btc: 5, eth: 2}},
+		{"agrega al final", sol, &models.PortfolioAsset{IDAsset: sol, Quantity: 3}, []primitive.ObjectID{btc, eth, sol}, map[primitive.ObjectID]float64{btc: 1, eth: 2, sol: 3}},
+		{"quita el asset", btc, nil, []primitive.ObjectID{eth}, map[primitive.ObjectID]float64{eth: 2}},
+		{"quitar uno que no esta no cambia nada", sol, nil, []primitive.ObjectID{btc, eth}, map[primitive.ObjectID]float64{btc: 1, eth: 2}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := services.SetPortfolioAssetPositionService(assets, tt.idAsset, tt.position)
+
+			ids := make([]primitive.ObjectID, len(got))
+			for i, asset := range got {
+				ids[i] = asset.IDAsset
+				if asset.Quantity != tt.wantQuantity[asset.IDAsset] {
+					t.Errorf("quantity de %s = %v, se esperaba %v", asset.IDAsset.Hex(), asset.Quantity, tt.wantQuantity[asset.IDAsset])
+				}
+			}
+			if !slices.Equal(ids, tt.wantAssets) {
+				t.Errorf("assets = %v, se esperaba %v", ids, tt.wantAssets)
+			}
+		})
+	}
+
+	// La cartera recibida no se modifica y una cartera vacia nunca queda en nil
+	if assets[0].Quantity != 1 || len(assets) != 2 {
+		t.Errorf("la cartera original cambio: %+v", assets)
+	}
+	if empty := services.SetPortfolioAssetPositionService(nil, btc, nil); empty == nil {
+		t.Error("se esperaba [] y no nil para que se guarde como arreglo vacio")
+	}
+}

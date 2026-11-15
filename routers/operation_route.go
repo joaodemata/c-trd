@@ -36,6 +36,15 @@ func operationRoutes(server *http.ServeMux) *http.ServeMux {
 	api.Post("/operation/google_trends/upload", controllers.GoogleTrendsUploadController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.GoogleTrendsUploadFormatValidate, dv.GoogleTrendsUploadDataValidate)
 	api.Post("/operation/google_trends/series", controllers.GoogleTrendsSeriesController(), cmm.LocalOnlyMiddleware, fv.GoogleTrendsSeriesFormatValidate, dv.GoogleTrendsSeriesDataValidate)
 
+	// Portfolio del usuario (super usuario o generico): cada uno solo ve y edita los suyos. Borrar el portfolio borra sus transacciones
+	api.Post("/operation/create/portfolio", controllers.CreatePortfolioController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.CreatePortfolioFormatValidate, dv.CreatePortfolioDataValidate)
+	api.Put("/operation/update/portfolio", controllers.UpdatePortfolioController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.UpdatePortfolioFormatValidate, dv.UpdatePortfolioDataValidate)
+	api.Put("/operation/delete/portfolio", controllers.DeletePortfolioController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.DeletePortfolioFormatValidate, dv.DeletePortfolioDataValidate)
+	// Transacciones: cada cambio reconstruye la posicion del asset en el portfolio desde su historial
+	api.Post("/operation/create/portfolio_transaction", controllers.CreatePortfolioTransactionController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.CreatePortfolioTransactionFormatValidate, dv.CreatePortfolioTransactionDataValidate)
+	api.Put("/operation/update/portfolio_transaction", controllers.UpdatePortfolioTransactionController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.UpdatePortfolioTransactionFormatValidate, dv.UpdatePortfolioTransactionDataValidate)
+	api.Put("/operation/delete/portfolio_transaction", controllers.DeletePortfolioTransactionController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.DeletePortfolioTransactionFormatValidate, dv.DeletePortfolioTransactionDataValidate)
+
 	return server
 
 }

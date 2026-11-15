@@ -5,8 +5,12 @@ import (
 	"c_trd/providers"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	cmm "c_trd/common"
 
@@ -150,4 +154,58 @@ func GetFinnhubQuotePriceService(ctx context.Context, provider models.ProvidersM
 	}
 
 	return price, cmm.NewEmptyErrorHandler()
+}
+
+// Limites de la consulta de precios de un portfolio: el servidor responde en maximo 10s (write timeout)
+const (
+	assetsMarketPricesTimeout = 6 * time.Second
+	assetsMarketPricesWorkers = 5
+)
+
+// GetAssetsMarketPricesService consulta en paralelo el precio actual de cada asset (sin repetir). Los que fallan no
+// quedan en el mapa: se registran en el log y quien llama decide como valorarlos
+func GetAssetsMarketPricesService(ctx context.Context, idAssets []primitive.ObjectID) map[primitive.ObjectID]float64 {
+	prices := make(map[primitive.ObjectID]float64, len(idAssets))
+	unique := make([]primitive.ObjectID, 0, len(idAssets))
+	for _, idAsset := range idAssets {
+		if !slices.Contains(unique, idAsset) {
+			unique = append(unique, idAsset)
+		}
+	}
+	if len(unique) == 0 {
+		return prices
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, assetsMarketPricesTimeout)
+	defer cancel()
+
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+	jobs := make(chan primitive.ObjectID)
+
+	workers := min(assetsMarketPricesWorkers, len(unique))
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idAsset := range jobs {
+				price, err := GetAssetMarketPriceService(ctx, idAsset)
+				if !err.IsEmtpy() {
+					log.Printf("No se obtuvo el precio del asset %s para el ROI: %v", idAsset.Hex(), err)
+					continue
+				}
+				mutex.Lock()
+				prices[idAsset] = price
+				mutex.Unlock()
+			}
+		}()
+	}
+
+	for _, idAsset := range unique {
+		jobs <- idAsset
+	}
+	close(jobs)
+	wg.Wait()
+
+	return prices
 }
