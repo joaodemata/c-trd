@@ -751,3 +751,317 @@ func ReviewTriggerDataValidate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// ---------- Portfolio ----------
+
+// portfolioTransactionReferences datos que referencia una transaccion del portfolio. El asset y la oportunidad quedan
+// vacios (ID cero) si no se enviaron
+type portfolioTransactionReferences struct {
+	typeTransaction models.CatalogsModelType
+	asset           models.AssetsModelType
+	opportunity     models.OpportunitiesModelType
+}
+
+// validatePortfolioTransactionReferences valida que el tipo de transaccion exista y, si se enviaron, el asset y la
+// oportunidad. La oportunidad debe ser visible para el usuario, estar activa o finalizada y ser del mismo asset
+func validatePortfolioTransactionReferences(idUser primitive.ObjectID, idTypeTransaction string, idAsset string, idOpportunity string) (portfolioTransactionReferences, *cmm.ErrorHandler) {
+	var references portfolioTransactionReferences
+
+	typeTransaction, err := findCatalog(idTypeTransaction, cmm.CatalogTypeTransaction)
+	if !err.IsEmtpy() {
+		return references, err
+	}
+	if typeTransaction.ID.IsZero() {
+		return references, cmm.NewErrorHandler(fmt.Errorf("type_transaction %s", idTypeTransaction), "El tipo de transaccion enviado no existe", cmm.LevelError, "DVOPR045")
+	}
+	references.typeTransaction = typeTransaction
+
+	if idAsset != "" {
+		asset, err := validateAssetExists(idAsset)
+		if !err.IsEmtpy() {
+			return references, err
+		}
+		references.asset = asset
+	}
+
+	if idOpportunity == "" {
+		return references, cmm.NewEmptyErrorHandler()
+	}
+
+	idOpportunityParsed, err := cmm.ParseHexToObjectId(idOpportunity)
+	if !err.IsEmtpy() {
+		return references, err
+	}
+
+	opportunity, err := services.GetVisibleOpportunityService(idOpportunityParsed, idUser)
+	if !err.IsEmtpy() {
+		return references, err
+	}
+	if opportunity.ID.IsZero() {
+		return references, cmm.NewErrorHandler(fmt.Errorf("opportunity %s", idOpportunity), "La oportunidad enviada no existe", cmm.LevelError, "DVOPR046")
+	}
+
+	linkable := opportunity.TagStatus == cmm.OpportunityStatusActive.Tag || opportunity.TagStatus == cmm.OpportunityStatusFinished.Tag
+	if !linkable {
+		return references, cmm.NewErrorHandler(fmt.Errorf("opportunity %s status %s", idOpportunity, opportunity.TagStatus), "Solo se pueden ligar transacciones a oportunidades activas o finalizadas", cmm.LevelError, "DVOPR047")
+	}
+	if !references.asset.ID.IsZero() && opportunity.IDAsset != references.asset.ID {
+		return references, cmm.NewErrorHandler(fmt.Errorf("opportunity asset %s transaction asset %s", opportunity.IDAsset.Hex(), references.asset.ID.Hex()), "La oportunidad es de otro asset: "+opportunity.TagAsset, cmm.LevelError, "DVOPR048")
+	}
+	references.opportunity = opportunity
+
+	return references, cmm.NewEmptyErrorHandler()
+}
+
+// CreatePortfolioDataValidate valida que el usuario no tenga otro portfolio con el mismo tag
+func CreatePortfolioDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreatePortfolioFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR049", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR050", nil, err)
+			return
+		}
+
+		existing, err := services.GetPortfolioByTagService(payload.Tag, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if !existing.ID.IsZero() {
+			res.Error("FAIL", "Ya tiene un portfolio con ese tag", "DVOPR051", payload.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// UpdatePortfolioDataValidate valida que el portfolio sea del usuario y que el tag no lo use otro de sus portfolios.
+// Deja el portfolio en el contexto (portfolio)
+func UpdatePortfolioDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdatePortfolioFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR052", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR053", nil, err)
+			return
+		}
+
+		idPortfolio, err := cmm.ParseHexToObjectId(payload.IdPortfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := services.GetPortfolioService(idPortfolio, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if portfolio.ID.IsZero() {
+			res.Error("FAIL", "El portfolio enviado no existe", "DVOPR054", payload.IdPortfolio, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		existing, err := services.GetPortfolioByTagService(payload.Tag, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if !existing.ID.IsZero() && existing.ID != portfolio.ID {
+			res.Error("FAIL", "Ya tiene otro portfolio con ese tag", "DVOPR055", payload.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "portfolio", &portfolio)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// DeletePortfolioDataValidate valida que el portfolio sea del usuario. Deja el portfolio en el contexto (portfolio)
+func DeletePortfolioDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.DeletePortfolioFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR056", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR057", nil, err)
+			return
+		}
+
+		idPortfolio, err := cmm.ParseHexToObjectId(payload.IdPortfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := services.GetPortfolioService(idPortfolio, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if portfolio.ID.IsZero() {
+			res.Error("FAIL", "El portfolio enviado no existe", "DVOPR058", payload.IdPortfolio, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "portfolio", &portfolio)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CreatePortfolioTransactionDataValidate valida que el portfolio sea del usuario y las referencias de la transaccion.
+// Deja en el contexto portfolio, typeTransaction, asset y opportunity (estos dos con ID cero si no se enviaron)
+func CreatePortfolioTransactionDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreatePortfolioTransactionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR059", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR060", nil, err)
+			return
+		}
+
+		idPortfolio, err := cmm.ParseHexToObjectId(payload.IdPortfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := services.GetPortfolioService(idPortfolio, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if portfolio.ID.IsZero() {
+			res.Error("FAIL", "El portfolio enviado no existe", "DVOPR061", payload.IdPortfolio, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		references, err := validatePortfolioTransactionReferences(authSession.IDUser, payload.IdTypeTransaction, payload.IdAsset, payload.IdOpportunity)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "portfolio", &portfolio)
+		r = cmm.SetInRequestContext(r, "typeTransaction", &references.typeTransaction)
+		r = cmm.SetInRequestContext(r, "asset", &references.asset)
+		r = cmm.SetInRequestContext(r, "opportunity", &references.opportunity)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// UpdatePortfolioTransactionDataValidate valida que la transaccion sea del usuario y sus nuevas referencias. Deja en el
+// contexto transaction, typeTransaction, asset y opportunity (estos dos con ID cero si no se enviaron)
+func UpdatePortfolioTransactionDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdatePortfolioTransactionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR062", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR063", nil, err)
+			return
+		}
+
+		idTransaction, err := cmm.ParseHexToObjectId(payload.IdTransaction)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		transaction, err := services.GetPortfolioTransactionService(idTransaction, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if transaction.ID.IsZero() {
+			res.Error("FAIL", "La transaccion enviada no existe", "DVOPR064", payload.IdTransaction, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		references, err := validatePortfolioTransactionReferences(authSession.IDUser, payload.IdTypeTransaction, payload.IdAsset, payload.IdOpportunity)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "transaction", &transaction)
+		r = cmm.SetInRequestContext(r, "typeTransaction", &references.typeTransaction)
+		r = cmm.SetInRequestContext(r, "asset", &references.asset)
+		r = cmm.SetInRequestContext(r, "opportunity", &references.opportunity)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// DeletePortfolioTransactionDataValidate valida que la transaccion sea del usuario. Deja la transaccion en el contexto
+// (transaction)
+func DeletePortfolioTransactionDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.DeletePortfolioTransactionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR065", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR066", nil, err)
+			return
+		}
+
+		idTransaction, err := cmm.ParseHexToObjectId(payload.IdTransaction)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		transaction, err := services.GetPortfolioTransactionService(idTransaction, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if transaction.ID.IsZero() {
+			res.Error("FAIL", "La transaccion enviada no existe", "DVOPR067", payload.IdTransaction, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "transaction", &transaction)
+		next.ServeHTTP(w, r)
+	})
+}

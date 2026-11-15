@@ -7,6 +7,7 @@ import (
 	"c_trd/providers"
 	"c_trd/services"
 	"net/http"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -282,5 +283,129 @@ func ListAgentRunsController() http.HandlerFunc {
 		}
 
 		res.Send(http.StatusOK, "SUCCESS", "Listado de corridas.", "CLIS009", map[string]any{"runs": runs, "page": total})
+	}
+}
+
+// ListPortfoliosController lista los portfolios del usuario de la sesion con la posicion de cada asset
+func ListPortfoliosController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE015", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE016", nil, err)
+			return
+		}
+
+		portfolios, total, err := services.GetPortfoliosService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de portfolios.", "CLIS010", map[string]any{"portfolios": portfolios, "page": total})
+	}
+}
+
+// ListPortfolioTransactionsController lista las transacciones de un portfolio del usuario, las ejecutadas mas
+// recientemente primero
+func ListPortfolioTransactionsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE017", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListPortfolioTransactionsFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE018", nil, err)
+			return
+		}
+
+		portfolio, err := cmm.GetFromRequestContext[*models.PortfolioModelType](r, "portfolio")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE019", nil, err)
+			return
+		}
+
+		transactionFilters := services.PortfolioTransactionsFilter{TagTypeTransaction: filters.TagTypeTransaction}
+		if filters.IdAsset != "" {
+			transactionFilters.IDAsset, err = cmm.ParseHexToObjectId(filters.IdAsset)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+		if filters.IdOpportunity != "" {
+			transactionFilters.IDOpportunity, err = cmm.ParseHexToObjectId(filters.IdOpportunity)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+
+		transactions, total, err := services.GetPortfolioTransactionsService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, portfolio.ID, portfolio.IDUser, transactionFilters)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de transacciones.", "CLIS011", map[string]any{"transactions": transactions, "page": total})
+	}
+}
+
+// ListPortfolioRoiController calcula el ROI del portfolio, de cada asset y de cada oportunidad ligada con los precios
+// de mercado actuales. No se guarda: cambia con cada precio
+func ListPortfolioRoiController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		portfolio, err := cmm.GetFromRequestContext[*models.PortfolioModelType](r, "portfolio")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE020", nil, err)
+			return
+		}
+
+		transactions, err := services.GetAllPortfolioTransactionsService(portfolio.ID, portfolio.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		// Precio de los assets en cartera y de los ligados a oportunidades (una consulta por asset)
+		idAssets := make([]primitive.ObjectID, 0, len(portfolio.Assets))
+		idOpportunities := make([]primitive.ObjectID, 0)
+		for _, asset := range portfolio.Assets {
+			if asset.Quantity > 0 {
+				idAssets = append(idAssets, asset.IDAsset)
+			}
+		}
+		for _, transaction := range transactions {
+			if transaction.IDOpportunity != nil && transaction.IDAsset != nil {
+				idAssets = append(idAssets, *transaction.IDAsset)
+				idOpportunities = append(idOpportunities, *transaction.IDOpportunity)
+			}
+		}
+
+		prices := services.GetAssetsMarketPricesService(r.Context(), idAssets)
+
+		opportunities, err := services.GetVisibleOpportunitiesByIDsService(idOpportunities, portfolio.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		roi := services.BuildPortfolioRoiService(*portfolio, transactions, prices, opportunities, time.Now().UTC())
+
+		res.Send(http.StatusOK, "SUCCESS", "ROI del portfolio.", "CLIS012", map[string]any{"roi": roi})
 	}
 }
