@@ -482,3 +482,138 @@ func TestReviewFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestPortfolioFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	valid := func() map[string]any {
+		return map[string]any{
+			"idPortfolio": primitive.NewObjectID().Hex(),
+			"tag":         "PORTFOLIO-LARGO-PLAZO",
+			"name":        "Largo plazo",
+			"description": "Inversiones a mas de un año",
+		}
+	}
+
+	tests := []struct {
+		name         string
+		middleware   func(http.Handler) http.Handler
+		edit         func(body map[string]any)
+		wantTracking string
+	}{
+		{"crear valido", fv.CreatePortfolioFormatValidate, func(map[string]any) {}, ""},
+		{"crear sin descripcion", fv.CreatePortfolioFormatValidate, func(b map[string]any) { delete(b, "description") }, ""},
+		{"crear sin tag", fv.CreatePortfolioFormatValidate, func(b map[string]any) { delete(b, "tag") }, "CC003"},
+		{"crear sin nombre", fv.CreatePortfolioFormatValidate, func(b map[string]any) { delete(b, "name") }, "CC003"},
+		{"crear tag largo", fv.CreatePortfolioFormatValidate, func(b map[string]any) { b["tag"] = strings.Repeat("A", 65) }, "CC003"},
+		{"actualizar valido", fv.UpdatePortfolioFormatValidate, func(map[string]any) {}, ""},
+		{"actualizar sin portfolio", fv.UpdatePortfolioFormatValidate, func(b map[string]any) { delete(b, "idPortfolio") }, "CC003"},
+		{"borrar valido", fv.DeletePortfolioFormatValidate, func(map[string]any) {}, ""},
+		{"borrar portfolio que no es ObjectID", fv.DeletePortfolioFormatValidate, func(b map[string]any) { b["idPortfolio"] = "abc" }, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			body := valid()
+			tt.edit(body)
+			_, tracking := runFormatValidate(t, tt.middleware, body)
+			if tracking != tt.wantTracking {
+				t.Errorf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
+		})
+	}
+}
+
+func TestCreatePortfolioTransactionFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	valid := func() map[string]any {
+		return map[string]any{
+			"idPortfolio":       primitive.NewObjectID().Hex(),
+			"idTypeTransaction": primitive.NewObjectID().Hex(),
+			"idAsset":           primitive.NewObjectID().Hex(),
+			"quantity":          0.5,
+			"unitPrice":         60000,
+			"fee":               15,
+			"executedAt":        "2026-10-01T10:00:00Z",
+		}
+	}
+
+	tests := []struct {
+		name         string
+		edit         func(body map[string]any)
+		wantTracking string
+	}{
+		{"compra valida", func(map[string]any) {}, ""},
+		{"deposito sin asset", func(b map[string]any) {
+			delete(b, "idAsset")
+			delete(b, "quantity")
+			delete(b, "unitPrice")
+			b["value"] = 1000
+		}, ""},
+		{"ligada a una oportunidad", func(b map[string]any) { b["idOpportunity"] = primitive.NewObjectID().Hex() }, ""},
+		{"montos como texto numerico", func(b map[string]any) { b["quantity"] = "0.5"; b["fee"] = "15" }, ""},
+		{"fecha con zona horaria", func(b map[string]any) { b["executedAt"] = "2026-10-01T10:00:00+02:00" }, ""},
+		{"sin portfolio", func(b map[string]any) { delete(b, "idPortfolio") }, "CC003"},
+		{"sin tipo", func(b map[string]any) { delete(b, "idTypeTransaction") }, "CC003"},
+		{"asset que no es ObjectID", func(b map[string]any) { b["idAsset"] = "BTC" }, "CC003"},
+		{"oportunidad que no es ObjectID", func(b map[string]any) { b["idOpportunity"] = "abc" }, "CC003"},
+		{"cantidad negativa", func(b map[string]any) { b["quantity"] = -1 }, "CC003"},
+		{"precio negativo", func(b map[string]any) { b["unitPrice"] = -1 }, "CC003"},
+		{"value negativo", func(b map[string]any) { b["value"] = -1 }, "CC003"},
+		{"comision negativa", func(b map[string]any) { b["fee"] = -0.1 }, "CC003"},
+		{"sin fecha de ejecucion", func(b map[string]any) { delete(b, "executedAt") }, "CC003"},
+		{"comentario largo", func(b map[string]any) { b["comment"] = strings.Repeat("a", 1001) }, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			body := valid()
+			tt.edit(body)
+			_, tracking := runFormatValidate(t, fv.CreatePortfolioTransactionFormatValidate, body)
+			if tracking != tt.wantTracking {
+				t.Errorf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
+		})
+	}
+}
+
+func TestUpdateAndDeletePortfolioTransactionFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	valid := func() map[string]any {
+		return map[string]any{
+			"idTransaction":     primitive.NewObjectID().Hex(),
+			"idTypeTransaction": primitive.NewObjectID().Hex(),
+			"value":             250,
+			"executedAt":        "2026-10-01T10:00:00Z",
+		}
+	}
+
+	tests := []struct {
+		name         string
+		middleware   func(http.Handler) http.Handler
+		edit         func(body map[string]any)
+		wantTracking string
+	}{
+		{"actualizar valido", fv.UpdatePortfolioTransactionFormatValidate, func(map[string]any) {}, ""},
+		{"actualizar sin transaccion", fv.UpdatePortfolioTransactionFormatValidate, func(b map[string]any) { delete(b, "idTransaction") }, "CC003"},
+		{"actualizar comision negativa", fv.UpdatePortfolioTransactionFormatValidate, func(b map[string]any) { b["fee"] = -1 }, "CC003"},
+		{"borrar valido", fv.DeletePortfolioTransactionFormatValidate, func(map[string]any) {}, ""},
+		{"borrar transaccion que no es ObjectID", fv.DeletePortfolioTransactionFormatValidate, func(b map[string]any) { b["idTransaction"] = "abc" }, "CC003"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			body := valid()
+			tt.edit(body)
+			_, tracking := runFormatValidate(t, tt.middleware, body)
+			if tracking != tt.wantTracking {
+				t.Errorf("tracking = %q, se esperaba %q", tracking, tt.wantTracking)
+			}
+		})
+	}
+}

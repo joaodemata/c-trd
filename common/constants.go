@@ -61,6 +61,16 @@ var (
 	AgentRunStatusFailed     = CatalogStatus{ID: mustParseObjectId("6ae86ce704d146a72e6afe00"), Tag: "RUN-FAILED", Name: "Fallida"}
 )
 
+// TYPE_TRANSACTION. Transacciones del portfolio: compra y venta mueven la posicion del asset, el dividendo suma a la
+// ganancia realizada y el deposito y el retiro son movimientos de efectivo sin asset. Se crean con scripts/create_portfolio_catalogs.js
+var (
+	TransactionTypeBuy        = CatalogStatus{ID: mustParseObjectId("6af9aad4c3e8131cda0c5183"), Tag: "TRANSACTION-BUY", Name: "Compra"}
+	TransactionTypeSell       = CatalogStatus{ID: mustParseObjectId("6af9aad462469d39d6a86d80"), Tag: "TRANSACTION-SELL", Name: "Venta"}
+	TransactionTypeDividend   = CatalogStatus{ID: mustParseObjectId("6af9aad421702109f93bd590"), Tag: "TRANSACTION-DIVIDEND", Name: "Dividendo"}
+	TransactionTypeDeposit    = CatalogStatus{ID: mustParseObjectId("6af9aad46a7bb747aecc1ee0"), Tag: "TRANSACTION-DEPOSIT", Name: "Deposito"}
+	TransactionTypeWithdrawal = CatalogStatus{ID: mustParseObjectId("6af9aad41ab057268aa0dc23"), Tag: "TRANSACTION-WITHDRAWAL", Name: "Retiro"}
+)
+
 // Agentes
 const (
 	// Tesis que toma cada corrida, las mas antiguas primero. El resto espera a la siguiente semana
@@ -101,6 +111,7 @@ const (
 	CatalogTypeVisibility        = "TYPE_VISIBILITY"
 	CatalogTypeAgentThesisStatus = "AGENT_THESIS_STATUS"
 	CatalogTypeAgentRunStatus    = "AGENT_RUN_STATUS"
+	CatalogTypeTransaction       = "TYPE_TRANSACTION"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara

@@ -29,6 +29,11 @@ func listRoutes(server *http.ServeMux) *http.ServeMux {
 	// Agentes: cola de tesis (FIFO) y corridas para que el super usuario las revise
 	api.Get("/list/agent_theses", c.ListAgentThesesController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListAgentThesesFormatValidate)
 	api.Get("/list/agent_runs", c.ListAgentRunsController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListAgentRunsFormatValidate)
+	// Portfolios del usuario de la sesion y las transacciones de uno de ellos (startDate y endDate por fecha de ejecucion)
+	api.Get("/list/portfolios", c.ListPortfoliosController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), cmm.PaginationFormatValidate)
+	api.Get("/list/portfolio_transactions", c.ListPortfolioTransactionsController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), cmm.PaginationFormatValidate, fv.ListPortfolioTransactionsFormatValidate, dv.ListPortfolioTransactionsDataValidate)
+	// ROI calculado al momento con los precios de mercado (una consulta por asset), por eso va aparte del listado de portfolios
+	api.Get("/list/portfolio_roi", c.ListPortfolioRoiController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.PortfolioRoiFormatValidate, dv.PortfolioRoiDataValidate)
 
 	return server
 

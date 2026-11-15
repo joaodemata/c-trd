@@ -119,3 +119,80 @@ func ListConditionsDataValidate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// ListPortfolioTransactionsDataValidate valida que el portfolio sea del usuario. Deja el portfolio en el contexto
+// (portfolio). Va despues de AuthDataValidate y ListPortfolioTransactionsFormatValidate
+func ListPortfolioTransactionsDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListPortfolioTransactionsFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVLIS009", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVLIS010", nil, err)
+			return
+		}
+
+		idPortfolio, err := cmm.ParseHexToObjectId(filters.IdPortfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := services.GetPortfolioService(idPortfolio, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if portfolio.ID.IsZero() {
+			res.Error("FAIL", "El portfolio enviado no existe", "DVLIS011", filters.IdPortfolio, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "portfolio", &portfolio)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// PortfolioRoiDataValidate valida que el portfolio sea del usuario. Deja el portfolio en el contexto (portfolio)
+func PortfolioRoiDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.PortfolioRoiFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVLIS012", nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVLIS013", nil, err)
+			return
+		}
+
+		idPortfolio, err := cmm.ParseHexToObjectId(payload.IdPortfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := services.GetPortfolioService(idPortfolio, authSession.IDUser)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if portfolio.ID.IsZero() {
+			res.Error("FAIL", "El portfolio enviado no existe", "DVLIS014", payload.IdPortfolio, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "portfolio", &portfolio)
+		next.ServeHTTP(w, r)
+	})
+}
