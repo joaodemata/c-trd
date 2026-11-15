@@ -15,6 +15,9 @@ var (
 	hookRateLimit    = cmm.RateLimitMiddleware(60, time.Minute)
 )
 
+// Privilegios que pueden usar el portfolio: el agente no tiene portfolio
+var portfolioPrivileges = []string{cmm.UserPrivilegeSuperUser.Tag, cmm.UserPrivilegeGenericUser.Tag}
+
 // Call and group all the routes
 func SetupRouter(server *http.ServeMux, hub *cmm.Hub) *http.ServeMux {
 	// Instance for websocket

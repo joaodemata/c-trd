@@ -2,6 +2,7 @@ package format_validates
 
 import (
 	"c_trd/common"
+	"time"
 )
 
 // Definimos los format validates co la estructura
@@ -152,3 +153,72 @@ type ReviewTriggerFormat struct {
 }
 
 var ReviewTriggerFormatValidate = common.FormatValidateMiddleware[ReviewTriggerFormat]
+
+// ---------- Portfolio ----------
+
+// CreatePortfolioFormat datos para crear un portfolio. El tag no se puede repetir entre los portfolios del usuario
+type CreatePortfolioFormat struct {
+	Tag         string `json:"tag" validate:"required,max=64"`
+	Name        string `json:"name" validate:"required,max=100"`
+	Description string `json:"description" validate:"omitempty,max=1000"`
+}
+
+var CreatePortfolioFormatValidate = common.FormatValidateMiddleware[CreatePortfolioFormat]
+
+// UpdatePortfolioFormat portfolio a actualizar y sus nuevos datos (mismas reglas que CreatePortfolioFormat)
+type UpdatePortfolioFormat struct {
+	IdPortfolio string `json:"idPortfolio" validate:"required,mongodb"`
+	Tag         string `json:"tag" validate:"required,max=64"`
+	Name        string `json:"name" validate:"required,max=100"`
+	Description string `json:"description" validate:"omitempty,max=1000"`
+}
+
+var UpdatePortfolioFormatValidate = common.FormatValidateMiddleware[UpdatePortfolioFormat]
+
+// DeletePortfolioFormat portfolio a borrar junto con sus transacciones
+type DeletePortfolioFormat struct {
+	IdPortfolio string `json:"idPortfolio" validate:"required,mongodb"`
+}
+
+var DeletePortfolioFormatValidate = common.FormatValidateMiddleware[DeletePortfolioFormat]
+
+// CreatePortfolioTransactionFormat datos de una transaccion. Las reglas que dependen del tipo (que campos lleva cada
+// uno) se validan en models.NewPortfolioTransactionModel porque aqui solo se conoce el id del tipo
+type CreatePortfolioTransactionFormat struct {
+	IdPortfolio       string    `json:"idPortfolio" validate:"required,mongodb"`
+	IdTypeTransaction string    `json:"idTypeTransaction" validate:"required,mongodb"`
+	IdAsset           string    `json:"idAsset" validate:"omitempty,mongodb"`
+	IdOpportunity     string    `json:"idOpportunity" validate:"omitempty,mongodb"`
+	Quantity          float64   `json:"quantity" validate:"gte=0"`
+	UnitPrice         float64   `json:"unitPrice" validate:"gte=0"`
+	Value             float64   `json:"value" validate:"gte=0"`
+	Fee               float64   `json:"fee" validate:"gte=0"`
+	ExecutedAt        time.Time `json:"executedAt" validate:"required"`
+	Comment           string    `json:"comment" validate:"omitempty,max=1000"`
+}
+
+var CreatePortfolioTransactionFormatValidate = common.FormatValidateMiddleware[CreatePortfolioTransactionFormat]
+
+// UpdatePortfolioTransactionFormat transaccion a reemplazar y todos sus nuevos datos (mismas reglas que
+// CreatePortfolioTransactionFormat). El portfolio no cambia
+type UpdatePortfolioTransactionFormat struct {
+	IdTransaction     string    `json:"idTransaction" validate:"required,mongodb"`
+	IdTypeTransaction string    `json:"idTypeTransaction" validate:"required,mongodb"`
+	IdAsset           string    `json:"idAsset" validate:"omitempty,mongodb"`
+	IdOpportunity     string    `json:"idOpportunity" validate:"omitempty,mongodb"`
+	Quantity          float64   `json:"quantity" validate:"gte=0"`
+	UnitPrice         float64   `json:"unitPrice" validate:"gte=0"`
+	Value             float64   `json:"value" validate:"gte=0"`
+	Fee               float64   `json:"fee" validate:"gte=0"`
+	ExecutedAt        time.Time `json:"executedAt" validate:"required"`
+	Comment           string    `json:"comment" validate:"omitempty,max=1000"`
+}
+
+var UpdatePortfolioTransactionFormatValidate = common.FormatValidateMiddleware[UpdatePortfolioTransactionFormat]
+
+// DeletePortfolioTransactionFormat transaccion a borrar
+type DeletePortfolioTransactionFormat struct {
+	IdTransaction string `json:"idTransaction" validate:"required,mongodb"`
+}
+
+var DeletePortfolioTransactionFormatValidate = common.FormatValidateMiddleware[DeletePortfolioTransactionFormat]

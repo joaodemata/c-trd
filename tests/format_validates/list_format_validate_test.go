@@ -203,3 +203,90 @@ func TestListConditionsFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestListPortfolioTransactionsFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	const portfolio = "6adcd1882c3b99e2480bc973"
+	const asset = "6adcd1882c3b99e2480bc974"
+
+	tests := []struct {
+		name     string
+		query    string
+		wantNext bool
+		want     fv.ListPortfolioTransactionsFormat
+	}{
+		{"solo el portfolio", "?idPortfolio=" + portfolio, true, fv.ListPortfolioTransactionsFormat{IdPortfolio: portfolio}},
+		{"con filtros", "?idPortfolio=" + portfolio + "&idAsset=" + asset + "&tagTypeTransaction=TRANSACTION-SELL", true,
+			fv.ListPortfolioTransactionsFormat{IdPortfolio: portfolio, IdAsset: asset, TagTypeTransaction: "TRANSACTION-SELL"}},
+		{"sin portfolio", "", false, fv.ListPortfolioTransactionsFormat{}},
+		{"portfolio invalido", "?idPortfolio=no-es-un-id", false, fv.ListPortfolioTransactionsFormat{}},
+		{"oportunidad invalida", "?idPortfolio=" + portfolio + "&idOpportunity=abc", false, fv.ListPortfolioTransactionsFormat{}},
+		{"tipo desconocido", "?idPortfolio=" + portfolio + "&tagTypeTransaction=TRANSACTION-SWAP", false, fv.ListPortfolioTransactionsFormat{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/list/portfolio_transactions"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.ListPortfolioTransactionsFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != "CC003" {
+					t.Errorf("tracking = %s, se esperaba CC003", res.Tracking)
+				}
+				return
+			}
+
+			// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+			filters, errCtx := cmm.GetFromRequestContext[*fv.ListPortfolioTransactionsFormat](spy.Request, "filters")
+			testutil.RequireEmptyError(t, errCtx)
+			if *filters != tt.want {
+				t.Errorf("filters = %+v, want %+v", *filters, tt.want)
+			}
+		})
+	}
+}
+
+func TestPortfolioRoiFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		query    string
+		wantNext bool
+	}{
+		{"con portfolio", "?idPortfolio=6adcd1882c3b99e2480bc973", true},
+		{"sin portfolio", "", false},
+		{"portfolio invalido", "?idPortfolio=abc", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/list/portfolio_roi"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.PortfolioRoiFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != "CC003" {
+					t.Errorf("tracking = %s, se esperaba CC003", res.Tracking)
+				}
+			}
+		})
+	}
+}

@@ -68,3 +68,22 @@ type ListAgentRunsFormat struct {
 
 // Se inyecta en "filters" porque "payload" lo ocupa la paginacion
 var ListAgentRunsFormatValidate = common.FormatValidateMiddlewareWithKey[ListAgentRunsFormat]("filters")
+
+// ListPortfolioTransactionsFormat portfolio y filtros propios del listado de transacciones, se concatena con
+// cmm.PaginationFormatValidate (startDate y endDate filtran por la fecha de ejecucion)
+type ListPortfolioTransactionsFormat struct {
+	IdPortfolio        string `json:"idPortfolio" in:"query" validate:"required,mongodb"`
+	IdAsset            string `json:"idAsset" in:"query" validate:"omitempty,mongodb"`
+	IdOpportunity      string `json:"idOpportunity" in:"query" validate:"omitempty,mongodb"`
+	TagTypeTransaction string `json:"tagTypeTransaction" in:"query" validate:"omitempty,oneof=TRANSACTION-BUY TRANSACTION-SELL TRANSACTION-DIVIDEND TRANSACTION-DEPOSIT TRANSACTION-WITHDRAWAL"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListPortfolioTransactionsFormatValidate = common.FormatValidateMiddlewareWithKey[ListPortfolioTransactionsFormat]("filters")
+
+// PortfolioRoiFormat portfolio del que se calcula el ROI
+type PortfolioRoiFormat struct {
+	IdPortfolio string `json:"idPortfolio" in:"query" validate:"required,mongodb"`
+}
+
+var PortfolioRoiFormatValidate = common.FormatValidateMiddleware[PortfolioRoiFormat]

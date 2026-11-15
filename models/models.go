@@ -17,4 +17,6 @@ var RegistryList = []cmm.ModelRegistry{
 	{Name: "sessions", Ptr: &SessionsModel},
 	{Name: "agent_theses", Ptr: &AgentThesesModel},
 	{Name: "agent_runs", Ptr: &AgentRunsModel},
+	{Name: "portfolios", Ptr: &PortfolioModel},
+	{Name: "portfolio_transactions", Ptr: &PortfolioTransactionsModel},
 }
