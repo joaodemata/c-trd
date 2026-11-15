@@ -1270,3 +1270,368 @@ func ReviewTriggerService(idTrigger primitive.ObjectID, approve bool, idConditio
 
 	return cmm.NewEmptyErrorHandler()
 }
+
+// ---------- Portfolio y transacciones ----------
+
+// Margen para comparar cantidades en float64: una venta puede superar por redondeo la cantidad disponible
+const portfolioQuantityEpsilon = 1e-9
+
+// BuildPortfolioAssetPositionService reconstruye la posicion de un asset con sus transacciones (todas del mismo asset)
+// en orden de ejecucion, con el metodo de costo promedio:
+//   - Compra: suma la cantidad y el costo (value + fee); el costo promedio es costBasis / quantity
+//   - Venta: no puede superar la cantidad disponible en ese momento; saca el costo promedio de lo vendido y suma a la
+//     ganancia realizada lo recibido (value - fee) menos ese costo
+//   - Dividendo: suma a la ganancia realizada value - fee
+//
+// Retorna false si no hay transacciones, el asset sale del portfolio
+func BuildPortfolioAssetPositionService(transactions []models.PortfolioTransactionsModelType) (models.PortfolioAsset, bool, *cmm.ErrorHandler) {
+	var position models.PortfolioAsset
+	if len(transactions) == 0 {
+		return position, false, cmm.NewEmptyErrorHandler()
+	}
+
+	ordered := slices.Clone(transactions)
+	slices.SortStableFunc(ordered, func(a, b models.PortfolioTransactionsModelType) int {
+		if byExecution := a.ExecutedAt.Compare(b.ExecutedAt); byExecution != 0 {
+			return byExecution
+		}
+		if byCreation := a.CreatedDate.Compare(b.CreatedDate); byCreation != 0 {
+			return byCreation
+		}
+		return strings.Compare(a.ID.Hex(), b.ID.Hex())
+	})
+
+	for _, transaction := range ordered {
+		switch transaction.TagTypeTransaction {
+		case cmm.TransactionTypeBuy.Tag:
+			position.Quantity += transaction.Quantity
+			position.CostBasis += transaction.Value + transaction.Fee
+			position.AverageCost = position.CostBasis / position.Quantity
+		case cmm.TransactionTypeSell.Tag:
+			if transaction.Quantity > position.Quantity+portfolioQuantityEpsilon {
+				return position, false, cmm.NewErrorHandler(fmt.Errorf("sell %s quantity %v available %v", transaction.ID.Hex(), transaction.Quantity, position.Quantity),
+					fmt.Sprintf("La venta del %s de %v %s supera la cantidad disponible en ese momento (%v)", transaction.ExecutedAt.Format(time.RFC3339), transaction.Quantity, transaction.TagAsset, position.Quantity),
+					cmm.LevelError, "SOPRE073")
+			}
+			soldCost := position.AverageCost * transaction.Quantity
+			position.RealizedPnL += transaction.Value - transaction.Fee - soldCost
+			position.Quantity -= transaction.Quantity
+			position.CostBasis -= soldCost
+			if position.Quantity <= portfolioQuantityEpsilon {
+				position.Quantity = 0
+				position.CostBasis = 0
+				position.AverageCost = 0
+			}
+		case cmm.TransactionTypeDividend.Tag:
+			position.RealizedPnL += transaction.Value - transaction.Fee
+		default:
+			return position, false, cmm.NewErrorHandler(fmt.Errorf("transaction %s tag %s", transaction.ID.Hex(), transaction.TagTypeTransaction),
+				"La transaccion no mueve la posicion de un asset: "+transaction.TagTypeTransaction, cmm.LevelError, "SOPRE074")
+		}
+	}
+
+	// Los datos del asset se toman de la transaccion mas reciente
+	last := ordered[len(ordered)-1]
+	if last.IDAsset != nil {
+		position.IDAsset = *last.IDAsset
+	}
+	if last.IDTypeAsset != nil {
+		position.IDTypeAsset = *last.IDTypeAsset
+	}
+	position.TypeTagAsset = last.TypeTagAsset
+	position.TypeNameAsset = last.TypeNameAsset
+	position.TypeDescriptionAsset = last.TypeDescriptionAsset
+	position.TagAsset = last.TagAsset
+	position.NameAsset = last.NameAsset
+	position.DescriptionAsset = last.DescriptionAsset
+
+	return position, true, cmm.NewEmptyErrorHandler()
+}
+
+// SetPortfolioAssetPositionService reemplaza la posicion del asset en la cartera, la agrega al final si no estaba o la
+// quita si position es nil. No modifica la cartera recibida y nunca retorna nil
+func SetPortfolioAssetPositionService(assets []models.PortfolioAsset, idAsset primitive.ObjectID, position *models.PortfolioAsset) []models.PortfolioAsset {
+	result := make([]models.PortfolioAsset, 0, len(assets)+1)
+	found := false
+
+	for _, asset := range assets {
+		if asset.IDAsset != idAsset {
+			result = append(result, asset)
+			continue
+		}
+		found = true
+		if position != nil {
+			result = append(result, *position)
+		}
+	}
+
+	if !found && position != nil {
+		result = append(result, *position)
+	}
+
+	return result
+}
+
+// refreshPortfolioAssetsService reconstruye dentro de la transaccion de MongoDB la posicion de los assets en el
+// portfolio con sus transacciones no borradas. Si una venta supera la cantidad disponible retorna el error y la
+// transaccion se revierte
+func refreshPortfolioAssetsService(sessCtx mongo.SessionContext, idPortfolio primitive.ObjectID, idAssets []primitive.ObjectID, now time.Time) *cmm.ErrorHandler {
+	var portfolio models.PortfolioModelType
+	errFind := models.PortfolioModel.FindOne(sessCtx, bson.M{"_id": idPortfolio, "logical_delete": false}).Decode(&portfolio)
+	if errFind != nil {
+		return cmm.NewErrorHandler(errFind, "Error consultando el portfolio de la transaccion.", cmm.LevelDatabase, "SOPRE075")
+	}
+
+	assets := portfolio.Assets
+	for _, idAsset := range idAssets {
+		transactions := make([]models.PortfolioTransactionsModelType, 0)
+		filter := bson.M{"id_portfolio": idPortfolio, "id_asset": idAsset, "logical_delete": false}
+		cursor, errQuery := models.PortfolioTransactionsModel.Find(sessCtx, filter)
+		if errQuery != nil {
+			return cmm.NewErrorHandler(errQuery, "Error consultando las transacciones del asset.", cmm.LevelDatabase, "SOPRE076")
+		}
+		errDecode := cursor.All(sessCtx, &transactions)
+		if errDecode != nil {
+			return cmm.NewErrorHandler(errDecode, "Error decodificando las transacciones del asset.", cmm.LevelDatabase, "SOPRE077")
+		}
+
+		position, exists, err := BuildPortfolioAssetPositionService(transactions)
+		if !err.IsEmtpy() {
+			return err
+		}
+
+		if exists {
+			assets = SetPortfolioAssetPositionService(assets, idAsset, &position)
+		} else {
+			assets = SetPortfolioAssetPositionService(assets, idAsset, nil)
+		}
+	}
+
+	update := bson.M{"$set": bson.M{"assets": assets, "last_updated_at": now}}
+	_, errUpdate := models.PortfolioModel.UpdateOne(sessCtx, bson.M{"_id": idPortfolio}, update)
+	if errUpdate != nil {
+		return cmm.NewErrorHandler(errUpdate, "Error actualizando la cartera del portfolio.", cmm.LevelDatabase, "SOPRE078")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// CreatePortfolioService inserta un portfolio vacio
+func CreatePortfolioService(portfolio models.PortfolioModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	result, err := models.PortfolioModel.InsertOne(ctx, portfolio)
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, "Error creando el portfolio.", cmm.LevelDatabase, "SOPRE079")
+	}
+
+	insertedID, ok := result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return "", cmm.NewErrorHandler(nil, "Error parseando el object ID.", cmm.LevelFatal, "SOPRE080")
+	}
+
+	return insertedID.Hex(), cmm.NewEmptyErrorHandler()
+}
+
+// UpdatePortfolioService cambia el tag, nombre y descripcion de un portfolio del usuario. La cartera no se toca
+func UpdatePortfolioService(idPortfolio primitive.ObjectID, idUser primitive.ObjectID, tag, name, description string, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idPortfolio, "id_user": idUser, "logical_delete": false}
+	update := bson.M{"$set": bson.M{"tag": tag, "name": name, "description": description, "last_updated_at": now}}
+
+	result, err := models.PortfolioModel.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error actualizando el portfolio.", cmm.LevelDatabase, "SOPRE081")
+	}
+	if result.MatchedCount == 0 {
+		return cmm.NewErrorHandler(fmt.Errorf("portfolio %s", idPortfolio.Hex()), "El portfolio no existe o fue borrado.", cmm.LevelError, "SOPRE082")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// DeletePortfolioService borra logicamente el portfolio del usuario y todas sus transacciones en una transaccion
+func DeletePortfolioService(idPortfolio primitive.ObjectID, idUser primitive.ObjectID, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	// Usamos cmm.Database porque cmm.AppConfig puede ser nil al iniciar
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE083")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		deleteSet := bson.M{"$set": bson.M{"logical_delete": true, "last_updated_at": now}}
+
+		portfolioFilter := bson.M{"_id": idPortfolio, "id_user": idUser, "logical_delete": false}
+		result, errPortfolio := models.PortfolioModel.UpdateOne(sessCtx, portfolioFilter, deleteSet)
+		if errPortfolio != nil {
+			return nil, cmm.NewErrorHandler(errPortfolio, "Error borrando el portfolio.", cmm.LevelDatabase, "SOPRE084")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("portfolio %s", idPortfolio.Hex()), "El portfolio no existe o ya fue borrado.", cmm.LevelError, "SOPRE085")
+		}
+
+		transactionsFilter := bson.M{"id_portfolio": idPortfolio, "logical_delete": false}
+		if _, errTransactions := models.PortfolioTransactionsModel.UpdateMany(sessCtx, transactionsFilter, deleteSet); errTransactions != nil {
+			return nil, cmm.NewErrorHandler(errTransactions, "Error borrando las transacciones del portfolio.", cmm.LevelDatabase, "SOPRE086")
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return handler
+		}
+		return cmm.NewErrorHandler(err, "Error en la transaccion del borrado del portfolio.", cmm.LevelDatabase, "SOPRE087")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// CreatePortfolioTransactionService inserta la transaccion y, si tiene asset, reconstruye su posicion en el portfolio.
+// Todo va en una transaccion: si la posicion queda invalida (venta mayor a lo disponible) no se inserta nada
+func CreatePortfolioTransactionService(transaction models.PortfolioTransactionsModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE088")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		if _, errInsert := models.PortfolioTransactionsModel.InsertOne(sessCtx, transaction); errInsert != nil {
+			return nil, cmm.NewErrorHandler(errInsert, "Error creando la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE089")
+		}
+
+		// Depositos y retiros no tienen asset: no mueven la cartera
+		if transaction.IDAsset == nil {
+			return nil, nil
+		}
+
+		errRefresh := refreshPortfolioAssetsService(sessCtx, transaction.IDPortfolio, []primitive.ObjectID{*transaction.IDAsset}, transaction.LastUpdatedAt)
+		if !errRefresh.IsEmtpy() {
+			return nil, errRefresh
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return "", handler
+		}
+		return "", cmm.NewErrorHandler(err, "Error en la transaccion de la creacion de la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE090")
+	}
+
+	return transaction.ID.Hex(), cmm.NewEmptyErrorHandler()
+}
+
+// ReplacePortfolioTransactionService reemplaza la transaccion (mismo id) y reconstruye la posicion del asset anterior y
+// del nuevo si cambio. Si alguna posicion queda invalida no se guarda nada
+func ReplacePortfolioTransactionService(previous models.PortfolioTransactionsModelType, updated models.PortfolioTransactionsModelType) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	idAssets := make([]primitive.ObjectID, 0, 2)
+	if previous.IDAsset != nil {
+		idAssets = append(idAssets, *previous.IDAsset)
+	}
+	if updated.IDAsset != nil && !slices.Contains(idAssets, *updated.IDAsset) {
+		idAssets = append(idAssets, *updated.IDAsset)
+	}
+
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE091")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		filter := bson.M{"_id": previous.ID, "logical_delete": false}
+		result, errReplace := models.PortfolioTransactionsModel.ReplaceOne(sessCtx, filter, updated)
+		if errReplace != nil {
+			return nil, cmm.NewErrorHandler(errReplace, "Error actualizando la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE092")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("transaction %s", previous.ID.Hex()), "La transaccion no existe o fue borrada.", cmm.LevelError, "SOPRE093")
+		}
+
+		if len(idAssets) == 0 {
+			return nil, nil
+		}
+
+		errRefresh := refreshPortfolioAssetsService(sessCtx, updated.IDPortfolio, idAssets, updated.LastUpdatedAt)
+		if !errRefresh.IsEmtpy() {
+			return nil, errRefresh
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return handler
+		}
+		return cmm.NewErrorHandler(err, "Error en la transaccion de la actualizacion de la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE094")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// DeletePortfolioTransactionService borra logicamente la transaccion y reconstruye la posicion de su asset. Si al
+// quitarla una venta posterior supera la cantidad disponible no se borra
+func DeletePortfolioTransactionService(transaction models.PortfolioTransactionsModelType, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	session, err := cmm.Database.Client().StartSession()
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error iniciando la sesion de MongoDB.", cmm.LevelDatabase, "SOPRE095")
+	}
+	defer session.EndSession(ctx)
+
+	txnOpts := options.Transaction().SetWriteConcern(writeconcern.Majority())
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		filter := bson.M{"_id": transaction.ID, "logical_delete": false}
+		update := bson.M{"$set": bson.M{"logical_delete": true, "last_updated_at": now}}
+		result, errDelete := models.PortfolioTransactionsModel.UpdateOne(sessCtx, filter, update)
+		if errDelete != nil {
+			return nil, cmm.NewErrorHandler(errDelete, "Error borrando la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE096")
+		}
+		if result.MatchedCount == 0 {
+			return nil, cmm.NewErrorHandler(fmt.Errorf("transaction %s", transaction.ID.Hex()), "La transaccion no existe o ya fue borrada.", cmm.LevelError, "SOPRE097")
+		}
+
+		if transaction.IDAsset == nil {
+			return nil, nil
+		}
+
+		errRefresh := refreshPortfolioAssetsService(sessCtx, transaction.IDPortfolio, []primitive.ObjectID{*transaction.IDAsset}, now)
+		if !errRefresh.IsEmtpy() {
+			return nil, errRefresh
+		}
+
+		return nil, nil
+	}, txnOpts)
+	if err != nil {
+		var handler *cmm.ErrorHandler
+		if errors.As(err, &handler) {
+			return handler
+		}
+		return cmm.NewErrorHandler(err, "Error en la transaccion del borrado de la transaccion del portfolio.", cmm.LevelDatabase, "SOPRE098")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}

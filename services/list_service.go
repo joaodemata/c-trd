@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -1056,4 +1057,494 @@ func CountTriggersByConditionService(idCondition primitive.ObjectID) (int64, *cm
 	}
 
 	return total, cmm.NewEmptyErrorHandler()
+}
+
+// ---------- Portfolio y transacciones ----------
+
+// GetPortfolioService busca un portfolio no borrado del usuario. Si no existe o es de otro usuario retorna el portfolio
+// vacio sin error
+func GetPortfolioService(idPortfolio primitive.ObjectID, idUser primitive.ObjectID) (models.PortfolioModelType, *cmm.ErrorHandler) {
+	var result models.PortfolioModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idPortfolio, "id_user": idUser, "logical_delete": false}
+	err := models.PortfolioModel.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE048")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetPortfolioByTagService busca un portfolio no borrado del usuario por su tag. Si no existe retorna el portfolio vacio
+// sin error
+func GetPortfolioByTagService(tag string, idUser primitive.ObjectID) (models.PortfolioModelType, *cmm.ErrorHandler) {
+	var result models.PortfolioModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"tag": tag, "id_user": idUser, "logical_delete": false}
+	err := models.PortfolioModel.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE049")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetPortfoliosService lista paginados los portfolios del usuario, los mas antiguos primero
+func GetPortfoliosService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, idUser primitive.ObjectID) ([]models.PortfolioModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.PortfolioModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_user": idUser, "logical_delete": false}
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"tag": regexPattern},
+			{"name": regexPattern},
+			{"description": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.PortfolioModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los portfolios", cmm.LevelDatabase, "SLISE050")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "created_date", Value: 1}, {Key: "_id", Value: 1}})
+
+	cursor, err := models.PortfolioModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los portfolios", cmm.LevelDatabase, "SLISE051")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los portfolios", cmm.LevelDatabase, "SLISE052")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetPortfolioTransactionService busca una transaccion no borrada del usuario. Si no existe o es de otro usuario
+// retorna la transaccion vacia sin error
+func GetPortfolioTransactionService(idTransaction primitive.ObjectID, idUser primitive.ObjectID) (models.PortfolioTransactionsModelType, *cmm.ErrorHandler) {
+	var result models.PortfolioTransactionsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": idTransaction, "id_user": idUser, "logical_delete": false}
+	err := models.PortfolioTransactionsModel.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE053")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// PortfolioTransactionsFilter filtros opcionales del listado de transacciones de un portfolio. Los ids en cero y el tag
+// vacio no filtran
+type PortfolioTransactionsFilter struct {
+	IDAsset            primitive.ObjectID
+	IDOpportunity      primitive.ObjectID
+	TagTypeTransaction string
+}
+
+// GetPortfolioTransactionsService lista paginadas las transacciones de un portfolio del usuario, las ejecutadas mas
+// recientemente primero. startDate y endDate filtran por executed_at
+func GetPortfolioTransactionsService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, idPortfolio primitive.ObjectID, idUser primitive.ObjectID, filters PortfolioTransactionsFilter) ([]models.PortfolioTransactionsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.PortfolioTransactionsModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_portfolio": idPortfolio, "id_user": idUser, "logical_delete": false}
+	if !filters.IDAsset.IsZero() {
+		filter["id_asset"] = filters.IDAsset
+	}
+	if !filters.IDOpportunity.IsZero() {
+		filter["id_opportunity"] = filters.IDOpportunity
+	}
+	if filters.TagTypeTransaction != "" {
+		filter["tag_type_transaction"] = filters.TagTypeTransaction
+	}
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["executed_at"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["executed_at"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["executed_at"] = bson.M{"$lte": EndDate}
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"comment": regexPattern},
+			{"tag_asset": regexPattern},
+			{"name_asset": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.PortfolioTransactionsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las transacciones", cmm.LevelDatabase, "SLISE054")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "executed_at", Value: -1}, {Key: "_id", Value: -1}})
+
+	cursor, err := models.PortfolioTransactionsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las transacciones", cmm.LevelDatabase, "SLISE055")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las transacciones", cmm.LevelDatabase, "SLISE056")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetVisibleOpportunityService busca una oportunidad no borrada que el usuario puede ver (publica, suya o de lista
+// blanca donde esta). Si no existe o no la puede ver retorna la oportunidad vacia sin error
+func GetVisibleOpportunityService(idOpportunity primitive.ObjectID, idUser primitive.ObjectID) (models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	var result models.OpportunitiesModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := models.VisibleToUserFilter(idUser)
+	filter["_id"] = idOpportunity
+	filter["logical_delete"] = false
+
+	err := models.OpportunitiesModel.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE057")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetAllPortfolioTransactionsService retorna todas las transacciones no borradas de un portfolio del usuario, sin
+// paginar, para calcular el ROI
+func GetAllPortfolioTransactionsService(idPortfolio primitive.ObjectID, idUser primitive.ObjectID) ([]models.PortfolioTransactionsModelType, *cmm.ErrorHandler) {
+	result := make([]models.PortfolioTransactionsModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_portfolio": idPortfolio, "id_user": idUser, "logical_delete": false}
+	opts := options.Find().SetSort(bson.D{{Key: "executed_at", Value: 1}, {Key: "_id", Value: 1}})
+
+	cursor, err := models.PortfolioTransactionsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las transacciones del portfolio", cmm.LevelDatabase, "SLISE058")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las transacciones del portfolio", cmm.LevelDatabase, "SLISE059")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetVisibleOpportunitiesByIDsService busca las oportunidades no borradas que el usuario puede ver, por su ID. Las que
+// no existen o ya no puede ver no se incluyen en el mapa
+func GetVisibleOpportunitiesByIDsService(ids []primitive.ObjectID, idUser primitive.ObjectID) (map[primitive.ObjectID]models.OpportunitiesModelType, *cmm.ErrorHandler) {
+	result := make(map[primitive.ObjectID]models.OpportunitiesModelType, len(ids))
+	if len(ids) == 0 {
+		return result, cmm.NewEmptyErrorHandler()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := models.VisibleToUserFilter(idUser)
+	filter["_id"] = bson.M{"$in": ids}
+	filter["logical_delete"] = false
+
+	cursor, err := models.OpportunitiesModel.Find(ctx, filter)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las oportunidades de las transacciones", cmm.LevelDatabase, "SLISE060")
+	}
+	defer cursor.Close(ctx)
+
+	opportunities := make([]models.OpportunitiesModelType, 0, len(ids))
+	if err = cursor.All(ctx, &opportunities); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las oportunidades de las transacciones", cmm.LevelDatabase, "SLISE061")
+	}
+
+	for _, opportunity := range opportunities {
+		result[opportunity.ID] = opportunity
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// PortfolioAssetRoi posicion del asset con su valor de mercado. Los campos de mercado son null si no se obtuvo el precio
+type PortfolioAssetRoi struct {
+	models.PortfolioAsset
+	MarketPrice   *float64 `json:"marketPrice"`
+	MarketValue   *float64 `json:"marketValue"`
+	UnrealizedPnL *float64 `json:"unrealizedPnl"`
+}
+
+// PortfolioRoiTotals totales del portfolio. Los assets sin precio se valoran a su costo (sin ganancia no realizada)
+type PortfolioRoiTotals struct {
+	// Total pagado en compras (value + fee), base del ROI sobre lo invertido
+	InvestedCost  float64  `json:"investedCost"`
+	CostBasis     float64  `json:"costBasis"`
+	MarketValue   float64  `json:"marketValue"`
+	RealizedPnL   float64  `json:"realizedPnl"`
+	UnrealizedPnL float64  `json:"unrealizedPnl"`
+	RoiOnInvested *float64 `json:"roiOnInvested"`
+	// Movimientos de efectivo: cash = depositos - retiros - compras + ventas + dividendos (con comisiones)
+	NetDeposits float64  `json:"netDeposits"`
+	Cash        float64  `json:"cash"`
+	Equity      float64  `json:"equity"`
+	RoiOnEquity *float64 `json:"roiOnEquity"`
+}
+
+// OpportunityRoi resultado de las transacciones ligadas a una oportunidad, con su propio costo promedio (no el del
+// portfolio). Los datos de la oportunidad quedan vacios si ya no es visible para el usuario
+type OpportunityRoi struct {
+	IDOpportunity primitive.ObjectID `json:"idOpportunity"`
+	TagTrigger    string             `json:"tagTrigger"`
+	TagAction     string             `json:"tagAction"`
+	TagStatus     string             `json:"tagStatus"`
+	IDAsset       primitive.ObjectID `json:"idAsset"`
+	TagAsset      string             `json:"tagAsset"`
+	Transactions  int                `json:"transactions"`
+	// Posicion de la oportunidad
+	QuantityBought float64  `json:"quantityBought"`
+	QuantitySold   float64  `json:"quantitySold"`
+	OpenQuantity   float64  `json:"openQuantity"`
+	InvestedCost   float64  `json:"investedCost"`
+	Proceeds       float64  `json:"proceeds"`
+	AverageCost    float64  `json:"averageCost"`
+	RealizedPnL    float64  `json:"realizedPnl"`
+	MarketPrice    *float64 `json:"marketPrice"`
+	UnrealizedPnL  *float64 `json:"unrealizedPnl"`
+	Roi            *float64 `json:"roi"`
+	// Cambio de precio entre la activacion y el cierre de la oportunidad (lo planeado) para compararlo con roi (lo
+	// ejecutado). null si la oportunidad no tiene esos precios
+	PlannedPriceChange *float64 `json:"plannedPriceChange"`
+	Warning            string   `json:"warning,omitempty"`
+}
+
+// PortfolioRoi ROI del portfolio, de cada asset y de cada oportunidad ligada. partial indica que algun precio no se
+// pudo obtener y esos assets se valoraron a su costo
+type PortfolioRoi struct {
+	IDPortfolio   primitive.ObjectID  `json:"idPortfolio"`
+	Partial       bool                `json:"partial"`
+	Assets        []PortfolioAssetRoi `json:"assets"`
+	Totals        PortfolioRoiTotals  `json:"totals"`
+	Opportunities []OpportunityRoi    `json:"opportunities"`
+	Warnings      []string            `json:"warnings"`
+	CalculatedAt  time.Time           `json:"calculatedAt"`
+}
+
+// ratio retorna numerator / denominator, o nil si el denominador no es positivo
+func ratio(numerator float64, denominator float64) *float64 {
+	if denominator <= 0 {
+		return nil
+	}
+	value := numerator / denominator
+	return &value
+}
+
+// BuildPortfolioRoiService calcula el ROI con la cartera del portfolio, todas sus transacciones, los precios de
+// mercado por asset (los que faltan se valoran a su costo) y las oportunidades visibles ligadas:
+//   - roiOnInvested = (ganancia realizada + no realizada) / total pagado en compras
+//   - roiOnEquity = (equity - depositos netos) / depositos netos, con equity = cash + valor de mercado. Es null si no
+//     hay depositos o si el cash queda negativo (compras sin los depositos que las cubren)
+//   - roi de cada oportunidad = (ganancia realizada + no realizada) / total pagado en sus compras, con su propio costo
+//     promedio. Es null si tiene ventas mayores a sus compras o le falta el precio con cantidad abierta
+func BuildPortfolioRoiService(portfolio models.PortfolioModelType, transactions []models.PortfolioTransactionsModelType, prices map[primitive.ObjectID]float64, opportunities map[primitive.ObjectID]models.OpportunitiesModelType, now time.Time) PortfolioRoi {
+	roi := PortfolioRoi{
+		IDPortfolio:   portfolio.ID,
+		Assets:        make([]PortfolioAssetRoi, 0, len(portfolio.Assets)),
+		Opportunities: make([]OpportunityRoi, 0),
+		Warnings:      make([]string, 0),
+		CalculatedAt:  now,
+	}
+
+	// 1. Assets: valor de mercado y ganancia no realizada de cada posicion
+	for _, asset := range portfolio.Assets {
+		assetRoi := PortfolioAssetRoi{PortfolioAsset: asset}
+		roi.Totals.CostBasis += asset.CostBasis
+		roi.Totals.RealizedPnL += asset.RealizedPnL
+
+		price, hasPrice := prices[asset.IDAsset]
+		if !hasPrice && asset.Quantity > 0 {
+			roi.Partial = true
+			roi.Totals.MarketValue += asset.CostBasis
+			roi.Warnings = append(roi.Warnings, fmt.Sprintf("No se obtuvo el precio de %s, se valoro a su costo", asset.TagAsset))
+			roi.Assets = append(roi.Assets, assetRoi)
+			continue
+		}
+
+		marketValue := asset.Quantity * price
+		unrealized := marketValue - asset.CostBasis
+		if hasPrice {
+			assetRoi.MarketPrice = &price
+		}
+		assetRoi.MarketValue = &marketValue
+		assetRoi.UnrealizedPnL = &unrealized
+		roi.Totals.MarketValue += marketValue
+		roi.Totals.UnrealizedPnL += unrealized
+		roi.Assets = append(roi.Assets, assetRoi)
+	}
+
+	// 2. Movimientos de efectivo y total pagado en compras
+	byOpportunity := map[primitive.ObjectID][]models.PortfolioTransactionsModelType{}
+	opportunityOrder := make([]primitive.ObjectID, 0)
+	for _, transaction := range transactions {
+		switch transaction.TagTypeTransaction {
+		case cmm.TransactionTypeBuy.Tag:
+			roi.Totals.InvestedCost += transaction.Value + transaction.Fee
+			roi.Totals.Cash -= transaction.Value + transaction.Fee
+		case cmm.TransactionTypeSell.Tag, cmm.TransactionTypeDividend.Tag:
+			roi.Totals.Cash += transaction.Value - transaction.Fee
+		case cmm.TransactionTypeDeposit.Tag:
+			roi.Totals.NetDeposits += transaction.Value - transaction.Fee
+			roi.Totals.Cash += transaction.Value - transaction.Fee
+		case cmm.TransactionTypeWithdrawal.Tag:
+			roi.Totals.NetDeposits -= transaction.Value + transaction.Fee
+			roi.Totals.Cash -= transaction.Value + transaction.Fee
+		}
+
+		if transaction.IDOpportunity == nil {
+			continue
+		}
+		if _, seen := byOpportunity[*transaction.IDOpportunity]; !seen {
+			opportunityOrder = append(opportunityOrder, *transaction.IDOpportunity)
+		}
+		byOpportunity[*transaction.IDOpportunity] = append(byOpportunity[*transaction.IDOpportunity], transaction)
+	}
+
+	// 3. ROI del portfolio
+	roi.Totals.RoiOnInvested = ratio(roi.Totals.RealizedPnL+roi.Totals.UnrealizedPnL, roi.Totals.InvestedCost)
+	roi.Totals.Equity = roi.Totals.Cash + roi.Totals.MarketValue
+	if roi.Totals.NetDeposits <= 0 {
+		roi.Warnings = append(roi.Warnings, "Sin depositos registrados no se calcula el ROI sobre el patrimonio")
+	} else if roi.Totals.Cash < -portfolioQuantityEpsilon {
+		roi.Warnings = append(roi.Warnings, "Hay compras sin los depositos que las cubren, no se calcula el ROI sobre el patrimonio")
+	} else {
+		roi.Totals.RoiOnEquity = ratio(roi.Totals.Equity-roi.Totals.NetDeposits, roi.Totals.NetDeposits)
+	}
+
+	// 4. ROI de cada oportunidad con sus propias transacciones
+	for _, idOpportunity := range opportunityOrder {
+		linked := byOpportunity[idOpportunity]
+		opportunityRoi := OpportunityRoi{IDOpportunity: idOpportunity, Transactions: len(linked)}
+		if linked[0].IDAsset != nil {
+			opportunityRoi.IDAsset = *linked[0].IDAsset
+		}
+		opportunityRoi.TagAsset = linked[0].TagAsset
+
+		opportunity, visible := opportunities[idOpportunity]
+		if visible {
+			opportunityRoi.TagTrigger = opportunity.TagTrigger
+			opportunityRoi.TagAction = opportunity.TagAction
+			opportunityRoi.TagStatus = opportunity.TagStatus
+			if opportunity.PriceActiveOportunity != nil && opportunity.PriceAchieved != nil {
+				opportunityRoi.PlannedPriceChange = ratio(*opportunity.PriceAchieved-*opportunity.PriceActiveOportunity, *opportunity.PriceActiveOportunity)
+			}
+		}
+
+		for _, transaction := range linked {
+			switch transaction.TagTypeTransaction {
+			case cmm.TransactionTypeBuy.Tag:
+				opportunityRoi.QuantityBought += transaction.Quantity
+				opportunityRoi.InvestedCost += transaction.Value + transaction.Fee
+			case cmm.TransactionTypeSell.Tag:
+				opportunityRoi.QuantitySold += transaction.Quantity
+				opportunityRoi.Proceeds += transaction.Value - transaction.Fee
+			}
+		}
+
+		position, _, err := BuildPortfolioAssetPositionService(linked)
+		if !err.IsEmtpy() {
+			opportunityRoi.Warning = "La oportunidad tiene ventas mayores a sus compras ligadas, su ROI no se calcula"
+			roi.Opportunities = append(roi.Opportunities, opportunityRoi)
+			continue
+		}
+		opportunityRoi.OpenQuantity = position.Quantity
+		opportunityRoi.AverageCost = position.AverageCost
+		opportunityRoi.RealizedPnL = position.RealizedPnL
+
+		unrealized := 0.0
+		price, hasPrice := prices[opportunityRoi.IDAsset]
+		if hasPrice {
+			opportunityRoi.MarketPrice = &price
+		}
+		if position.Quantity > 0 && !hasPrice {
+			opportunityRoi.Warning = "No se obtuvo el precio del asset, su ROI no se calcula"
+			roi.Opportunities = append(roi.Opportunities, opportunityRoi)
+			continue
+		}
+		if position.Quantity > 0 {
+			unrealized = position.Quantity*price - position.CostBasis
+		}
+		opportunityRoi.UnrealizedPnL = &unrealized
+		opportunityRoi.Roi = ratio(position.RealizedPnL+unrealized, opportunityRoi.InvestedCost)
+		roi.Opportunities = append(roi.Opportunities, opportunityRoi)
+	}
+
+	return roi
 }

@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"context"
 	"net/url"
 	"testing"
 
@@ -84,5 +85,16 @@ func TestBuildQuoteRequestServices_EmptySymbol(t *testing.T) {
 			_, err := tt.build(tt.symbol)
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
 		})
+	}
+}
+
+func TestGetAssetsMarketPricesService_NoAssets(t *testing.T) {
+	t.Parallel()
+
+	// Sin assets no se consulta ningun proveedor ni la base de datos
+	prices := services.GetAssetsMarketPricesService(context.Background(), nil)
+
+	if prices == nil || len(prices) != 0 {
+		t.Errorf("prices = %v, se esperaba un mapa vacio", prices)
 	}
 }

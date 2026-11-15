@@ -536,3 +536,252 @@ func ReviewTriggerController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "Trigger revisado", "COPR011", data)
 	}
 }
+
+// ---------- Portfolio ----------
+
+// CreatePortfolioController crea un portfolio vacio del usuario de la sesion
+func CreatePortfolioController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreatePortfolioFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := models.NewPortfolioModel(payload.Tag, payload.Name, payload.Description, authSession.RecordOwnerData)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idPortfolio, err := services.CreatePortfolioService(portfolio)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Portfolio creado", "COPR012", map[string]any{"idPortfolio": idPortfolio})
+	}
+}
+
+// UpdatePortfolioController cambia el tag, nombre y descripcion del portfolio. La cartera no cambia
+func UpdatePortfolioController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdatePortfolioFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := cmm.GetFromRequestContext[*models.PortfolioModelType](r, "portfolio")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.UpdatePortfolioService(portfolio.ID, portfolio.IDUser, payload.Tag, payload.Name, payload.Description, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Portfolio actualizado", "COPR013", map[string]any{"idPortfolio": portfolio.ID.Hex()})
+	}
+}
+
+// DeletePortfolioController borra logicamente el portfolio y sus transacciones
+func DeletePortfolioController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		portfolio, err := cmm.GetFromRequestContext[*models.PortfolioModelType](r, "portfolio")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.DeletePortfolioService(portfolio.ID, portfolio.IDUser, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Portfolio borrado", "COPR014", map[string]any{"idPortfolio": portfolio.ID.Hex()})
+	}
+}
+
+// CreatePortfolioTransactionController registra una transaccion en el portfolio y actualiza la posicion de su asset
+func CreatePortfolioTransactionController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreatePortfolioTransactionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		portfolio, err := cmm.GetFromRequestContext[*models.PortfolioModelType](r, "portfolio")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		typeTransaction, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "typeTransaction")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		opportunity, err := cmm.GetFromRequestContext[*models.OpportunitiesModelType](r, "opportunity")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		// El asset y la oportunidad llegan con ID cero si no se enviaron
+		opts := &models.PortfolioTransactionOptionalData{}
+		if !asset.ID.IsZero() {
+			opts.Asset = asset
+		}
+		if !opportunity.ID.IsZero() {
+			idOpportunity := opportunity.ID
+			opts.IDOpportunity = &idOpportunity
+		}
+
+		transaction, err := models.NewPortfolioTransactionModel(
+			portfolio.ID,
+			*typeTransaction,
+			payload.Quantity, payload.UnitPrice, payload.Value, payload.Fee,
+			payload.ExecutedAt,
+			payload.Comment,
+			authSession.RecordOwnerData,
+			opts,
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idTransaction, err := services.CreatePortfolioTransactionService(transaction)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Transaccion registrada", "COPR015", map[string]any{"idTransaction": idTransaction})
+	}
+}
+
+// UpdatePortfolioTransactionController reemplaza los datos de la transaccion (mismo id, portfolio y fecha de creacion)
+// y reconstruye la posicion de los assets afectados
+func UpdatePortfolioTransactionController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.UpdatePortfolioTransactionFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		previous, err := cmm.GetFromRequestContext[*models.PortfolioTransactionsModelType](r, "transaction")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		typeTransaction, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "typeTransaction")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		opportunity, err := cmm.GetFromRequestContext[*models.OpportunitiesModelType](r, "opportunity")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		// Se conservan el id y la fecha de creacion; el asset y la oportunidad llegan con ID cero si no se enviaron
+		opts := &models.PortfolioTransactionOptionalData{ID: previous.ID, CreatedDate: previous.CreatedDate}
+		if !asset.ID.IsZero() {
+			opts.Asset = asset
+		}
+		if !opportunity.ID.IsZero() {
+			idOpportunity := opportunity.ID
+			opts.IDOpportunity = &idOpportunity
+		}
+
+		updated, err := models.NewPortfolioTransactionModel(
+			previous.IDPortfolio,
+			*typeTransaction,
+			payload.Quantity, payload.UnitPrice, payload.Value, payload.Fee,
+			payload.ExecutedAt,
+			payload.Comment,
+			previous.RecordOwnerData,
+			opts,
+		)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.ReplacePortfolioTransactionService(*previous, updated)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Transaccion actualizada", "COPR016", map[string]any{"idTransaction": updated.ID.Hex()})
+	}
+}
+
+// DeletePortfolioTransactionController borra logicamente la transaccion y reconstruye la posicion de su asset
+func DeletePortfolioTransactionController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		transaction, err := cmm.GetFromRequestContext[*models.PortfolioTransactionsModelType](r, "transaction")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		err = services.DeletePortfolioTransactionService(*transaction, time.Now().UTC())
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Transaccion borrada", "COPR017", map[string]any{"idTransaction": transaction.ID.Hex()})
+	}
+}
