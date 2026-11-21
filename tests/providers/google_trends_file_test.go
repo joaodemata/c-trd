@@ -72,12 +72,19 @@ func TestGoogleTrendsFileCallbacks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(fileResponse(t, now, week, tt.values...), nil)
+			result, err := tt.callback(fileResponse(t, now, week, tt.values...), nil)
 
 			testutil.RequireEmptyError(t, err)
-			if accepted != tt.want {
-				t.Errorf("valores %v: accepted = %v, se esperaba %v", tt.values, accepted, tt.want)
+			if result.Accepted != tt.want {
+				t.Errorf("valores %v: accepted = %v, se esperaba %v", tt.values, result.Accepted, tt.want)
 			}
+
+			// El valor es el ultimo periodo y su fecha la del ultimo punto (fileResponse lo pone un periodo antes de subirlo)
+			lastValue := tt.values[len(tt.values)-1]
+			if result.Value != lastValue {
+				t.Errorf("value = %v, se esperaba %v", result.Value, lastValue)
+			}
+			requireAsOf(t, result.AsOf, now.Add(-week))
 		})
 	}
 }
@@ -102,12 +109,10 @@ func TestGoogleTrendsFileCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.GoogleTrendsFileHighCallback(tt.body, nil)
+			result, err := providers.GoogleTrendsFileHighCallback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
-			if accepted {
-				t.Error("un error nunca debe aceptar la condicion")
-			}
+			requireEmptyResult(t, result)
 		})
 	}
 }

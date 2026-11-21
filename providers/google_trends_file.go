@@ -32,10 +32,10 @@ type googleTrendsFileResponse struct {
 }
 
 // GoogleTrendsFileHighCallback el ultimo periodo del CSV esta en la zona alta del rango
-func GoogleTrendsFileHighCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsFile(responseData)
+func GoogleTrendsFileHighCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
@@ -47,14 +47,15 @@ func GoogleTrendsFileHighCallback(responseData []byte, parameters map[string]any
 
 	isHigh := !isFlat && lastValue >= highZone
 
-	return isHigh, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isHigh, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileLowCallback el ultimo periodo del CSV esta en la zona baja del rango
-func GoogleTrendsFileLowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsFile(responseData)
+func GoogleTrendsFileLowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
@@ -66,14 +67,15 @@ func GoogleTrendsFileLowCallback(responseData []byte, parameters map[string]any)
 
 	isLow := !isFlat && lastValue <= lowZone
 
-	return isLow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isLow, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileNewMaxCallback el ultimo periodo del CSV es un nuevo maximo de la serie
-func GoogleTrendsFileNewMaxCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsFile(responseData)
+func GoogleTrendsFileNewMaxCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	previousValues := series[:len(series)-1]
@@ -82,14 +84,15 @@ func GoogleTrendsFileNewMaxCallback(responseData []byte, parameters map[string]a
 
 	isNewMax := lastValue > previousHigh
 
-	return isNewMax, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isNewMax, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsFileNewMinCallback el ultimo periodo del CSV es un nuevo minimo de la serie
-func GoogleTrendsFileNewMinCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsFile(responseData)
+func GoogleTrendsFileNewMinCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsFile(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	previousValues := series[:len(series)-1]
@@ -98,26 +101,27 @@ func GoogleTrendsFileNewMinCallback(responseData []byte, parameters map[string]a
 
 	isNewMin := lastValue < previousLow
 
-	return isNewMin, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isNewMin, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
-// parseGoogleTrendsFile extrae los valores de la serie y valida que el archivo no este desactualizado.
-// Un archivo desactualizado retorna error para que la condicion conserve su ultimo status
-func parseGoogleTrendsFile(responseData []byte) ([]float64, *cmm.ErrorHandler) {
+// parseGoogleTrendsFile extrae los valores de la serie y la fecha del ultimo periodo, y valida que el archivo no este
+// desactualizado. Un archivo desactualizado retorna error para que la condicion conserve su ultimo status
+func parseGoogleTrendsFile(responseData []byte) ([]float64, *time.Time, *cmm.ErrorHandler) {
 	var data googleTrendsFileResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
-		return nil, cmm.NewErrorHandler(err, "Error parsing Google Trends file response", cmm.LevelFatal, "PCGTFE001")
+		return nil, nil, cmm.NewErrorHandler(err, "Error parsing Google Trends file response", cmm.LevelFatal, "PCGTFE001")
 	}
 
 	series := data.Data
 	if len(series.Points) < googleTrendsMinPoints {
-		return nil, cmm.NewErrorHandler(fmt.Errorf("got %d points", len(series.Points)), "Google Trends file has not enough complete points", cmm.LevelError, "PCGTFE002")
+		return nil, nil, cmm.NewErrorHandler(fmt.Errorf("got %d points", len(series.Points)), "Google Trends file has not enough complete points", cmm.LevelError, "PCGTFE002")
 	}
 
 	// El archivo cubre hasta el siguiente periodo, despues de eso hay que subir uno nuevo
 	staleAt := series.UploadedAt.Add(time.Duration(series.PeriodSeconds)*time.Second + googleTrendsFileStaleMargin)
 	if time.Now().UTC().After(staleAt) {
-		return nil, cmm.NewErrorHandler(fmt.Errorf("asset %s uploaded at %s", series.IDAsset, series.UploadedAt.Format(time.RFC3339)), "Google Trends file is outdated, upload a new one", cmm.LevelWarning, "PCGTFE003")
+		return nil, nil, cmm.NewErrorHandler(fmt.Errorf("asset %s uploaded at %s", series.IDAsset, series.UploadedAt.Format(time.RFC3339)), "Google Trends file is outdated, upload a new one", cmm.LevelWarning, "PCGTFE003")
 	}
 
 	values := make([]float64, len(series.Points))
@@ -125,5 +129,6 @@ func parseGoogleTrendsFile(responseData []byte) ([]float64, *cmm.ErrorHandler) {
 		values[i] = point.Value
 	}
 
-	return values, cmm.NewEmptyErrorHandler()
+	lastDate := series.Points[len(series.Points)-1].Date.UTC()
+	return values, &lastDate, cmm.NewEmptyErrorHandler()
 }

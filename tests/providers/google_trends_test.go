@@ -3,6 +3,7 @@ package providers_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"c_trd/providers"
 	"c_trd/tests/testutil"
@@ -18,15 +19,21 @@ func TestGoogleTrendsCallbacks_Fixture(t *testing.T) {
 
 	high, err := providers.GoogleTrendsHighCallback(body, nil)
 	testutil.RequireEmptyError(t, err)
-	if !high {
+	if !high.Accepted {
 		t.Error("GoogleTrendsHighCallback deberia aceptar 97 en el rango 20-100")
 	}
 
 	low, err := providers.GoogleTrendsLowCallback(body, nil)
 	testutil.RequireEmptyError(t, err)
-	if low {
+	if low.Accepted {
 		t.Error("GoogleTrendsLowCallback no deberia aceptar 97 en el rango 20-100")
 	}
+
+	// El valor es el ultimo punto completo y el fixture no trae timestamp
+	if high.Value != 97 || low.Value != 97 {
+		t.Errorf("value high = %v, low = %v; want 97", high.Value, low.Value)
+	}
+	requireAsOf(t, high.AsOf, time.Time{})
 }
 
 func TestGoogleTrendsCallbacks_Zones(t *testing.T) {
@@ -48,11 +55,11 @@ func TestGoogleTrendsCallbacks_Zones(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback([]byte(timeline(tt.values...)), nil)
+			result, err := tt.callback([]byte(timeline(tt.values...)), nil)
 
 			testutil.RequireEmptyError(t, err)
-			if accepted != tt.want {
-				t.Errorf("valores %v: accepted = %v, se esperaba %v", tt.values, accepted, tt.want)
+			if result.Accepted != tt.want {
+				t.Errorf("valores %v: accepted = %v, se esperaba %v", tt.values, result.Accepted, tt.want)
 			}
 		})
 	}
@@ -77,12 +84,45 @@ func TestGoogleTrendsCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.GoogleTrendsHighCallback([]byte(tt.body), nil)
+			result, err := providers.GoogleTrendsHighCallback([]byte(tt.body), nil)
 
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
-			if accepted {
-				t.Error("un error nunca debe aceptar la condicion")
+			requireEmptyResult(t, result)
+		})
+	}
+}
+
+func TestGoogleTrendsCallbacks_AsOf(t *testing.T) {
+	t.Parallel()
+
+	// SerpApi trae el inicio de cada periodo en unix (string). La fecha del dato es la del ultimo punto completo:
+	// el punto parcial se ignora igual que su valor
+	body := `{"interest_over_time":{"timeline_data":[
+		{"date":"Sep 7 - 13, 2026","timestamp":"1788739200","values":[{"query":"q","extracted_value":10}]},
+		{"date":"Sep 14 - 20, 2026","timestamp":"1789344000","values":[{"query":"q","extracted_value":100}]},
+		{"date":"Sep 21 - 27, 2026","timestamp":"1789948800","partial_data":true,"values":[{"query":"q","extracted_value":5}]}
+	]}}`
+
+	tests := []struct {
+		name     string
+		body     string
+		wantAsOf time.Time
+	}{
+		{"timestamp del ultimo punto completo", body, time.Unix(1789344000, 0).UTC()},
+		{"timestamp no numerico queda nil", strings.ReplaceAll(body, `"1789344000"`, `"abc"`), time.Time{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := providers.GoogleTrendsHighCallback([]byte(tt.body), nil)
+
+			testutil.RequireEmptyError(t, err)
+			if !result.Accepted || result.Value != 100 {
+				t.Errorf("accepted, value = %v, %v; want true, 100", result.Accepted, result.Value)
 			}
+			requireAsOf(t, result.AsOf, tt.wantAsOf)
 		})
 	}
 }

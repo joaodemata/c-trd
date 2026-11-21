@@ -3,6 +3,7 @@ package providers_test
 import (
 	"slices"
 	"testing"
+	"time"
 
 	cmm "c_trd/common"
 	"c_trd/providers"
@@ -102,5 +103,30 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 				t.Errorf("callbacks = %v, want %v", names, tt.want)
 			}
 		})
+	}
+}
+
+// requireAsOf valida la fecha del dato del callback. Con want cero se espera nil (la respuesta no trae fecha)
+func requireAsOf(t *testing.T, got *time.Time, want time.Time) {
+	t.Helper()
+
+	switch {
+	case want.IsZero() && got != nil:
+		t.Errorf("asOf = %s, want nil", got.Format(time.RFC3339Nano))
+	case !want.IsZero() && got == nil:
+		t.Errorf("asOf = nil, want %s", want.Format(time.RFC3339Nano))
+	case !want.IsZero() && !got.Equal(want):
+		t.Errorf("asOf = %s, want %s", got.Format(time.RFC3339Nano), want.Format(time.RFC3339Nano))
+	case got != nil && got.Location() != time.UTC:
+		t.Errorf("asOf debe estar en UTC, esta en %s", got.Location())
+	}
+}
+
+// requireEmptyResult valida que un callback con error retorne CallbackResult{}: sin aceptar, sin valor y sin fecha
+func requireEmptyResult(t *testing.T, got providers.CallbackResult) {
+	t.Helper()
+
+	if got != (providers.CallbackResult{}) {
+		t.Errorf("result = %+v, un error debe retornar CallbackResult{}", got)
 	}
 }

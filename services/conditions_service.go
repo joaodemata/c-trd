@@ -201,10 +201,10 @@ func UpdateConditionsExecutionService(ctx context.Context, updates []ConditionEx
 	return cmm.NewEmptyErrorHandler()
 }
 
-// SaveConditionResultsService guarda en una transaccion el status de las condiciones en las oportunidades
-// y la ejecucion de las condiciones. Si algo falla se hace rollback de todo el lote.
+// SaveConditionResultsService guarda en una transaccion el status de las condiciones en las oportunidades,
+// la ejecucion de las condiciones y sus evaluaciones (historico). Si algo falla se hace rollback de todo el lote.
 // Requiere que MongoDB sea un replica set
-func SaveConditionResultsService(changes []ConditionStatusChange, updates []ConditionExecutionUpdate) *cmm.ErrorHandler {
+func SaveConditionResultsService(changes []ConditionStatusChange, updates []ConditionExecutionUpdate, evaluations []models.ConditionEvaluationsModelType) *cmm.ErrorHandler {
 	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
 	defer cancel()
 
@@ -227,6 +227,11 @@ func SaveConditionResultsService(changes []ConditionStatusChange, updates []Cond
 		// B. Actualizamos las condiciones, reprogramamos y liberamos el lock
 		if errCond := UpdateConditionsExecutionService(sessCtx, updates); !errCond.IsEmtpy() {
 			return nil, errCond
+		}
+
+		// C. Guardamos una evaluacion por resultado, tambien las fallidas
+		if errEval := InsertConditionEvaluationsService(sessCtx, evaluations); !errEval.IsEmtpy() {
+			return nil, errEval
 		}
 
 		return nil, nil

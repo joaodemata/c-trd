@@ -5,6 +5,7 @@ import (
 	"c_trd/providers"
 	"c_trd/services"
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,10 @@ type ConditionResult struct {
 	ExecutedAt time.Time
 	Evaluated  bool // true si la API y el callback respondieron correctamente
 	Accepted   bool
+	Value      float64    // Valor medido por el callback, solo si Evaluated
+	AsOf       *time.Time // Fecha del dato segun el proveedor, nil si no la trae o no se evaluo
+	// Tracking code del error que impidio evaluar la condicion, "" si se evaluo
+	ErrorTrackingCode string
 }
 
 // ProcessConditions evalua las condiciones de tipo cronjob, actualiza su status, lo replica en las
@@ -170,14 +175,17 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 	// Un panic en un callback no debe tumbar el cronjob ni dejar la condicion bloqueada
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Panic evaluando la condicion %s: %v", condition.ID.Hex(), r)
+			errPanic := cmm.NewErrorHandler(fmt.Errorf("condition %s: %v", condition.ID.Hex(), r), "Panic evaluando la condicion", cmm.LevelFatal, "CJCHCE003")
 			result.Evaluated = false
+			result.Accepted = false
+			result.ErrorTrackingCode = errPanic.TrackingCode
 		}
 	}()
 
 	// 1. Validamos que exista la peticion
 	if condition.HttpRequest.URL == "" {
-		log.Printf("Condition %s has no RequestConfig, skipping...", condition.ID.Hex())
+		errRequest := cmm.NewErrorHandler(fmt.Errorf("condition %s", condition.ID.Hex()), "La condicion no tiene peticion HTTP, se omite", cmm.LevelWarning, "CJCHCE001")
+		result.ErrorTrackingCode = errRequest.TrackingCode
 		return result
 	}
 
@@ -185,7 +193,8 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 	callbackName := condition.CallbackFunction
 	callback, exists := providers.FunctionRegistry[callbackName]
 	if !exists {
-		log.Printf("Warning: Callback function '%s' not found in FunctionRegistry for condition %s", callbackName, condition.ID.Hex())
+		errCallback := cmm.NewErrorHandler(fmt.Errorf("callback %q condition %s", callbackName, condition.ID.Hex()), "El callback no existe en FunctionRegistry", cmm.LevelError, "CJCHCE002")
+		result.ErrorTrackingCode = errCallback.TrackingCode
 		return result
 	}
 
@@ -197,18 +206,22 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 	responseBody, err := providers.ExecuteRequest(ctx, &condition.HttpRequest, credentials)
 	if !err.IsEmtpy() {
 		log.Printf("Error executing HTTP request for condition %s: %v", condition.ID.Hex(), err)
+		result.ErrorTrackingCode = err.TrackingCode
 		return result
 	}
 
 	// 4. Ejecutamos el callback
-	accepted, err := callback.Fn(responseBody, condition.ParametersCallback)
+	callbackResult, err := callback.Fn(responseBody, condition.ParametersCallback)
 	if !err.IsEmtpy() {
 		log.Printf("Error executing callback '%s' for condition %s: %v", callbackName, condition.ID.Hex(), err)
+		result.ErrorTrackingCode = err.TrackingCode
 		return result
 	}
 
 	result.Evaluated = true
-	result.Accepted = accepted
+	result.Accepted = callbackResult.Accepted
+	result.Value = callbackResult.Value
+	result.AsOf = callbackResult.AsOf
 	return result
 }
 
@@ -240,13 +253,14 @@ func persistConditionResults(results []ConditionResult) bool {
 	return changed.Load()
 }
 
-// persistConditionBatch guarda el lote en una transaccion (oportunidades y condiciones).
+// persistConditionBatch guarda el lote en una transaccion (oportunidades, condiciones y una evaluacion por resultado).
 // Si la transaccion falla se hace rollback y solo se libera el lock, sin tocar next_execution_at,
-// asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote.
+// asi la siguiente ejecucion del cronjob vuelve a evaluar las condiciones del lote y guarda sus evaluaciones.
 // Retorna true si se guardo algun cambio de status
 func persistConditionBatch(batch []ConditionResult) bool {
 	changes := make([]services.ConditionStatusChange, 0)
 	updates := make([]services.ConditionExecutionUpdate, len(batch))
+	evaluations := make([]models.ConditionEvaluationsModelType, 0, len(batch))
 
 	for i, r := range batch {
 		newStatus := NewConditionStatus(r)
@@ -260,9 +274,16 @@ func persistConditionBatch(batch []ConditionResult) bool {
 			NextExecutionAt: r.ExecutedAt.Add(ConditionInterval(r.Condition)),
 			NewStatus:       newStatus,
 		}
+
+		evaluation, err := NewConditionEvaluation(r)
+		if !err.IsEmtpy() {
+			log.Printf("Error creando la evaluacion de la condicion %s, se guarda el resto del lote: %v", r.Condition.ID.Hex(), err)
+			continue
+		}
+		evaluations = append(evaluations, evaluation)
 	}
 
-	if err := services.SaveConditionResultsService(changes, updates); !err.IsEmtpy() {
+	if err := services.SaveConditionResultsService(changes, updates, evaluations); !err.IsEmtpy() {
 		log.Printf("Error guardando el lote de condiciones, se reintentara en el siguiente ciclo: %v", err)
 
 		// Liberamos el lock para que las condiciones no queden bloqueadas
@@ -277,6 +298,23 @@ func persistConditionBatch(batch []ConditionResult) bool {
 	}
 
 	return len(changes) > 0
+}
+
+// NewConditionEvaluation crea la evaluacion (historico) del resultado de la condicion, incluso si no se pudo evaluar
+func NewConditionEvaluation(r ConditionResult) (models.ConditionEvaluationsModelType, *cmm.ErrorHandler) {
+	evaluationData := models.ConditionEvaluationData{
+		Evaluated:         r.Evaluated,
+		Result:            providers.CallbackResult{Accepted: r.Accepted, Value: r.Value, AsOf: r.AsOf},
+		ExecutedAt:        r.ExecutedAt,
+		ErrorTrackingCode: r.ErrorTrackingCode,
+	}
+
+	evaluation, err := models.NewConditionEvaluationModel(r.Condition, evaluationData)
+	if !err.IsEmtpy() {
+		return models.ConditionEvaluationsModelType{}, err
+	}
+
+	return evaluation, cmm.NewEmptyErrorHandler()
 }
 
 // NewConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar

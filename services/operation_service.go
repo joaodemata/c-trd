@@ -1635,3 +1635,23 @@ func DeletePortfolioTransactionService(transaction models.PortfolioTransactionsM
 
 	return cmm.NewEmptyErrorHandler()
 }
+
+// InsertConditionEvaluationsService inserta las evaluaciones de un lote de condiciones. Recibe el contexto de la
+// transaccion del lote para que el historico se guarde junto con los cambios de status o no se guarde
+func InsertConditionEvaluationsService(ctx context.Context, evaluations []models.ConditionEvaluationsModelType) *cmm.ErrorHandler {
+	if len(evaluations) == 0 {
+		return cmm.NewEmptyErrorHandler()
+	}
+
+	documents := make([]interface{}, len(evaluations))
+	for i, evaluation := range evaluations {
+		documents[i] = evaluation
+	}
+
+	// Unordered es mas rapido ya que las evaluaciones son independientes
+	if _, err := models.ConditionEvaluationsModel.InsertMany(ctx, documents, options.InsertMany().SetOrdered(false)); err != nil {
+		return cmm.NewErrorHandler(err, "Error insertando las evaluaciones de las condiciones.", cmm.LevelDatabase, "SOPRE099")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}

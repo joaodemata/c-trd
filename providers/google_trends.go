@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 // Umbrales relativos al rango (min-max) de la serie para considerar que la tendencia esta en maximos o minimos
@@ -19,7 +20,9 @@ const (
 type googleTrendsResponse struct {
 	InterestOverTime struct {
 		TimelineData []struct {
-			Date        string `json:"date"`
+			Date string `json:"date"`
+			// Inicio del periodo en unix (segundos) como string, ej: "1694908800"
+			Timestamp   string `json:"timestamp"`
 			PartialData bool   `json:"partial_data"`
 			Values      []struct {
 				Query string `json:"query"`
@@ -34,10 +37,10 @@ type googleTrendsResponse struct {
 }
 
 // GoogleTrendsHighCallback retorna true si el ultimo valor de interes esta en la zona alta del rango de la serie
-func GoogleTrendsHighCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsSeries(responseData)
+func GoogleTrendsHighCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsSeries(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
@@ -49,14 +52,15 @@ func GoogleTrendsHighCallback(responseData []byte, parameters map[string]any) (b
 
 	isHigh := !isFlat && lastValue >= highZone
 
-	return isHigh, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isHigh, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // GoogleTrendsLowCallback retorna true si el ultimo valor de interes esta en la zona baja del rango de la serie
-func GoogleTrendsLowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	series, err := parseGoogleTrendsSeries(responseData)
+func GoogleTrendsLowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	series, asOf, err := parseGoogleTrendsSeries(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	// Los valores solo son comparables dentro de la misma serie porque Google los reescala en cada consulta.
@@ -68,22 +72,24 @@ func GoogleTrendsLowCallback(responseData []byte, parameters map[string]any) (bo
 
 	isLow := !isFlat && lastValue <= lowZone
 
-	return isLow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isLow, Value: lastValue, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
-// parseGoogleTrendsSeries extrae la serie del primer query con los puntos completos.
-// Los puntos con partial_data se ignoran porque el periodo aun no termina y subestiman el interes
-func parseGoogleTrendsSeries(responseData []byte) ([]float64, *cmm.ErrorHandler) {
+// parseGoogleTrendsSeries extrae la serie del primer query con los puntos completos y la fecha del ultimo punto completo
+// (nil si no trae timestamp). Los puntos con partial_data se ignoran porque el periodo aun no termina y subestiman el interes
+func parseGoogleTrendsSeries(responseData []byte) ([]float64, *time.Time, *cmm.ErrorHandler) {
 	var data googleTrendsResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
-		return nil, cmm.NewErrorHandler(err, "Error parsing Google Trends response data", cmm.LevelFatal, "PCGTRE001")
+		return nil, nil, cmm.NewErrorHandler(err, "Error parsing Google Trends response data", cmm.LevelFatal, "PCGTRE001")
 	}
 
 	if data.Error != "" {
-		return nil, cmm.NewErrorHandler(errors.New(data.Error), "Google Trends provider returned an error message", cmm.LevelError, "PCGTRE002")
+		return nil, nil, cmm.NewErrorHandler(errors.New(data.Error), "Google Trends provider returned an error message", cmm.LevelError, "PCGTRE002")
 	}
 
 	series := []float64{}
+	lastTimestamp := ""
 	for _, point := range data.InterestOverTime.TimelineData {
 		if point.PartialData || len(point.Values) == 0 {
 			continue
@@ -91,16 +97,29 @@ func parseGoogleTrendsSeries(responseData []byte) ([]float64, *cmm.ErrorHandler)
 
 		value, err := parseTrendValue(point.Values[0].ExtractedValue, point.Date)
 		if !err.IsEmtpy() {
-			return nil, err
+			return nil, nil, err
 		}
 		series = append(series, value)
+		lastTimestamp = point.Timestamp
 	}
 
 	if len(series) < googleTrendsMinPoints {
-		return nil, cmm.NewErrorHandler(fmt.Errorf("got %d points", len(series)), "Google Trends series has not enough complete points", cmm.LevelError, "PCGTRE004")
+		return nil, nil, cmm.NewErrorHandler(fmt.Errorf("got %d points", len(series)), "Google Trends series has not enough complete points", cmm.LevelError, "PCGTRE004")
 	}
 
-	return series, cmm.NewEmptyErrorHandler()
+	asOf := unixTimestampTime(lastTimestamp)
+	return series, asOf, cmm.NewEmptyErrorHandler()
+}
+
+// unixTimestampTime convierte un timestamp unix en segundos (string) a fecha UTC. nil si viene vacio o no es un numero
+func unixTimestampTime(text string) *time.Time {
+	seconds, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return nil
+	}
+
+	asOf := time.Unix(seconds, 0).UTC()
+	return &asOf
 }
 
 // parseTrendValue acepta extracted_value como numero o como string numerico

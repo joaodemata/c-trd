@@ -128,6 +128,13 @@ const (
 	ResponseFormatBiquoteEconomicCalendar  = "BIQUOTE_ECONOMIC_CALENDAR" // /api/calendar, arreglo de eventos macroeconomicos
 )
 
+// Origen de la fecha del dato (as_of_source de condition_evaluations): PROVIDER si la respuesta del proveedor traia la
+// fecha y SERVER si no la traia y se uso la hora del servidor al ejecutar la evaluacion (executed_at)
+const (
+	AsOfSourceProvider = "PROVIDER"
+	AsOfSourceServer   = "SERVER"
+)
+
 // Tipos de dato de los parametros de una API (data_type). El valor se guarda como string y se valida con este tipo
 const (
 	ApiParameterTypeString  = "STRING"
