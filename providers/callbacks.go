@@ -46,6 +46,9 @@ type CallbackDefinition struct {
 	ResponseFormat string
 	// Parametros que la condicion puede personalizar, nil si no tiene
 	Parameters []CallbackParameter
+	// Antiguedad maxima del dato (executed_at - as_of). Si el AsOf del resultado es mas viejo la evaluacion se
+	// considera fallida. 0 no limita, y si el callback no trae AsOf (nil) no se puede validar
+	MaxDataAge time.Duration
 }
 
 // CallbackInfo datos publicos de un callback para listarlo
@@ -67,6 +70,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             RealtimePutCallRatioCallback,
 		Description:    "Put/Call ratio mayor a 1 o menor o igual a 0.6",
 		ResponseFormat: cmm.ResponseFormatAlphaVantagePutCallRatio,
+		MaxDataAge:     4 * 24 * time.Hour,
 	},
 	"GoogleTrendsHigh": {
 		ID:             "GoogleTrendsHigh",
@@ -75,6 +79,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsHighCallback,
 		Description:    "El ultimo valor de interes esta en la zona alta del rango de la serie",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsSeries,
+		MaxDataAge:     14 * 24 * time.Hour,
 	},
 	"GoogleTrendsLow": {
 		ID:             "GoogleTrendsLow",
@@ -83,6 +88,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsLowCallback,
 		Description:    "El ultimo valor de interes esta en la zona baja del rango de la serie",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsSeries,
+		MaxDataAge:     14 * 24 * time.Hour,
 	},
 	"GoogleTrendsFileHigh": {
 		ID:             "GoogleTrendsFileHigh",
@@ -91,6 +97,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsFileHighCallback,
 		Description:    "El ultimo periodo del CSV esta en la zona alta del rango",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsFile,
+		MaxDataAge:     35 * 24 * time.Hour,
 	},
 	"GoogleTrendsFileLow": {
 		ID:             "GoogleTrendsFileLow",
@@ -99,6 +106,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsFileLowCallback,
 		Description:    "El ultimo periodo del CSV esta en la zona baja del rango",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsFile,
+		MaxDataAge:     35 * 24 * time.Hour,
 	},
 	"GoogleTrendsFileNewMax": {
 		ID:             "GoogleTrendsFileNewMax",
@@ -107,6 +115,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsFileNewMaxCallback,
 		Description:    "El ultimo periodo del CSV es un nuevo maximo de la serie",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsFile,
+		MaxDataAge:     35 * 24 * time.Hour,
 	},
 	"GoogleTrendsFileNewMin": {
 		ID:             "GoogleTrendsFileNewMin",
@@ -115,6 +124,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             GoogleTrendsFileNewMinCallback,
 		Description:    "El ultimo periodo del CSV es un nuevo minimo de la serie",
 		ResponseFormat: cmm.ResponseFormatGoogleTrendsFile,
+		MaxDataAge:     35 * 24 * time.Hour,
 	},
 	"FredSeriesRising": {
 		ID:             "FredSeriesRising",
@@ -123,6 +133,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FredSeriesRisingCallback,
 		Description:    "La regresion lineal de la ventana de la serie de FRED tiene pendiente positiva",
 		ResponseFormat: cmm.ResponseFormatFredSeriesObservations,
+		MaxDataAge:     200 * 24 * time.Hour,
 	},
 	"FredSeriesFalling": {
 		ID:             "FredSeriesFalling",
@@ -131,6 +142,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FredSeriesFallingCallback,
 		Description:    "La regresion lineal de la ventana de la serie de FRED tiene pendiente negativa",
 		ResponseFormat: cmm.ResponseFormatFredSeriesObservations,
+		MaxDataAge:     200 * 24 * time.Hour,
 	},
 	"FedNextMeetingCutLikely": {
 		ID:             "FedNextMeetingCutLikely",
@@ -163,6 +175,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedExtremeFearCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap esta en Extreme Fear (menor a 20)",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 	},
 	"FearAndGreedFear": {
 		ID:             "FearAndGreedFear",
@@ -171,6 +184,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedFearCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap esta en Fear (20 a menos de 40)",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 	},
 	"FearAndGreedNeutral": {
 		ID:             "FearAndGreedNeutral",
@@ -179,6 +193,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedNeutralCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap esta en Neutral (40 a menos de 60)",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 	},
 	"FearAndGreedGreed": {
 		ID:             "FearAndGreedGreed",
@@ -187,6 +202,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedGreedCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap esta en Greed (60 a menos de 80)",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 	},
 	"FearAndGreedExtremeGreed": {
 		ID:             "FearAndGreedExtremeGreed",
@@ -195,6 +211,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedExtremeGreedCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap esta en Extreme Greed (80 o mas)",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 	},
 	"BtcDominanceAbove60": {
 		ID:             "BtcDominanceAbove60",
@@ -203,6 +220,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             BtcDominanceAbove60Callback,
 		Description:    "La dominancia de Bitcoin en CoinMarketCap es mayor a 60%",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 	},
 	"StablecoinDominanceAbove12": {
 		ID:             "StablecoinDominanceAbove12",
@@ -211,6 +229,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             StablecoinDominanceAbove12Callback,
 		Description:    "El market cap de las stablecoins en CoinMarketCap es mayor al 12% del market cap total",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 	},
 	"FearAndGreedAbove": {
 		ID:             "FearAndGreedAbove",
@@ -219,6 +238,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedAboveCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap es mayor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 		Parameters:     fearAndGreedThresholdParameters,
 	},
 	"FearAndGreedBelow": {
@@ -228,6 +248,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             FearAndGreedBelowCallback,
 		Description:    "El indice Fear and Greed de CoinMarketCap es menor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapFearGreed,
+		MaxDataAge:     2 * 24 * time.Hour,
 		Parameters:     fearAndGreedThresholdParameters,
 	},
 	"BtcDominanceAbove": {
@@ -237,6 +258,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             BtcDominanceAboveCallback,
 		Description:    "La dominancia de Bitcoin (BTC.D) en CoinMarketCap es mayor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"BtcDominanceBelow": {
@@ -246,6 +268,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             BtcDominanceBelowCallback,
 		Description:    "La dominancia de Bitcoin (BTC.D) en CoinMarketCap es menor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"Others2DominanceAbove": {
@@ -255,6 +278,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             Others2DominanceAboveCallback,
 		Description:    "La dominancia del mercado sin BTC (100 - BTC.D) en CoinMarketCap es mayor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"Others2DominanceBelow": {
@@ -264,6 +288,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             Others2DominanceBelowCallback,
 		Description:    "La dominancia del mercado sin BTC (100 - BTC.D) en CoinMarketCap es menor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"Others3DominanceAbove": {
@@ -273,6 +298,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             Others3DominanceAboveCallback,
 		Description:    "La dominancia del mercado sin BTC ni ETH (100 - BTC.D - ETH.D) en CoinMarketCap es mayor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"Others3DominanceBelow": {
@@ -282,6 +308,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             Others3DominanceBelowCallback,
 		Description:    "La dominancia del mercado sin BTC ni ETH (100 - BTC.D - ETH.D) en CoinMarketCap es menor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapGlobal,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"UsdtDominanceAbove": {
@@ -291,6 +318,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             UsdtDominanceAboveCallback,
 		Description:    "La dominancia de Tether (USDT.D) en CoinMarketCap es mayor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapUsdtQuote,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"UsdtDominanceBelow": {
@@ -300,6 +328,7 @@ var FunctionRegistry = map[string]CallbackDefinition{
 		Fn:             UsdtDominanceBelowCallback,
 		Description:    "La dominancia de Tether (USDT.D) en CoinMarketCap es menor al umbral de la condicion",
 		ResponseFormat: cmm.ResponseFormatCoinMarketCapUsdtQuote,
+		MaxDataAge:     24 * time.Hour,
 		Parameters:     dominanceThresholdParameters,
 	},
 	"EconomicCalendarHighImpactUpcoming": {

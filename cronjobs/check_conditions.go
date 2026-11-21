@@ -218,6 +218,13 @@ func EvaluateCondition(ctx context.Context, condition models.ConditionsModelType
 		return result
 	}
 
+	// 5. Validamos que el dato del proveedor no supere la antiguedad maxima del callback
+	if err := ValidateDataAge(callback, callbackResult, result.ExecutedAt); !err.IsEmtpy() {
+		log.Printf("Dato viejo en el callback '%s' para la condicion %s: %v", callbackName, condition.ID.Hex(), err)
+		result.ErrorTrackingCode = err.TrackingCode
+		return result
+	}
+
 	result.Evaluated = true
 	result.Accepted = callbackResult.Accepted
 	result.Value = callbackResult.Value
@@ -273,6 +280,7 @@ func persistConditionBatch(batch []ConditionResult) bool {
 			ExecutedAt:      r.ExecutedAt,
 			NextExecutionAt: r.ExecutedAt.Add(ConditionInterval(r.Condition)),
 			NewStatus:       newStatus,
+			FailedAttempts:  NewFailedAttempts(r),
 		}
 
 		evaluation, err := NewConditionEvaluation(r)
@@ -317,10 +325,41 @@ func NewConditionEvaluation(r ConditionResult) (models.ConditionEvaluationsModel
 	return evaluation, cmm.NewEmptyErrorHandler()
 }
 
-// NewConditionStatus retorna el nuevo status de la condicion o nil si no cambia o no se pudo evaluar
+// ValidateDataAge retorna error si el AsOf del resultado es mas viejo que el MaxDataAge del callback. No valida si el
+// callback no tiene limite (0) o si el resultado no trae AsOf
+func ValidateDataAge(callback providers.CallbackDefinition, callbackResult providers.CallbackResult, executedAt time.Time) *cmm.ErrorHandler {
+	if callback.MaxDataAge <= 0 || callbackResult.AsOf == nil {
+		return cmm.NewEmptyErrorHandler()
+	}
+
+	dataAge := executedAt.Sub(*callbackResult.AsOf)
+	if dataAge > callback.MaxDataAge {
+		errAge := fmt.Errorf("callback %q: as_of %s, antiguedad %s, maximo %s", callback.ID, callbackResult.AsOf.Format(time.RFC3339), dataAge, callback.MaxDataAge)
+		return cmm.NewErrorHandler(errAge, "El dato del proveedor supera la antiguedad maxima del callback", cmm.LevelWarning, "CJCHCE004")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// NewFailedAttempts retorna el nuevo failed_attempts de la condicion: 0 si se evaluo, o el actual mas uno si fallo
+func NewFailedAttempts(r ConditionResult) int {
+	if r.Evaluated {
+		return 0
+	}
+
+	return r.Condition.FailedAttempts + 1
+}
+
+// NewConditionStatus retorna el nuevo status de la condicion o nil si no cambia. Si no se pudo evaluar conserva el
+// status, salvo que llegue a ConditionMaxConsecutiveFailures fallos seguidos: entonces pasa a INACTIVE
 func NewConditionStatus(r ConditionResult) *cmm.CatalogStatus {
 	if !r.Evaluated {
-		return nil
+		inactive := cmm.GenericStatusInactive
+		failedAttempts := NewFailedAttempts(r)
+		if failedAttempts < cmm.ConditionMaxConsecutiveFailures || r.Condition.TagStatus == inactive.Tag {
+			return nil
+		}
+		return &inactive
 	}
 
 	target := cmm.GenericStatusInactive

@@ -20,6 +20,7 @@ type ConditionExecutionUpdate struct {
 	ExecutedAt      time.Time
 	NextExecutionAt time.Time
 	NewStatus       *cmm.CatalogStatus // nil si el status no cambia
+	FailedAttempts  int                // Evaluaciones fallidas seguidas, 0 si se evaluo
 }
 
 // GetCronjobConditionsService obtiene las condiciones de tipo cronjob que deben ser evaluadas
@@ -178,6 +179,7 @@ func UpdateConditionsExecutionService(ctx context.Context, updates []ConditionEx
 			"is_processing":     false,
 			"last_executed_at":  u.ExecutedAt,
 			"next_execution_at": u.NextExecutionAt,
+			"failed_attempts":   u.FailedAttempts,
 			"last_updated_at":   now,
 		}
 
