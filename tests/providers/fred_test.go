@@ -2,6 +2,7 @@ package providers_test
 
 import (
 	"testing"
+	"time"
 
 	"c_trd/providers"
 	"c_trd/tests/testutil"
@@ -27,11 +28,12 @@ func TestFredSeriesCallbacks_Fixtures(t *testing.T) {
 		fixture     string
 		wantRising  bool
 		wantFalling bool
+		wantAsOf    time.Time
 	}{
 		// Desempleo abr-sep: 4.3, 4.3, 4.2, 4.1, 4.1, 4.2. Repunta al final pero la tendencia de la ventana baja
-		{"desempleo", "fred_unrate_observations.json", false, true},
-		// Balance de la FED may-sep con octubre sin valor ("."), la tendencia sube
-		{"balance de la FED", "fred_walcl_observations.json", true, false},
+		{"desempleo", "fred_unrate_observations.json", false, true, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+		// Balance de la FED may-sep con octubre sin valor ("."), la tendencia sube y la ultima observacion es septiembre
+		{"balance de la FED", "fred_walcl_observations.json", true, false, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
 	}
 
 	for _, tt := range tests {
@@ -42,15 +44,25 @@ func TestFredSeriesCallbacks_Fixtures(t *testing.T) {
 
 			rising, err := providers.FredSeriesRisingCallback(body, nil)
 			testutil.RequireEmptyError(t, err)
-			if rising != tt.wantRising {
-				t.Errorf("rising = %v, want %v", rising, tt.wantRising)
+			if rising.Accepted != tt.wantRising {
+				t.Errorf("rising = %v, want %v", rising.Accepted, tt.wantRising)
 			}
 
 			falling, err := providers.FredSeriesFallingCallback(body, nil)
 			testutil.RequireEmptyError(t, err)
-			if falling != tt.wantFalling {
-				t.Errorf("falling = %v, want %v", falling, tt.wantFalling)
+			if falling.Accepted != tt.wantFalling {
+				t.Errorf("falling = %v, want %v", falling.Accepted, tt.wantFalling)
 			}
+
+			// Los dos callbacks miden la misma pendiente: positiva si sube, negativa si baja y 0 si es plana
+			if rising.Value != falling.Value {
+				t.Errorf("value rising = %v, falling = %v; deben ser la misma pendiente", rising.Value, falling.Value)
+			}
+			if (rising.Value > 0) != tt.wantRising || (rising.Value < 0) != tt.wantFalling {
+				t.Errorf("pendiente = %v, no coincide con rising = %v, falling = %v", rising.Value, tt.wantRising, tt.wantFalling)
+			}
+			requireAsOf(t, rising.AsOf, tt.wantAsOf)
+			requireAsOf(t, falling.AsOf, tt.wantAsOf)
 		})
 	}
 }
@@ -89,14 +101,22 @@ func TestFredSeriesCallbacks_Trend(t *testing.T) {
 
 			rising, err := providers.FredSeriesRisingCallback(tt.body, nil)
 			testutil.RequireEmptyError(t, err)
-			if rising != tt.wantRising {
-				t.Errorf("rising = %v, want %v", rising, tt.wantRising)
+			if rising.Accepted != tt.wantRising {
+				t.Errorf("rising = %v, want %v", rising.Accepted, tt.wantRising)
 			}
 
 			falling, err := providers.FredSeriesFallingCallback(tt.body, nil)
 			testutil.RequireEmptyError(t, err)
-			if falling != tt.wantFalling {
-				t.Errorf("falling = %v, want %v", falling, tt.wantFalling)
+			if falling.Accepted != tt.wantFalling {
+				t.Errorf("falling = %v, want %v", falling.Accepted, tt.wantFalling)
+			}
+
+			// Los dos callbacks miden la misma pendiente: positiva si sube, negativa si baja y 0 si es plana
+			if rising.Value != falling.Value {
+				t.Errorf("value rising = %v, falling = %v; deben ser la misma pendiente", rising.Value, falling.Value)
+			}
+			if (rising.Value > 0) != tt.wantRising || (rising.Value < 0) != tt.wantFalling {
+				t.Errorf("pendiente = %v, no coincide con rising = %v, falling = %v", rising.Value, tt.wantRising, tt.wantFalling)
 			}
 		})
 	}
@@ -125,15 +145,23 @@ func TestFredSeriesCallbacks_Errors(t *testing.T) {
 
 			rising, err := providers.FredSeriesRisingCallback(tt.body, nil)
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
-			if rising {
-				t.Error("un error nunca debe aceptar la condicion")
-			}
+			requireEmptyResult(t, rising)
 
 			falling, err := providers.FredSeriesFallingCallback(tt.body, nil)
 			testutil.RequireTrackingCode(t, err, tt.wantTracking)
-			if falling {
-				t.Error("un error nunca debe aceptar la condicion")
-			}
+			requireEmptyResult(t, falling)
 		})
 	}
+}
+
+func TestFredSeriesCallbacks_AsOf(t *testing.T) {
+	t.Parallel()
+
+	// La fecha del dato es la observacion con valor mas reciente, sin importar el orden ni las que no tienen valor
+	body := observations([2]string{"2026-03-01", "2.8"}, [2]string{"2026-10-01", "."}, [2]string{"2026-08-01", "2.5"}, [2]string{"2026-05-01", "2.6"})
+
+	result, err := providers.FredSeriesFallingCallback(body, nil)
+
+	testutil.RequireEmptyError(t, err)
+	requireAsOf(t, result.AsOf, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
 }

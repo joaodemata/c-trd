@@ -3,12 +3,22 @@ package providers
 import (
 	cmm "c_trd/common"
 	"sort"
+	"time"
 )
+
+// CallbackResult resultado de un callback: si la condicion se cumple, el valor medido con el que se decidio y la
+// fecha propia del dato segun el proveedor. AsOf es nil si la respuesta no trae fecha; el callback nunca la reemplaza
+// con la hora del servidor, eso lo decide la evaluacion (as_of_source)
+type CallbackResult struct {
+	Accepted bool
+	Value    float64
+	AsOf     *time.Time
+}
 
 // CallbackFunc defines the signature for dynamic callback functions.
 // Recibe el body de la respuesta HTTP y el parameters_callback de la condicion (ya tipados segun su data_type)
-// Todos los callbacks solo deberian recibir un bool
-type CallbackFunc func(responseBody []byte, parameters map[string]any) (bool, *cmm.ErrorHandler)
+// Todos los callbacks retornan un CallbackResult; si hay error retornan CallbackResult{}
+type CallbackFunc func(responseBody []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler)
 
 // CallbackParameter parametro que acepta un callback (ej: umbral). El callback solo define el parametro,
 // el valor lo guarda cada condicion en parameters_callback

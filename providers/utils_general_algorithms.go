@@ -1,5 +1,7 @@
 package providers
 
+import "time"
+
 // Algoritmos genericos que usan los callbacks. No conocen ningun proveedor: reciben series ya parseadas y
 // retornan numeros, la decision (comparar contra un umbral, el signo de la pendiente, etc.) la toma cada callback
 
@@ -50,4 +52,20 @@ func rangeLevel(low, high, ratio float64) float64 {
 // sharePercentage retorna el porcentaje que representa part sobre total. Recibe total mayor a 0
 func sharePercentage(part, total float64) float64 {
 	return part / total * 100
+}
+
+// optionalTime parsea la fecha del dato que trae el proveedor con el layout indicado y la retorna en UTC.
+// Retorna nil si viene vacia o no se puede parsear: la fecha es informativa y no debe hacer fallar la evaluacion
+func optionalTime(layout, text string) *time.Time {
+	if text == "" {
+		return nil
+	}
+
+	parsed, err := time.Parse(layout, text)
+	if err != nil {
+		return nil
+	}
+
+	utc := parsed.UTC()
+	return &utc
 }

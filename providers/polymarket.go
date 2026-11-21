@@ -14,7 +14,8 @@ import (
 
 // Las decisiones de la FED en Polymarket son eventos de la serie fomc (uno por reunion). Cada evento agrupa mercados
 // binarios Yes/No cuyo groupItemTitle es fijo: "50+ bps decrease", "25 bps decrease", "No change", "25 bps increase",
-// "50+ bps increase". Los callbacks siempre leen la proxima reunion abierta, asi la condicion no expira
+// "50+ bps increase". Los callbacks siempre leen la proxima reunion abierta, asi la condicion no expira.
+// Value es la probabilidad (0 a 1) de la decision y AsOf es nil porque /events no trae la fecha de los precios
 const (
 	// Probabilidad minima (suma de los precios Yes del grupo) para considerar probable la decision
 	polymarketLikelyThreshold = 0.6
@@ -48,44 +49,47 @@ type polymarketMarket struct {
 
 // FedNextMeetingCutLikely retorna true si en la proxima reunion de la FED la probabilidad de bajar la tasa
 // (suma de todos los mercados "decrease") es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingCutLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingCutLikely(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	cutProbability := probabilities[fedDecisionCut]
 	isCutLikely := cutProbability+polymarketEpsilon >= polymarketLikelyThreshold
 
-	return isCutLikely, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isCutLikely, Value: cutProbability, AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FedNextMeetingHoldLikely retorna true si en la proxima reunion de la FED la probabilidad de mantener la tasa
 // es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingHoldLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingHoldLikely(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	holdProbability := probabilities[fedDecisionHold]
 	isHoldLikely := holdProbability+polymarketEpsilon >= polymarketLikelyThreshold
 
-	return isHoldLikely, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isHoldLikely, Value: holdProbability, AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FedNextMeetingHikeLikely retorna true si en la proxima reunion de la FED la probabilidad de subir la tasa
 // (suma de todos los mercados "increase") es mayor o igual a polymarketLikelyThreshold
-func FedNextMeetingHikeLikely(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func FedNextMeetingHikeLikely(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	probabilities, err := parseFedNextMeeting(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	hikeProbability := probabilities[fedDecisionHike]
 	isHikeLikely := hikeProbability+polymarketEpsilon >= polymarketLikelyThreshold
 
-	return isHikeLikely, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isHikeLikely, Value: hikeProbability, AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // parseFedNextMeeting busca la reunion abierta mas cercana (por endDate, sin depender del orden de la peticion) y

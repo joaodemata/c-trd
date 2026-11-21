@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Rangos del indice Fear and Greed de CoinMarketCap (0 a 100) segun su documentacion. El limite inferior de cada
@@ -94,6 +95,7 @@ type coinMarketCapGlobalMetricsResponse struct {
 	Data *struct {
 		BtcDominance *float64 `json:"btc_dominance"`
 		EthDominance *float64 `json:"eth_dominance"`
+		LastUpdated  string   `json:"last_updated"`
 		Quote        map[string]struct {
 			TotalMarketCap      *float64 `json:"total_market_cap"`
 			StablecoinMarketCap *float64 `json:"stablecoin_market_cap"`
@@ -117,281 +119,300 @@ type coinMarketCapQuote struct {
 	Quote   map[string]struct {
 		Price              *float64 `json:"price"`
 		MarketCapDominance *float64 `json:"market_cap_dominance"`
+		LastUpdated        string   `json:"last_updated"`
 	} `json:"quote"`
 }
 
 // FearAndGreedExtremeFearCallback retorna true si el indice Fear and Greed esta en Extreme Fear (menor a 20)
-func FearAndGreedExtremeFearCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	value, err := parseFearAndGreedLatest(responseData)
+func FearAndGreedExtremeFearCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isExtremeFear := value < fearAndGreedFearMin
 
-	return isExtremeFear, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isExtremeFear, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedFearCallback retorna true si el indice Fear and Greed esta en Fear (20 a menos de 40)
-func FearAndGreedFearCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	value, err := parseFearAndGreedLatest(responseData)
+func FearAndGreedFearCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isFear := value >= fearAndGreedFearMin && value < fearAndGreedNeutralMin
 
-	return isFear, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isFear, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedNeutralCallback retorna true si el indice Fear and Greed esta en Neutral (40 a menos de 60)
-func FearAndGreedNeutralCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	value, err := parseFearAndGreedLatest(responseData)
+func FearAndGreedNeutralCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isNeutral := value >= fearAndGreedNeutralMin && value < fearAndGreedGreedMin
 
-	return isNeutral, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isNeutral, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedGreedCallback retorna true si el indice Fear and Greed esta en Greed (60 a menos de 80)
-func FearAndGreedGreedCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	value, err := parseFearAndGreedLatest(responseData)
+func FearAndGreedGreedCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isGreed := value >= fearAndGreedGreedMin && value < fearAndGreedExtremeGreed
 
-	return isGreed, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isGreed, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedExtremeGreedCallback retorna true si el indice Fear and Greed esta en Extreme Greed (80 o mas)
-func FearAndGreedExtremeGreedCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	value, err := parseFearAndGreedLatest(responseData)
+func FearAndGreedExtremeGreedCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isExtremeGreed := value >= fearAndGreedExtremeGreed
 
-	return isExtremeGreed, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isExtremeGreed, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // BtcDominanceAbove60Callback retorna true si la dominancia de Bitcoin es mayor a btcDominanceThreshold
-func BtcDominanceAbove60Callback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-	btcDominance, err := parseBtcDominance(responseData)
+func BtcDominanceAbove60Callback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
+	btcDominance, asOf, err := parseBtcDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isAbove := btcDominance > btcDominanceThreshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: btcDominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // StablecoinDominanceAbove12Callback retorna true si el market cap de las stablecoins es mayor a
 // stablecoinDominanceThreshold por ciento del market cap total. Una dominancia alta indica liquidez fuera del
 // mercado esperando entrar (miedo o capitulacion), historicamente cerca de los minimos
-func StablecoinDominanceAbove12Callback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func StablecoinDominanceAbove12Callback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	data, err := parseGlobalMetricsLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	quote, exists := data.Data.Quote[coinMarketCapQuoteCurrency]
 	if !exists {
-		return false, cmm.NewErrorHandler(fmt.Errorf("quote currencies %d", len(data.Data.Quote)), "CoinMarketCap global metrics has no USD quote", cmm.LevelError, "PCCMCE007")
+		return CallbackResult{}, cmm.NewErrorHandler(fmt.Errorf("quote currencies %d", len(data.Data.Quote)), "CoinMarketCap global metrics has no USD quote", cmm.LevelError, "PCCMCE007")
 	}
 
 	if quote.TotalMarketCap == nil || quote.StablecoinMarketCap == nil || *quote.TotalMarketCap <= 0 || *quote.StablecoinMarketCap < 0 {
-		return false, cmm.NewErrorHandler(fmt.Errorf("total_market_cap %s stablecoin_market_cap %s", optionalFloatText(quote.TotalMarketCap), optionalFloatText(quote.StablecoinMarketCap)), "CoinMarketCap market caps are missing or invalid", cmm.LevelError, "PCCMCE008")
+		return CallbackResult{}, cmm.NewErrorHandler(fmt.Errorf("total_market_cap %s stablecoin_market_cap %s", optionalFloatText(quote.TotalMarketCap), optionalFloatText(quote.StablecoinMarketCap)), "CoinMarketCap market caps are missing or invalid", cmm.LevelError, "PCCMCE008")
 	}
 
 	dominance := sharePercentage(*quote.StablecoinMarketCap, *quote.TotalMarketCap)
 	isAbove := dominance > stablecoinDominanceThreshold
+	asOf := optionalTime(time.RFC3339, data.Data.LastUpdated)
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: dominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedAboveCallback retorna true si el indice Fear and Greed es mayor al parametro threshold
-func FearAndGreedAboveCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func FearAndGreedAboveCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	value, err := parseFearAndGreedLatest(responseData)
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isAbove := value > threshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // FearAndGreedBelowCallback retorna true si el indice Fear and Greed es menor al parametro threshold
-func FearAndGreedBelowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func FearAndGreedBelowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	value, err := parseFearAndGreedLatest(responseData)
+	value, asOf, err := parseFearAndGreedLatest(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isBelow := value < threshold
 
-	return isBelow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBelow, Value: value, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // BtcDominanceAboveCallback retorna true si la dominancia de Bitcoin (BTC.D) es mayor al parametro threshold
-func BtcDominanceAboveCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func BtcDominanceAboveCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	btcDominance, err := parseBtcDominance(responseData)
+	btcDominance, asOf, err := parseBtcDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isAbove := btcDominance > threshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: btcDominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // BtcDominanceBelowCallback retorna true si la dominancia de Bitcoin (BTC.D) es menor al parametro threshold
-func BtcDominanceBelowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func BtcDominanceBelowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	btcDominance, err := parseBtcDominance(responseData)
+	btcDominance, asOf, err := parseBtcDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isBelow := btcDominance < threshold
 
-	return isBelow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBelow, Value: btcDominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // Others2DominanceAboveCallback retorna true si la dominancia del mercado sin Bitcoin (OTHERS2 = 100 - BTC.D)
 // es mayor al parametro threshold
-func Others2DominanceAboveCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func Others2DominanceAboveCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	btcDominance, err := parseBtcDominance(responseData)
+	btcDominance, asOf, err := parseBtcDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	others2Dominance := dominanceMaxValue - btcDominance
 	isAbove := others2Dominance > threshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: others2Dominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // Others2DominanceBelowCallback retorna true si la dominancia del mercado sin Bitcoin (OTHERS2 = 100 - BTC.D)
 // es menor al parametro threshold
-func Others2DominanceBelowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func Others2DominanceBelowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	btcDominance, err := parseBtcDominance(responseData)
+	btcDominance, asOf, err := parseBtcDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	others2Dominance := dominanceMaxValue - btcDominance
 	isBelow := others2Dominance < threshold
 
-	return isBelow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBelow, Value: others2Dominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // Others3DominanceAboveCallback retorna true si la dominancia del mercado sin Bitcoin ni Ethereum
 // (OTHERS3 = 100 - BTC.D - ETH.D) es mayor al parametro threshold
-func Others3DominanceAboveCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func Others3DominanceAboveCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	others3Dominance, err := parseOthers3Dominance(responseData)
+	others3Dominance, asOf, err := parseOthers3Dominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isAbove := others3Dominance > threshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: others3Dominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // Others3DominanceBelowCallback retorna true si la dominancia del mercado sin Bitcoin ni Ethereum
 // (OTHERS3 = 100 - BTC.D - ETH.D) es menor al parametro threshold
-func Others3DominanceBelowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func Others3DominanceBelowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	others3Dominance, err := parseOthers3Dominance(responseData)
+	others3Dominance, asOf, err := parseOthers3Dominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isBelow := others3Dominance < threshold
 
-	return isBelow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBelow, Value: others3Dominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // UsdtDominanceAboveCallback retorna true si la dominancia de Tether (USDT.D) es mayor al parametro threshold.
 // Lee la respuesta de /v2/cryptocurrency/quotes/latest pedida con symbol=USDT
-func UsdtDominanceAboveCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func UsdtDominanceAboveCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	usdtDominance, err := parseUsdtDominance(responseData)
+	usdtDominance, asOf, err := parseUsdtDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isAbove := usdtDominance > threshold
 
-	return isAbove, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isAbove, Value: usdtDominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // UsdtDominanceBelowCallback retorna true si la dominancia de Tether (USDT.D) es menor al parametro threshold.
 // Lee la respuesta de /v2/cryptocurrency/quotes/latest pedida con symbol=USDT
-func UsdtDominanceBelowCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func UsdtDominanceBelowCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	threshold, err := parseThresholdParameter(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
-	usdtDominance, err := parseUsdtDominance(responseData)
+	usdtDominance, asOf, err := parseUsdtDominance(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	isBelow := usdtDominance < threshold
 
-	return isBelow, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBelow, Value: usdtDominance, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // parseThresholdParameter retorna el parametro threshold del callback en el rango [0, 100]. Se guarda como FLOAT,
@@ -418,54 +439,59 @@ func parseThresholdParameter(parameters map[string]any) (float64, *cmm.ErrorHand
 	return threshold, cmm.NewEmptyErrorHandler()
 }
 
-// parseBtcDominance retorna la dominancia de Bitcoin de la respuesta de global metrics
-func parseBtcDominance(responseData []byte) (float64, *cmm.ErrorHandler) {
+// parseBtcDominance retorna la dominancia de Bitcoin de la respuesta de global metrics y su last_updated
+func parseBtcDominance(responseData []byte) (float64, *time.Time, *cmm.ErrorHandler) {
 	data, err := parseGlobalMetricsLatest(responseData)
 	if !err.IsEmtpy() {
-		return 0, err
+		return 0, nil, err
 	}
 
 	if !isValidDominance(data.Data.BtcDominance) {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s", optionalFloatText(data.Data.BtcDominance)), "CoinMarketCap btc_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE006")
+		return 0, nil, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s", optionalFloatText(data.Data.BtcDominance)), "CoinMarketCap btc_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE006")
 	}
 
-	return *data.Data.BtcDominance, cmm.NewEmptyErrorHandler()
+	asOf := optionalTime(time.RFC3339, data.Data.LastUpdated)
+	return *data.Data.BtcDominance, asOf, cmm.NewEmptyErrorHandler()
 }
 
-// parseOthers3Dominance retorna la dominancia del mercado sin Bitcoin ni Ethereum (100 - BTC.D - ETH.D)
-func parseOthers3Dominance(responseData []byte) (float64, *cmm.ErrorHandler) {
+// parseOthers3Dominance retorna la dominancia del mercado sin Bitcoin ni Ethereum (100 - BTC.D - ETH.D) y su last_updated
+func parseOthers3Dominance(responseData []byte) (float64, *time.Time, *cmm.ErrorHandler) {
 	data, err := parseGlobalMetricsLatest(responseData)
 	if !err.IsEmtpy() {
-		return 0, err
+		return 0, nil, err
 	}
 
 	btcDominance := data.Data.BtcDominance
 	ethDominance := data.Data.EthDominance
 	if !isValidDominance(btcDominance) || !isValidDominance(ethDominance) || *btcDominance+*ethDominance > dominanceMaxValue {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s eth_dominance %s", optionalFloatText(btcDominance), optionalFloatText(ethDominance)), "CoinMarketCap btc_dominance or eth_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE014")
+		return 0, nil, cmm.NewErrorHandler(fmt.Errorf("btc_dominance %s eth_dominance %s", optionalFloatText(btcDominance), optionalFloatText(ethDominance)), "CoinMarketCap btc_dominance or eth_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE014")
 	}
 
-	return dominanceMaxValue - *btcDominance - *ethDominance, cmm.NewEmptyErrorHandler()
+	others3Dominance := dominanceMaxValue - *btcDominance - *ethDominance
+	asOf := optionalTime(time.RFC3339, data.Data.LastUpdated)
+	return others3Dominance, asOf, cmm.NewEmptyErrorHandler()
 }
 
 // parseUsdtDominance retorna el market_cap_dominance en USD de Tether de la respuesta de /v2/cryptocurrency/quotes/latest
-func parseUsdtDominance(responseData []byte) (float64, *cmm.ErrorHandler) {
+// y el last_updated de esa cotizacion
+func parseUsdtDominance(responseData []byte) (float64, *time.Time, *cmm.ErrorHandler) {
 	data, err := parseQuotesLatest(responseData)
 	if !err.IsEmtpy() {
-		return 0, err
+		return 0, nil, err
 	}
 
 	coin, err := bestRankedCoin(data, coinMarketCapUsdtSymbol)
 	if !err.IsEmtpy() {
-		return 0, err
+		return 0, nil, err
 	}
 
 	quote, exists := coin.Quote[coinMarketCapQuoteCurrency]
 	if !exists || !isValidDominance(quote.MarketCapDominance) {
-		return 0, cmm.NewErrorHandler(fmt.Errorf("market_cap_dominance %s", optionalFloatText(quote.MarketCapDominance)), "CoinMarketCap USDT market_cap_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE015")
+		return 0, nil, cmm.NewErrorHandler(fmt.Errorf("market_cap_dominance %s", optionalFloatText(quote.MarketCapDominance)), "CoinMarketCap USDT market_cap_dominance is missing or out of range [0, 100]", cmm.LevelError, "PCCMCE015")
 	}
 
-	return *quote.MarketCapDominance, cmm.NewEmptyErrorHandler()
+	asOf := optionalTime(time.RFC3339, quote.LastUpdated)
+	return *quote.MarketCapDominance, asOf, cmm.NewEmptyErrorHandler()
 }
 
 // optionalFloatText texto de un numero opcional para el detalle de los errores: el valor o "null" si no llego.
@@ -483,23 +509,24 @@ func isValidDominance(dominance *float64) bool {
 }
 
 // parseFearAndGreedLatest retorna el valor actual del indice Fear and Greed. Se usa el valor y no
-// value_classification para no depender del texto de la clasificacion
-func parseFearAndGreedLatest(responseData []byte) (float64, *cmm.ErrorHandler) {
+// value_classification para no depender del texto de la clasificacion. Tambien retorna su update_time
+func parseFearAndGreedLatest(responseData []byte) (float64, *time.Time, *cmm.ErrorHandler) {
 	var data coinMarketCapFearAndGreedResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
-		return 0, cmm.NewErrorHandler(err, "Error parsing CoinMarketCap Fear and Greed response", cmm.LevelFatal, "PCCMCE001")
+		return 0, nil, cmm.NewErrorHandler(err, "Error parsing CoinMarketCap Fear and Greed response", cmm.LevelFatal, "PCCMCE001")
 	}
 
 	err := coinMarketCapStatusError(data.Status)
 	if !err.IsEmtpy() {
-		return 0, err
+		return 0, nil, err
 	}
 
 	if data.Data == nil || data.Data.Value == nil || *data.Data.Value < fearAndGreedMinValue || *data.Data.Value > fearAndGreedMaxValue {
-		return 0, cmm.NewErrorHandler(errors.New("value missing or out of range [0, 100]"), "CoinMarketCap Fear and Greed value is invalid", cmm.LevelError, "PCCMCE003")
+		return 0, nil, cmm.NewErrorHandler(errors.New("value missing or out of range [0, 100]"), "CoinMarketCap Fear and Greed value is invalid", cmm.LevelError, "PCCMCE003")
 	}
 
-	return *data.Data.Value, cmm.NewEmptyErrorHandler()
+	asOf := optionalTime(time.RFC3339, data.Data.UpdateTime)
+	return *data.Data.Value, asOf, cmm.NewEmptyErrorHandler()
 }
 
 // parseGlobalMetricsLatest retorna la respuesta de global metrics validando el status y que exista data

@@ -14,6 +14,7 @@ import (
 	"c_trd/cronjobs"
 	"c_trd/models"
 	"c_trd/providers"
+	"c_trd/tests/testutil"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -103,13 +104,18 @@ func TestEvaluateCondition(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	registerCallback(t, "TestIsBullish", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-		return string(body) == "bullish", cmm.NewEmptyErrorHandler()
+	asOf := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	registerCallback(t, "TestIsBullish", func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
+		isBullish := string(body) == "bullish"
+		result := providers.CallbackResult{Accepted: isBullish, Value: 1.27, AsOf: &asOf}
+		return result, cmm.NewEmptyErrorHandler()
 	})
-	registerCallback(t, "TestCallbackError", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
-		return true, cmm.NewErrorHandler(errors.New("respuesta inesperada"), "callback fallido", cmm.LevelError, "TESTE005")
+	registerCallback(t, "TestCallbackError", func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
+		// Aunque el callback devuelva datos junto con el error, el resultado no debe usarlos
+		result := providers.CallbackResult{Accepted: true, Value: 99, AsOf: &asOf}
+		return result, cmm.NewErrorHandler(errors.New("respuesta inesperada"), "callback fallido", cmm.LevelError, "TESTE005")
 	})
-	registerCallback(t, "TestCallbackPanic", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestCallbackPanic", func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
 		panic("bug en el callback")
 	})
 
@@ -119,13 +125,14 @@ func TestEvaluateCondition(t *testing.T) {
 		callback      string
 		wantEvaluated bool
 		wantAccepted  bool
+		wantTracking  string
 	}{
 		{name: "condicion que se cumple", url: server.URL, callback: "TestIsBullish", wantEvaluated: true, wantAccepted: true},
-		{name: "sin URL no se evalua", url: "", callback: "TestIsBullish"},
-		{name: "callback no registrado", url: server.URL, callback: "NoExiste"},
-		{name: "la API responde con error", url: server.URL + "/fail", callback: "TestIsBullish"},
-		{name: "el callback retorna error", url: server.URL, callback: "TestCallbackError"},
-		{name: "un panic en el callback no tumba el cronjob", url: server.URL, callback: "TestCallbackPanic"},
+		{name: "sin URL no se evalua", url: "", callback: "TestIsBullish", wantTracking: "CJCHCE001"},
+		{name: "callback no registrado", url: server.URL, callback: "NoExiste", wantTracking: "CJCHCE002"},
+		{name: "la API responde con error", url: server.URL + "/fail", callback: "TestIsBullish", wantTracking: "PRHTTPE004"},
+		{name: "el callback retorna error", url: server.URL, callback: "TestCallbackError", wantTracking: "TESTE005"},
+		{name: "un panic en el callback no tumba el cronjob", url: server.URL, callback: "TestCallbackPanic", wantTracking: "CJCHCE003"},
 	}
 
 	for _, tt := range tests {
@@ -144,6 +151,18 @@ func TestEvaluateCondition(t *testing.T) {
 			if result.ExecutedAt.IsZero() {
 				t.Error("ExecutedAt debe registrarse aunque la evaluacion falle")
 			}
+			if result.ErrorTrackingCode != tt.wantTracking {
+				t.Errorf("errorTrackingCode = %q, se esperaba %q", result.ErrorTrackingCode, tt.wantTracking)
+			}
+
+			// Solo una evaluacion exitosa guarda el valor y la fecha del dato
+			if tt.wantEvaluated {
+				if result.Value != 1.27 || result.AsOf == nil || !result.AsOf.Equal(asOf) {
+					t.Errorf("value = %v, asOf = %v; se esperaba 1.27, %s", result.Value, result.AsOf, asOf)
+				}
+			} else if result.Value != 0 || result.AsOf != nil {
+				t.Errorf("value = %v, asOf = %v; una evaluacion fallida no debe guardar datos", result.Value, result.AsOf)
+			}
 		})
 	}
 }
@@ -155,12 +174,14 @@ func TestEvaluateConditions_KeepsOrderWithMoreConditionsThanWorkers(t *testing.T
 	}))
 	t.Cleanup(server.Close)
 
-	registerCallback(t, "TestIsEven", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestIsEven", func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
 		n, err := strconv.Atoi(string(body))
 		if err != nil {
-			return false, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE006")
+			return providers.CallbackResult{}, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE006")
 		}
-		return n%2 == 0, cmm.NewEmptyErrorHandler()
+		isEven := n%2 == 0
+		result := providers.CallbackResult{Accepted: isEven, Value: float64(n)}
+		return result, cmm.NewEmptyErrorHandler()
 	})
 
 	conditions := make([]models.ConditionsModelType, cmm.ConditionEvaluationWorkers*2+3)
@@ -178,8 +199,8 @@ func TestEvaluateConditions_KeepsOrderWithMoreConditionsThanWorkers(t *testing.T
 		if result.Condition.ID != conditions[i].ID {
 			t.Errorf("resultado %d corresponde a otra condicion", i)
 		}
-		if !result.Evaluated || result.Accepted != (i%2 == 0) {
-			t.Errorf("resultado %d: evaluated = %v, accepted = %v", i, result.Evaluated, result.Accepted)
+		if !result.Evaluated || result.Accepted != (i%2 == 0) || result.Value != float64(i) {
+			t.Errorf("resultado %d: evaluated = %v, accepted = %v, value = %v", i, result.Evaluated, result.Accepted, result.Value)
 		}
 	}
 }
@@ -191,16 +212,18 @@ func TestEvaluateCondition_PassesParametersCallback(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	// El callback acepta si el valor de la respuesta supera el umbral de la condicion
-	registerCallback(t, "TestAboveThreshold", func(body []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+	registerCallback(t, "TestAboveThreshold", func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
 		value, err := strconv.ParseFloat(string(body), 64)
 		if err != nil {
-			return false, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE007")
+			return providers.CallbackResult{}, cmm.NewErrorHandler(err, "numero invalido", cmm.LevelError, "TESTE007")
 		}
 		threshold, ok := parameters["threshold"].(float64)
 		if !ok {
-			return false, cmm.NewErrorHandler(nil, "umbral invalido", cmm.LevelError, "TESTE008")
+			return providers.CallbackResult{}, cmm.NewErrorHandler(nil, "umbral invalido", cmm.LevelError, "TESTE008")
 		}
-		return value > threshold, cmm.NewEmptyErrorHandler()
+		isAbove := value > threshold
+		result := providers.CallbackResult{Accepted: isAbove, Value: value}
+		return result, cmm.NewEmptyErrorHandler()
 	})
 
 	tests := []struct {
@@ -227,6 +250,105 @@ func TestEvaluateCondition_PassesParametersCallback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewConditionEvaluation(t *testing.T) {
+	t.Parallel()
+
+	executedAt := time.Date(2026, 11, 21, 10, 30, 0, 0, time.UTC)
+	asOf := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	condition := newTestCondition("https://api.test", "FearAndGreedBelow")
+	condition.ParametersCallback = map[string]any{"threshold": 25.0}
+
+	tests := []struct {
+		name         string
+		result       cronjobs.ConditionResult
+		wantAccepted bool
+		wantValue    *float64
+		wantAsOf     *time.Time
+		wantSource   *string
+		wantTracking *string
+	}{
+		{
+			name:         "con fecha del proveedor guarda esa fecha con origen PROVIDER",
+			result:       cronjobs.ConditionResult{Evaluated: true, Accepted: true, Value: 18, AsOf: &asOf},
+			wantAccepted: true, wantValue: floatPointer(18), wantAsOf: &asOf, wantSource: stringPointer(cmm.AsOfSourceProvider),
+		},
+		{
+			// Un valor 0 medido es un dato, no debe confundirse con "sin valor"
+			name:         "sin fecha del proveedor usa executed_at con origen SERVER",
+			result:       cronjobs.ConditionResult{Evaluated: true, Accepted: false, Value: 0},
+			wantAccepted: false, wantValue: floatPointer(0), wantAsOf: &executedAt, wantSource: stringPointer(cmm.AsOfSourceServer),
+		},
+		{
+			name:         "fallida guarda el tracking code y no guarda valor",
+			result:       cronjobs.ConditionResult{Evaluated: false, ErrorTrackingCode: "PRHTTPE004"},
+			wantTracking: stringPointer("PRHTTPE004"),
+		},
+		{
+			// Si llegara un resultado no evaluado con datos (no deberia), no se guardan
+			name:         "fallida ignora valor y aceptacion",
+			result:       cronjobs.ConditionResult{Evaluated: false, Accepted: true, Value: 50, AsOf: &asOf, ErrorTrackingCode: "CJCHCE003"},
+			wantTracking: stringPointer("CJCHCE003"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tt.result.Condition = condition
+			tt.result.ExecutedAt = executedAt
+
+			got, err := cronjobs.NewConditionEvaluation(tt.result)
+
+			testutil.RequireEmptyError(t, err)
+			if got.ID.IsZero() || got.IDCondition != condition.ID {
+				t.Errorf("id = %s, idCondition = %s; se esperaba un id nuevo y la condicion %s", got.ID.Hex(), got.IDCondition.Hex(), condition.ID.Hex())
+			}
+			if got.CallbackFunction != "FearAndGreedBelow" || got.ParametersCallback["threshold"] != 25.0 {
+				t.Errorf("callback = %s %v; se esperaba la copia del callback y sus parametros", got.CallbackFunction, got.ParametersCallback)
+			}
+			if got.Evaluated != tt.result.Evaluated || got.Accepted != tt.wantAccepted {
+				t.Errorf("evaluated, accepted = %v, %v; se esperaba %v, %v", got.Evaluated, got.Accepted, tt.result.Evaluated, tt.wantAccepted)
+			}
+			if !got.ExecutedAt.Equal(executedAt) {
+				t.Errorf("executedAt = %s, se esperaba %s", got.ExecutedAt, executedAt)
+			}
+			if !equalPointer(got.Value, tt.wantValue) {
+				t.Errorf("value = %v, se esperaba %v", printablePointer(got.Value), printablePointer(tt.wantValue))
+			}
+			if (got.AsOf == nil) != (tt.wantAsOf == nil) || (got.AsOf != nil && !got.AsOf.Equal(*tt.wantAsOf)) {
+				t.Errorf("asOf = %v, se esperaba %v", got.AsOf, tt.wantAsOf)
+			}
+			if !equalPointer(got.AsOfSource, tt.wantSource) {
+				t.Errorf("asOfSource = %v, se esperaba %v", printablePointer(got.AsOfSource), printablePointer(tt.wantSource))
+			}
+			if !equalPointer(got.ErrorTrackingCode, tt.wantTracking) {
+				t.Errorf("errorTrackingCode = %v, se esperaba %v", printablePointer(got.ErrorTrackingCode), printablePointer(tt.wantTracking))
+			}
+		})
+	}
+}
+
+func floatPointer(value float64) *float64 { return &value }
+
+func stringPointer(value string) *string { return &value }
+
+// equalPointer compara dos punteros opcionales por su valor
+func equalPointer[T comparable](got, want *T) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	return *got == *want
+}
+
+// printablePointer valor del puntero para los mensajes de error, o "nil"
+func printablePointer[T any](value *T) any {
+	if value == nil {
+		return "nil"
+	}
+	return *value
 }
 
 // registerCallback agrega un callback de prueba al registro y lo elimina al terminar la prueba

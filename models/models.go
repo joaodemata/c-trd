@@ -19,4 +19,5 @@ var RegistryList = []cmm.ModelRegistry{
 	{Name: "agent_runs", Ptr: &AgentRunsModel},
 	{Name: "portfolios", Ptr: &PortfolioModel},
 	{Name: "portfolio_transactions", Ptr: &PortfolioTransactionsModel},
+	{Name: "condition_evaluations", Ptr: &ConditionEvaluationsModel},
 }
