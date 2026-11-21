@@ -176,6 +176,9 @@ const (
 	ConditionMinIntervalSeconds = 60
 	// Tiempo maximo para evaluar todas las condiciones de un ciclo (el ticker corre cada minuto)
 	ConditionEvaluationTimeout = 50 * time.Second
+	// Evaluaciones fallidas seguidas (incluyendo la actual) tras las que una condicion pasa a INACTIVE,
+	// asi una API caida no deja la condicion ACTIVE para siempre
+	ConditionMaxConsecutiveFailures = 3
 )
 
 // Peticiones HTTP a proveedores externos

@@ -30,9 +30,16 @@ func TestNewConditionStatus(t *testing.T) {
 		currentStatus string
 		evaluated     bool
 		accepted      bool
+		failed        int                // failed_attempts guardado antes de esta evaluacion
 		want          *cmm.CatalogStatus // nil si el status no debe cambiar
 	}{
 		{name: "no evaluada conserva el status", currentStatus: active.Tag, evaluated: false, accepted: false, want: nil},
+		{name: "activa con un fallo menos que el maximo conserva el status", currentStatus: active.Tag, failed: cmm.ConditionMaxConsecutiveFailures - 2, want: nil},
+		{name: "activa que llega al maximo de fallos pasa a inactiva", currentStatus: active.Tag, failed: cmm.ConditionMaxConsecutiveFailures - 1, want: &inactive},
+		{name: "activa que supera el maximo de fallos pasa a inactiva", currentStatus: active.Tag, failed: cmm.ConditionMaxConsecutiveFailures + 4, want: &inactive},
+		{name: "inactiva que llega al maximo de fallos no cambia", currentStatus: inactive.Tag, failed: cmm.ConditionMaxConsecutiveFailures - 1, want: nil},
+		{name: "inactiva con fallos que se cumple pasa a activa", currentStatus: inactive.Tag, evaluated: true, accepted: true, failed: cmm.ConditionMaxConsecutiveFailures + 4, want: &active},
+		{name: "activa con fallos que se cumple no cambia", currentStatus: active.Tag, evaluated: true, accepted: true, failed: cmm.ConditionMaxConsecutiveFailures - 1, want: nil},
 		{name: "inactiva que se cumple pasa a activa", currentStatus: inactive.Tag, evaluated: true, accepted: true, want: &active},
 		{name: "activa que se cumple no cambia", currentStatus: active.Tag, evaluated: true, accepted: true, want: nil},
 		{name: "activa que deja de cumplirse pasa a inactiva", currentStatus: active.Tag, evaluated: true, accepted: false, want: &inactive},
@@ -44,7 +51,7 @@ func TestNewConditionStatus(t *testing.T) {
 			t.Parallel()
 
 			result := cronjobs.ConditionResult{
-				Condition: models.ConditionsModelType{TagStatus: tt.currentStatus},
+				Condition: models.ConditionsModelType{TagStatus: tt.currentStatus, FailedAttempts: tt.failed},
 				Evaluated: tt.evaluated,
 				Accepted:  tt.accepted,
 			}
@@ -57,6 +64,118 @@ func TestNewConditionStatus(t *testing.T) {
 				t.Errorf("el status no cambio, se esperaba %s", tt.want.Tag)
 			case tt.want != nil && *got != *tt.want:
 				t.Errorf("status = %s, se esperaba %s", got.Tag, tt.want.Tag)
+			}
+		})
+	}
+}
+
+func TestNewFailedAttempts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		current   int
+		evaluated bool
+		want      int
+	}{
+		{"primer fallo", 0, false, 1},
+		{"fallo seguido suma uno", 2, false, 3},
+		{"evaluacion exitosa reinicia a cero", 5, true, 0},
+		{"evaluacion exitosa sin fallos queda en cero", 0, true, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cronjobs.ConditionResult{
+				Condition: models.ConditionsModelType{FailedAttempts: tt.current},
+				Evaluated: tt.evaluated,
+			}
+
+			if got := cronjobs.NewFailedAttempts(result); got != tt.want {
+				t.Errorf("failed_attempts = %d, se esperaba %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateDataAge(t *testing.T) {
+	t.Parallel()
+
+	executedAt := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) *time.Time {
+		date := executedAt.Add(-d)
+		return &date
+	}
+
+	tests := []struct {
+		name       string
+		maxDataAge time.Duration
+		asOf       *time.Time
+		wantCode   string // "" si el dato es valido
+	}{
+		{name: "dato dentro del maximo", maxDataAge: 48 * time.Hour, asOf: ago(47 * time.Hour)},
+		{name: "dato justo en el maximo", maxDataAge: 48 * time.Hour, asOf: ago(48 * time.Hour)},
+		{name: "dato mas viejo que el maximo", maxDataAge: 48 * time.Hour, asOf: ago(49 * time.Hour), wantCode: "CJCHCE004"},
+		{name: "callback sin limite no valida", maxDataAge: 0, asOf: ago(365 * 24 * time.Hour)},
+		{name: "resultado sin AsOf no se valida", maxDataAge: time.Hour, asOf: nil},
+		{name: "dato con fecha futura es valido", maxDataAge: time.Hour, asOf: ago(-2 * time.Hour)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			callback := providers.CallbackDefinition{ID: "TestCallback", MaxDataAge: tt.maxDataAge}
+			callbackResult := providers.CallbackResult{Accepted: true, Value: 1, AsOf: tt.asOf}
+
+			err := cronjobs.ValidateDataAge(callback, callbackResult, executedAt)
+			if tt.wantCode == "" {
+				if !err.IsEmtpy() {
+					t.Errorf("error inesperado: %v", err)
+				}
+				return
+			}
+			testutil.RequireTrackingCode(t, err, tt.wantCode)
+		})
+	}
+}
+
+func TestEvaluateCondition_StaleDataFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "bullish")
+	}))
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name          string
+		age           time.Duration
+		wantEvaluated bool
+		wantTracking  string
+	}{
+		{name: "dato reciente se evalua", age: time.Hour, wantEvaluated: true},
+		{name: "dato viejo falla la evaluacion", age: 72 * time.Hour, wantTracking: "CJCHCE004"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name := "TestStaleData" + strconv.Itoa(int(tt.age.Hours()))
+			asOf := time.Now().UTC().Add(-tt.age)
+			callback := func(body []byte, parameters map[string]any) (providers.CallbackResult, *cmm.ErrorHandler) {
+				return providers.CallbackResult{Accepted: true, Value: 1, AsOf: &asOf}, cmm.NewEmptyErrorHandler()
+			}
+			registerCallbackDefinition(t, providers.CallbackDefinition{ID: name, Fn: callback, MaxDataAge: 48 * time.Hour})
+
+			result := cronjobs.EvaluateCondition(context.Background(), newTestCondition(server.URL, name), nil)
+
+			if result.Evaluated != tt.wantEvaluated || result.ErrorTrackingCode != tt.wantTracking {
+				t.Errorf("evaluated = %v, tracking = %q; se esperaba evaluated = %v, tracking = %q",
+					result.Evaluated, result.ErrorTrackingCode, tt.wantEvaluated, tt.wantTracking)
+			}
+			// Una evaluacion fallida por dato viejo no debe aceptar la condicion ni guardar datos
+			if !tt.wantEvaluated && (result.Accepted || result.AsOf != nil || result.Value != 0) {
+				t.Errorf("accepted = %v, value = %v, asOf = %v; un dato viejo no debe guardar datos", result.Accepted, result.Value, result.AsOf)
 			}
 		})
 	}
@@ -360,6 +479,17 @@ func registerCallback(t *testing.T, name string, callback providers.CallbackFunc
 	}
 	providers.FunctionRegistry[name] = providers.CallbackDefinition{Fn: callback}
 	t.Cleanup(func() { delete(providers.FunctionRegistry, name) })
+}
+
+// registerCallbackDefinition registra una definicion completa (ej: con MaxDataAge) y la borra al terminar el test
+func registerCallbackDefinition(t *testing.T, definition providers.CallbackDefinition) {
+	t.Helper()
+
+	if _, exists := providers.FunctionRegistry[definition.ID]; exists {
+		t.Fatalf("el callback %s ya existe en FunctionRegistry", definition.ID)
+	}
+	providers.FunctionRegistry[definition.ID] = definition
+	t.Cleanup(func() { delete(providers.FunctionRegistry, definition.ID) })
 }
 
 // newTestCondition condicion de tipo cronjob sin autenticacion
