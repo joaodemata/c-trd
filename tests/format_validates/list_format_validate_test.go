@@ -290,3 +290,51 @@ func TestPortfolioRoiFormatValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestListUsersFormatValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		query    string
+		wantNext bool
+		want     string
+	}{
+		{"sin filtro", "", true, ""},
+		{"vacio", "?tagPrivilege=", true, ""},
+		{"super usuario", "?tagPrivilege=" + cmm.UserPrivilegeSuperUser.Tag, true, cmm.UserPrivilegeSuperUser.Tag},
+		{"usuario generico", "?tagPrivilege=" + cmm.UserPrivilegeGenericUser.Tag, true, cmm.UserPrivilegeGenericUser.Tag},
+		{"agente", "?tagPrivilege=" + cmm.UserPrivilegeAgent.Tag, true, cmm.UserPrivilegeAgent.Tag},
+		{"minusculas", "?tagPrivilege=super_user", false, ""},
+		{"privilegio inexistente", "?tagPrivilege=ADMIN", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/list/users"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			spy := &testutil.NextSpy{}
+
+			fv.ListUsersFormatValidate(spy).ServeHTTP(rec, req)
+
+			if spy.Called != tt.wantNext {
+				t.Fatalf("next llamado = %v, se esperaba %v (body: %s)", spy.Called, tt.wantNext, rec.Body.String())
+			}
+
+			if !tt.wantNext {
+				if res := testutil.DecodeResponse(t, rec); res.Tracking != "CC003" {
+					t.Errorf("tracking = %s, se esperaba CC003", res.Tracking)
+				}
+				return
+			}
+
+			filters, errCtx := cmm.GetFromRequestContext[*fv.ListUsersFormat](spy.Request, "filters")
+			testutil.RequireEmptyError(t, errCtx)
+			if filters.TagPrivilege != tt.want {
+				t.Errorf("tagPrivilege = %q, want %q", filters.TagPrivilege, tt.want)
+			}
+		})
+	}
+}

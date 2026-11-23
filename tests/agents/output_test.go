@@ -76,11 +76,16 @@ func TestLoadPromptIncludesSchema(t *testing.T) {
 	testutil.RequireTrackingCode(t, err, "AGOUTE001")
 }
 
+const pineTriggerTag = "BTC-EMA-CROSS"
+
 func validPine() agents.PineAuthorOutput {
 	return agents.PineAuthorOutput{
 		PineIndicator: `//@version=6
 indicator("x")
-alert("{\"idWebhook\":\"{{ID_WEBHOOK}}\"}")`,
+alert("{\"idWebhook\":\"{{ID_WEBHOOK}}\"}")
+plot(entrySignal ? 1 : 0, "CTRD_SIGNAL_BTC-EMA-CROSS", display = display.data_window)
+plot(entrySignal ? sl : na, "CTRD_SL_BTC-EMA-CROSS", display = display.data_window)
+plot(entrySignal ? tp : na, "CTRD_TP_BTC-EMA-CROSS", display = display.data_window)`,
 		PineStrategy: "//@version=6\nstrategy(\"x\")",
 		RiskLogic:    agents.RiskLogic{PlannedRR: 2},
 	}
@@ -105,6 +110,21 @@ func TestValidatePineOutput(t *testing.T) {
 		{"placeholder de cancelacion", func(o *agents.PineAuthorOutput) { o.PineIndicator += "\n// {{ID_CANCEL}}" }, []string{"ID_CANCEL"}},
 		{"sin strategy", func(o *agents.PineAuthorOutput) { o.PineStrategy = "//@version=6" }, []string{"strategy"}},
 		{"riesgo bajo", func(o *agents.PineAuthorOutput) { o.RiskLogic.PlannedRR = 1.5 }, []string{"plannedRR"}},
+		{"sin plot de senal", func(o *agents.PineAuthorOutput) {
+			o.PineIndicator = strings.Replace(o.PineIndicator, `"CTRD_SIGNAL_BTC-EMA-CROSS"`, `"signal"`, 1)
+		}, []string{"CTRD_SIGNAL_BTC-EMA-CROSS"}},
+		{"sin plot de stop loss", func(o *agents.PineAuthorOutput) {
+			o.PineIndicator = strings.Replace(o.PineIndicator, `"CTRD_SL_BTC-EMA-CROSS"`, `"sl"`, 1)
+		}, []string{"CTRD_SL_BTC-EMA-CROSS"}},
+		{"sin plot de take profit", func(o *agents.PineAuthorOutput) {
+			o.PineIndicator = strings.Replace(o.PineIndicator, `"CTRD_TP_BTC-EMA-CROSS"`, `"tp"`, 1)
+		}, []string{"CTRD_TP_BTC-EMA-CROSS"}},
+		{"plot con el tag de otro trigger", func(o *agents.PineAuthorOutput) {
+			o.PineIndicator = strings.ReplaceAll(o.PineIndicator, "BTC-EMA-CROSS", "ETH-RSI")
+		}, []string{"CTRD_SIGNAL_BTC-EMA-CROSS", "CTRD_SL_BTC-EMA-CROSS", "CTRD_TP_BTC-EMA-CROSS"}},
+		{"plot dibujado en el grafico", func(o *agents.PineAuthorOutput) {
+			o.PineIndicator = strings.ReplaceAll(o.PineIndicator, "display.data_window", "display.all")
+		}, []string{"display.data_window"}},
 	}
 
 	for _, tt := range tests {
@@ -112,8 +132,23 @@ func TestValidatePineOutput(t *testing.T) {
 			t.Parallel()
 			out := validPine()
 			tt.edit(&out)
-			requireProblems(t, agents.ValidatePineOutput(out), tt.want)
+			requireProblems(t, agents.ValidatePineOutput(out, pineTriggerTag), tt.want)
 		})
+	}
+}
+
+func TestRetagPinePlots(t *testing.T) {
+	t.Parallel()
+
+	code := validPine().PineIndicator + "\n// BTC-EMA-CROSS en un comentario no cambia"
+	retagged := agents.RetagPinePlots(code, pineTriggerTag, "BTC-EMA-CROSS-V2")
+
+	requireProblems(t, agents.ValidatePineOutput(agents.PineAuthorOutput{PineIndicator: retagged, PineStrategy: validPine().PineStrategy, RiskLogic: validPine().RiskLogic}, "BTC-EMA-CROSS-V2"), nil)
+	if strings.Contains(retagged, `"CTRD_SL_BTC-EMA-CROSS"`) {
+		t.Errorf("quedo un titulo con el tag viejo: %s", retagged)
+	}
+	if !strings.Contains(retagged, "// BTC-EMA-CROSS en un comentario") {
+		t.Errorf("cambio texto que no es titulo de plot: %s", retagged)
 	}
 }
 

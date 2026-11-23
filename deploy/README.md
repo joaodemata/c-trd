@@ -296,6 +296,47 @@ out) the run stops and the theses go back to the queue for the next Thursday.
    trigger with a rejected condition can't be approved.
 4. Create the TradingView alert with the trigger `code` and the webhook `https://<api>/hook/trigger`.
 
+## Backtesting
+
+The backtester (`cmd/backtester`) simulates triggers over a TradingView "Export chart data" CSV. It is
+built into the API image as `/app/backtester` and runs **inside the API container of each environment**
+(same env vars, same network to Mongo and the same `backtests-<env>` volume), but as a separate process:
+never inside the HTTP server or the conditions cron. Each run marks stale runs as failed, processes up
+to 10 queued runs (oldest first) and exits.
+
+**Catalogs and indexes** (once per environment, through the same tunnel as the super user): creates
+the `BACKTEST_RUN_STATUS` catalog and the indexes of `backtest_datasets`, `backtest_runs` and
+`condition_evaluations`:
+
+```powershell
+$env:JM_CTRD_MDB_USER = "ctrd_dev"
+mongosh "mongodb://ctrd_dev:<dev password>@localhost:27018/ctrd_dev?authSource=admin&directConnection=true" --file scripts/create_backtest_catalogs.js
+```
+
+**Cron** (as root, one line per environment in `/etc/cron.d/ctrd-backtester`). `flock` skips a minute
+if the previous run is still working; the container name is `<project>-<service>-1`:
+
+```
+* * * * * root flock -n /run/ctrd-backtester-prod.lock docker exec ctrd-ctrd-prod-1 /app/backtester >> /var/log/ctrd-backtester-prod.log 2>&1
+```
+
+**Manual run**: `docker exec ctrd-ctrd-dev-1 /app/backtester -max-runs 1`.
+
+**Flow** (super user):
+
+1. Each trigger's Pine indicator plots `CTRD_SIGNAL_<tag>`, `CTRD_SL_<tag>` and `CTRD_TP_<tag>` with
+   `display = display.data_window` (the Pine Author adds them). Put the indicators of every trigger of
+   one asset and timeframe on one chart, load the history and use **Export chart data** with the time
+   format **UNIX timestamp**.
+2. Upload it: `POST /operation/backtest/upload_dataset` (multipart: `file`, `idAsset`,
+   `idCandlestickTimeframe`, optional `allowSessionGaps=true` for markets with sessions). There is one
+   dataset per asset and timeframe; a new upload replaces its file but the old one stays in the volume
+   by its SHA-256, so old runs can be repeated.
+3. Queue runs: `POST /operation/backtest/create_runs` with `idDataset`, `idTriggers` (up to 25),
+   `feeBps`, `slippageBps` and `conditionSource` (`AUTO`, `EVALUATIONS_ONLY` or `CURRENT_DATA_ONLY`).
+4. Read them: `GET /list/backtest_runs` (metrics, without trades) and `GET /list/backtest_run?idRun=`
+   (with every trade). `GET /list/backtest_datasets` lists the uploaded datasets.
+
 ## Troubleshooting
 
 **Job stuck in "Waiting for a runner to pick up this job"**: the runner is registered but offline.

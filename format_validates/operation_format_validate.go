@@ -222,3 +222,32 @@ type DeletePortfolioTransactionFormat struct {
 }
 
 var DeletePortfolioTransactionFormatValidate = common.FormatValidateMiddleware[DeletePortfolioTransactionFormat]
+
+// ---------- Backtesting ----------
+
+// BacktestDatasetUploadFormat asset y temporalidad del CSV "Export chart data" de TradingView. allowSessionGaps "true"
+// acepta huecos entre velas (mercados con sesiones, ej: acciones); por defecto no se aceptan
+type BacktestDatasetUploadFormat struct {
+	IdAsset                string `form:"idAsset" validate:"required,mongodb"`
+	IdCandlestickTimeframe string `form:"idCandlestickTimeframe" validate:"required,mongodb"`
+	AllowSessionGaps       string `form:"allowSessionGaps" validate:"omitempty,oneof=true false"`
+}
+
+// El CSV llega en el campo "file" (maximo cmm.BacktestDatasetMaxBytes)
+var BacktestDatasetUploadFormatValidate = common.FileFormatValidateMiddleware[BacktestDatasetUploadFormat](common.FileUploadConfig{
+	Field:      "file",
+	MaxBytes:   common.BacktestDatasetMaxBytes,
+	Extensions: []string{".csv"},
+})
+
+// CreateBacktestRunsFormat triggers a simular sobre un dataset (una corrida por trigger), costos en puntos basicos
+// (10 = 0.1%) y origen de los datos de las condiciones
+type CreateBacktestRunsFormat struct {
+	IdDataset       string   `json:"idDataset" validate:"required,mongodb"`
+	IdTriggers      []string `json:"idTriggers" validate:"required,min=1,max=25,unique,dive,mongodb"`
+	FeeBps          float64  `json:"feeBps" validate:"gte=0,lte=500"`
+	SlippageBps     float64  `json:"slippageBps" validate:"gte=0,lte=500"`
+	ConditionSource string   `json:"conditionSource" validate:"required,oneof=AUTO EVALUATIONS_ONLY CURRENT_DATA_ONLY"`
+}
+
+var CreateBacktestRunsFormatValidate = common.FormatValidateMiddleware[CreateBacktestRunsFormat]

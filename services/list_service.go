@@ -1548,3 +1548,245 @@ func BuildPortfolioRoiService(portfolio models.PortfolioModelType, transactions 
 
 	return roi
 }
+
+// ---------- Backtesting ----------
+
+// GetBacktestDatasetService busca un dataset no borrado por su ID. Si no existe retorna el dataset vacio sin error
+func GetBacktestDatasetService(idDataset primitive.ObjectID) (models.BacktestDatasetsModelType, *cmm.ErrorHandler) {
+	var result models.BacktestDatasetsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	err := models.BacktestDatasetsModel.FindOne(ctx, bson.M{"_id": idDataset, "logical_delete": false}).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE062")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetBacktestDatasetsService lista paginados los datasets, los actualizados mas recientemente primero. idAsset cero
+// lista todos
+func GetBacktestDatasetsService(Limit int, Page int, Search string, IdAsset primitive.ObjectID) ([]models.BacktestDatasetsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.BacktestDatasetsModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if !IdAsset.IsZero() {
+		filter["id_asset"] = IdAsset
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"tag_asset": regexPattern},
+			{"asset": regexPattern},
+			{"signal_tags": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.BacktestDatasetsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los datasets", cmm.LevelDatabase, "SLISE063")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "last_updated_at", Value: -1}, {Key: "_id", Value: -1}})
+
+	cursor, err := models.BacktestDatasetsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los datasets", cmm.LevelDatabase, "SLISE064")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los datasets", cmm.LevelDatabase, "SLISE065")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetBacktestRunsService lista paginadas las corridas de backtest sin sus operaciones (solo van en el detalle), las mas
+// recientes primero. idTrigger e idDataset cero no filtran
+func GetBacktestRunsService(Limit int, Page int, Search string, TagStatus string, IdTrigger primitive.ObjectID, IdDataset primitive.ObjectID) ([]models.BacktestRunsModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.BacktestRunsModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if TagStatus != "" {
+		filter["tag_status"] = TagStatus
+	}
+	if !IdTrigger.IsZero() {
+		filter["id_trigger"] = IdTrigger
+	}
+	if !IdDataset.IsZero() {
+		filter["id_dataset"] = IdDataset
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"tag_trigger": regexPattern},
+			{"trigger": regexPattern},
+			{"tag_asset": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.BacktestRunsModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando las corridas de backtest", cmm.LevelDatabase, "SLISE066")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "created_date", Value: -1}, {Key: "_id", Value: -1}}).
+		SetProjection(bson.M{"trades": 0})
+
+	cursor, err := models.BacktestRunsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando las corridas de backtest", cmm.LevelDatabase, "SLISE067")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando las corridas de backtest", cmm.LevelDatabase, "SLISE068")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}
+
+// GetBacktestRunService busca una corrida de backtest no borrada por su ID, con sus operaciones. Si no existe retorna
+// la corrida vacia sin error
+func GetBacktestRunService(idRun primitive.ObjectID) (models.BacktestRunsModelType, *cmm.ErrorHandler) {
+	var result models.BacktestRunsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	err := models.BacktestRunsModel.FindOne(ctx, bson.M{"_id": idRun, "logical_delete": false}).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return result, cmm.NewEmptyErrorHandler()
+		}
+
+		return result, cmm.NewErrorHandler(err, err.Error(), cmm.LevelDatabase, "SLISE069")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetConditionEvaluationsUntilService evaluaciones correctas (evaluated) de la condicion con executed_at hasta until,
+// ordenadas por executed_at. Solo trae los campos que usa el backtest
+func GetConditionEvaluationsUntilService(idCondition primitive.ObjectID, until time.Time) ([]models.ConditionEvaluationsModelType, *cmm.ErrorHandler) {
+	result := make([]models.ConditionEvaluationsModelType, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_condition": idCondition, "evaluated": true, "executed_at": bson.M{"$lte": until}}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "executed_at", Value: 1}}).
+		SetProjection(bson.M{"id_condition": 1, "evaluated": 1, "accepted": 1, "value": 1, "as_of": 1, "executed_at": 1})
+
+	cursor, err := models.ConditionEvaluationsModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, cmm.NewErrorHandler(err, "Error consultando las evaluaciones de la condicion", cmm.LevelDatabase, "SLISE070")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, cmm.NewErrorHandler(err, "Error decodificando las evaluaciones de la condicion", cmm.LevelDatabase, "SLISE071")
+	}
+
+	return result, cmm.NewEmptyErrorHandler()
+}
+
+// GetUsersService lista paginados los usuarios no borrados, los mas recientes primero. La busqueda aplica sobre el
+// username, el correo, el nombre y el apellido; startDate y endDate filtran por la fecha de creacion y
+// tagPrivilege vacio lista todos los privilegios. La contraseña y los datos de login no se envian (json:"-")
+func GetUsersService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, TagPrivilege string) ([]models.UsersModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.UsersModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if TagPrivilege != "" {
+		filter["tag_privilege"] = TagPrivilege
+	}
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"username": regexPattern},
+			{"email": regexPattern},
+			{"name": regexPattern},
+			{"last_name": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.UsersModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los usuarios", cmm.LevelDatabase, "SLISE072")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "created_date", Value: -1}, {Key: "_id", Value: -1}})
+
+	cursor, err := models.UsersModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los usuarios", cmm.LevelDatabase, "SLISE073")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los usuarios", cmm.LevelDatabase, "SLISE074")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}

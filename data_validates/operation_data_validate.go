@@ -1,6 +1,7 @@
 package data_validates
 
 import (
+	"c_trd/backtest"
 	cmm "c_trd/common"
 	fv "c_trd/format_validates"
 	"c_trd/models"
@@ -8,6 +9,7 @@ import (
 	"c_trd/services"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -1064,4 +1066,161 @@ func DeletePortfolioTransactionDataValidate(next http.Handler) http.Handler {
 		r = cmm.SetInRequestContext(r, "transaction", &transaction)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ---------- Backtesting ----------
+
+// BacktestDatasetUploadDataValidate valida el asset, la temporalidad y el CSV: columnas, velas coherentes y ordenadas,
+// distancia entre velas de la temporalidad (huecos solo con allowSessionGaps) y columnas completas de cada trigger.
+// Deja en el contexto el asset, la temporalidad y los datos del archivo (backtestFile, sin el SHA-256)
+func BacktestDatasetUploadDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.BacktestDatasetUploadFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR068", nil, err)
+			return
+		}
+
+		file, err := cmm.GetFromRequestContext[*cmm.UploadedFile](r, "file")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR069", nil, err)
+			return
+		}
+
+		asset, err := validateAssetExists(payload.IdAsset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		timeframe, err := findCatalog(payload.IdCandlestickTimeframe, cmm.CatalogTypeCandleStick)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if timeframe.ID.IsZero() {
+			res.Error("FAIL", "La temporalidad enviada no existe", "DVOPR070", payload.IdCandlestickTimeframe, cmm.NewEmptyErrorHandler())
+			return
+		}
+		if !cmm.IsKnownTimeframeTag(timeframe.Tag) {
+			res.Error("FAIL", "La temporalidad no tiene una duracion conocida para el backtest", "DVOPR071", timeframe.Tag, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		chart, err := backtest.ParseChartCSV(file.Content)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		allowSessionGaps := payload.AllowSessionGaps == "true"
+		gaps, err := backtest.ValidateChartTimeframe(chart.Bars, cmm.ParseTimeframeTag(timeframe.Tag), allowSessionGaps)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		fileData := models.BacktestDatasetFileData{
+			OriginalName:     file.Name,
+			SizeBytes:        int64(len(file.Content)),
+			RowCount:         len(chart.Bars),
+			FirstBarAt:       chart.Bars[0].Time,
+			LastBarAt:        chart.Bars[len(chart.Bars)-1].Time,
+			AllowSessionGaps: allowSessionGaps,
+			Gaps:             gaps,
+			SignalTags:       backtest.SignalTags(chart),
+		}
+
+		r = cmm.SetInRequestContext(r, "asset", &asset)
+		r = cmm.SetInRequestContext(r, "timeframe", &timeframe)
+		r = cmm.SetInRequestContext(r, "backtestFile", &fileData)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CreateBacktestRunsDataValidate valida que el dataset exista y que cada trigger exista, sea del asset y la temporalidad
+// del dataset, tenga sus columnas en el CSV y sea de compra o venta. Responde todos los problemas juntos. Deja en el
+// contexto el dataset y los triggers en el orden enviado
+func CreateBacktestRunsDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateBacktestRunsFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVOPR072", nil, err)
+			return
+		}
+
+		idDataset, err := cmm.ParseHexToObjectId(payload.IdDataset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		dataset, err := services.GetBacktestDatasetService(idDataset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if dataset.ID.IsZero() {
+			res.Error("FAIL", "El dataset enviado no existe", "DVOPR073", payload.IdDataset, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		triggers := make([]models.TriggersModelType, 0, len(payload.IdTriggers))
+		problems := []string{}
+		for _, idTriggerHex := range payload.IdTriggers {
+			idTrigger, err := cmm.ParseHexToObjectId(idTriggerHex)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+
+			trigger, err := services.GetTriggerService(idTrigger)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+
+			triggerProblems := backtestTriggerProblems(idTriggerHex, trigger, dataset)
+			problems = append(problems, triggerProblems...)
+			triggers = append(triggers, trigger)
+		}
+
+		if len(problems) > 0 {
+			res.Error("FAIL", "Algunos triggers no se pueden simular con el dataset", "DVOPR074", problems, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "dataset", &dataset)
+		r = cmm.SetInRequestContext(r, "triggers", triggers)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// backtestTriggerProblems problemas para simular el trigger con el dataset, [] si no tiene
+func backtestTriggerProblems(idTriggerHex string, trigger models.TriggersModelType, dataset models.BacktestDatasetsModelType) []string {
+	if trigger.ID.IsZero() {
+		return []string{fmt.Sprintf("%s: el trigger no existe", idTriggerHex)}
+	}
+
+	problems := []string{}
+	if trigger.IDAsset != dataset.IDAsset {
+		problems = append(problems, fmt.Sprintf("%s: el trigger es de %s y el dataset de %s", trigger.Tag, trigger.TagAsset, dataset.TagAsset))
+	}
+	if trigger.IDCandlestickTimeframe != dataset.IDCandlestickTimeframe {
+		problems = append(problems, fmt.Sprintf("%s: el trigger es de velas %s y el dataset de %s", trigger.Tag, trigger.TagCandlestickTimeframe, dataset.TagCandlestickTimeframe))
+	}
+	if !slices.Contains(dataset.SignalTags, strings.ToUpper(trigger.Tag)) {
+		problems = append(problems, fmt.Sprintf("%s: el CSV del dataset no tiene la columna %s%s", trigger.Tag, cmm.BacktestSignalColumnPrefix, trigger.Tag))
+	}
+	if trigger.TagAction != cmm.ActionTagBuy && trigger.TagAction != cmm.ActionTagSell {
+		problems = append(problems, fmt.Sprintf("%s: la accion %s no es %s ni %s", trigger.Tag, trigger.TagAction, cmm.ActionTagBuy, cmm.ActionTagSell))
+	}
+	if trigger.MaxCandlestickQty < 1 {
+		problems = append(problems, fmt.Sprintf("%s: max_candlestick_qty debe ser al menos 1", trigger.Tag))
+	}
+	return problems
 }

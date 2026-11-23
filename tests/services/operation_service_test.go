@@ -763,3 +763,65 @@ func TestSetPortfolioAssetPositionService(t *testing.T) {
 		t.Error("se esperaba [] y no nil para que se guarde como arreglo vacio")
 	}
 }
+
+// TestBacktestDatasetFileService no es paralela porque t.Setenv cambia la carpeta de los backtests
+func TestBacktestDatasetFileService(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(cmm.BacktestDirEnv, dir)
+
+	first := []byte("time,open,high,low,close\n1,1,1,1,1\n")
+	second := []byte("time,open,high,low,close\n2,2,2,2,2\n")
+
+	firstSha, err := services.SaveBacktestDatasetFileService(first)
+	testutil.RequireEmptyError(t, err)
+	if len(firstSha) != 64 {
+		t.Fatalf("sha256 = %q, se esperaban 64 caracteres hexadecimales", firstSha)
+	}
+
+	// El mismo contenido da el mismo archivo y otro contenido no reemplaza al anterior
+	again, err := services.SaveBacktestDatasetFileService(first)
+	testutil.RequireEmptyError(t, err)
+	secondSha, err := services.SaveBacktestDatasetFileService(second)
+	testutil.RequireEmptyError(t, err)
+	if again != firstSha || secondSha == firstSha {
+		t.Fatalf("hashes = %s, %s, %s", firstSha, again, secondSha)
+	}
+
+	content, err := services.ReadBacktestDatasetFileService(firstSha)
+	testutil.RequireEmptyError(t, err)
+	if string(content) != string(first) {
+		t.Errorf("contenido = %q, se esperaba el primer CSV", content)
+	}
+
+	entries, errDir := os.ReadDir(dir)
+	if errDir != nil || len(entries) != 2 {
+		t.Errorf("archivos en la carpeta = %d (%v), se esperaban 2 sin temporales", len(entries), errDir)
+	}
+
+	_, err = services.ReadBacktestDatasetFileService("../../etc/passwd")
+	testutil.RequireTrackingCode(t, err, "SOPRE104")
+
+	_, err = services.ReadBacktestDatasetFileService(strings.Repeat("a", 64))
+	testutil.RequireTrackingCode(t, err, "SOPRE105")
+
+	if errWrite := os.WriteFile(filepath.Join(dir, secondSha+".csv"), []byte("cambiado"), 0o600); errWrite != nil {
+		t.Fatal(errWrite)
+	}
+	_, err = services.ReadBacktestDatasetFileService(secondSha)
+	testutil.RequireTrackingCode(t, err, "SOPRE107")
+}
+
+func TestPineCodeSha256Service(t *testing.T) {
+	t.Parallel()
+
+	if got := services.PineCodeSha256Service(nil); got != nil {
+		t.Errorf("hash sin pine_code = %v, se esperaba nil", *got)
+	}
+
+	code := "abc"
+	got := services.PineCodeSha256Service(&code)
+	want := "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+	if got == nil || *got != want {
+		t.Errorf("hash = %v, se esperaba %s", got, want)
+	}
+}

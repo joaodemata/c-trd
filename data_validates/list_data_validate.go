@@ -196,3 +196,35 @@ func PortfolioRoiDataValidate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// GetBacktestRunDataValidate valida que la corrida de backtest exista. La deja en el contexto (backtestRun)
+func GetBacktestRunDataValidate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.GetBacktestRunFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "DVLIS015", nil, err)
+			return
+		}
+
+		idRun, err := cmm.ParseHexToObjectId(payload.IdRun)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		run, err := services.GetBacktestRunService(idRun)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		if run.ID.IsZero() {
+			res.Error("FAIL", "La corrida de backtest no existe", "DVLIS016", payload.IdRun, cmm.NewEmptyErrorHandler())
+			return
+		}
+
+		r = cmm.SetInRequestContext(r, "backtestRun", &run)
+		next.ServeHTTP(w, r)
+	})
+}

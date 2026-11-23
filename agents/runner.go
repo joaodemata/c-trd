@@ -456,6 +456,12 @@ func (r *Runner) runTrigger(ctx context.Context, run *thesisRun, thesis thesisIn
 			pine, pineFor, hasPine = written, out.Trigger, true
 		}
 
+		// Si solo cambio el tag se reutiliza el codigo, pero los plot del backtest llevan el tag en el titulo
+		if pineFor.Tag != out.Trigger.Tag {
+			pine.PineIndicator = RetagPinePlots(pine.PineIndicator, pineFor.Tag, out.Trigger.Tag)
+			pineFor = out.Trigger
+		}
+
 		idTrigger, err := r.Client.CreateTrigger(ctx, out.Trigger.RequestBody(pine.PineIndicator))
 		if !err.IsEmtpy() {
 			problems = []string{"c-trd rechazo el trigger: " + err.Message}
@@ -497,7 +503,7 @@ func (r *Runner) runPineAuthor(ctx context.Context, run *thesisRun, thesis thesi
 		}
 		out = decoded
 		if len(problems) == 0 {
-			problems = ValidatePineOutput(out)
+			problems = ValidatePineOutput(out, trigger.Tag)
 		}
 
 		r.recordStep(run, AgentPineAuthor, raw, problems)

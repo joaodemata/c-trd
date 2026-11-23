@@ -45,6 +45,11 @@ func operationRoutes(server *http.ServeMux) *http.ServeMux {
 	api.Put("/operation/update/portfolio_transaction", controllers.UpdatePortfolioTransactionController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.UpdatePortfolioTransactionFormatValidate, dv.UpdatePortfolioTransactionDataValidate)
 	api.Put("/operation/delete/portfolio_transaction", controllers.DeletePortfolioTransactionController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.DeletePortfolioTransactionFormatValidate, dv.DeletePortfolioTransactionDataValidate)
 
+	// Backtesting (super usuario): el CSV "Export chart data" de TradingView es uno por asset y temporalidad y trae las
+	// señales de varios triggers; la subida tiene tiempos de conexion mas largos. Las corridas quedan en cola y las ejecuta el binario cmd/backtester, nunca el servidor
+	api.Post("/operation/backtest/upload_dataset", controllers.BacktestDatasetUploadController(), generalRateLimit, cmm.RequestDeadlineMiddleware(cmm.BacktestUploadReadTimeout, cmm.BacktestUploadWriteTimeout), cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.BacktestDatasetUploadFormatValidate, dv.BacktestDatasetUploadDataValidate)
+	api.Post("/operation/backtest/create_runs", controllers.CreateBacktestRunsController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.CreateBacktestRunsFormatValidate, dv.CreateBacktestRunsDataValidate)
+
 	return server
 
 }
