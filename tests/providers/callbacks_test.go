@@ -68,9 +68,9 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 		want   []string
 	}{
 		{"alpha vantage", cmm.ResponseFormatAlphaVantagePutCallRatio, []string{"ProcessAlphaVantageData"}},
-		{"google trends", cmm.ResponseFormatGoogleTrendsSeries, []string{"GoogleTrendsHigh", "GoogleTrendsLow"}},
-		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin"}},
-		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesFalling", "FredSeriesRising"}},
+		{"google trends", cmm.ResponseFormatGoogleTrendsSeries, []string{"GoogleTrendsAboveWithHysteresis", "GoogleTrendsBelow", "GoogleTrendsCrossAbove", "GoogleTrendsCrossBelow", "GoogleTrendsHigh", "GoogleTrendsLow", "GoogleTrendsPercentileAbove", "GoogleTrendsPercentileBelow", "GoogleTrendsSlopeAbove", "GoogleTrendsZScoreAbove", "GoogleTrendsZScoreBelow"}},
+		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileAboveWithHysteresis", "GoogleTrendsFileBelow", "GoogleTrendsFileCrossAbove", "GoogleTrendsFileCrossBelow", "GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin", "GoogleTrendsFilePercentileAbove", "GoogleTrendsFilePercentileBelow", "GoogleTrendsFileSlopeAbove", "GoogleTrendsFileZScoreAbove", "GoogleTrendsFileZScoreBelow"}},
+		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesAboveWithHysteresis", "FredSeriesBelow", "FredSeriesCrossAbove", "FredSeriesCrossBelow", "FredSeriesFalling", "FredSeriesPercentileAbove", "FredSeriesPercentileBelow", "FredSeriesRising", "FredSeriesSlopeAbove", "FredSeriesZScoreAbove", "FredSeriesZScoreBelow"}},
 		{"polymarket fed", cmm.ResponseFormatPolymarketFedDecisions, []string{"FedNextMeetingCutLikely", "FedNextMeetingHikeLikely", "FedNextMeetingHoldLikely"}},
 		{"coinmarketcap fear and greed", cmm.ResponseFormatCoinMarketCapFearGreed, []string{"FearAndGreedAbove", "FearAndGreedBelow", "FearAndGreedExtremeFear", "FearAndGreedExtremeGreed", "FearAndGreedFear", "FearAndGreedGreed", "FearAndGreedNeutral"}},
 		{"coinmarketcap global metrics", cmm.ResponseFormatCoinMarketCapGlobal, []string{"BtcDominanceAbove", "BtcDominanceAbove60", "BtcDominanceBelow", "Others2DominanceAbove", "Others2DominanceBelow", "Others3DominanceAbove", "Others3DominanceBelow", "StablecoinDominanceAbove12"}},
