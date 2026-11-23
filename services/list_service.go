@@ -1728,3 +1728,65 @@ func GetConditionEvaluationsUntilService(idCondition primitive.ObjectID, until t
 
 	return result, cmm.NewEmptyErrorHandler()
 }
+
+// GetUsersService lista paginados los usuarios no borrados, los mas recientes primero. La busqueda aplica sobre el
+// username, el correo, el nombre y el apellido; startDate y endDate filtran por la fecha de creacion y
+// tagPrivilege vacio lista todos los privilegios. La contraseña y los datos de login no se envian (json:"-")
+func GetUsersService(Limit int, Page int, Search string, StartDate time.Time, EndDate time.Time, TagPrivilege string) ([]models.UsersModelType, int64, *cmm.ErrorHandler) {
+	result := make([]models.UsersModelType, 0)
+	if Limit <= 0 {
+		Limit = 10
+	}
+	if Page <= 0 {
+		Page = 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false}
+	if TagPrivilege != "" {
+		filter["tag_privilege"] = TagPrivilege
+	}
+	if !StartDate.IsZero() && !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate, "$lte": EndDate}
+	} else if !StartDate.IsZero() {
+		filter["created_date"] = bson.M{"$gte": StartDate}
+	} else if !EndDate.IsZero() {
+		filter["created_date"] = bson.M{"$lte": EndDate}
+	}
+	if Search != "" {
+		regexPattern := primitive.Regex{Pattern: regexp.QuoteMeta(Search), Options: "i"}
+		filter["$or"] = []bson.M{
+			{"username": regexPattern},
+			{"email": regexPattern},
+			{"name": regexPattern},
+			{"last_name": regexPattern},
+		}
+	}
+
+	totalDocs, err := models.UsersModel.CountDocuments(ctx, filter)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error contando los usuarios", cmm.LevelDatabase, "SLISE072")
+	}
+	if totalDocs == 0 {
+		return result, 0, cmm.NewEmptyErrorHandler()
+	}
+
+	opts := options.Find().
+		SetSkip(int64((Page - 1) * Limit)).
+		SetLimit(int64(Limit)).
+		SetSort(bson.D{{Key: "created_date", Value: -1}, {Key: "_id", Value: -1}})
+
+	cursor, err := models.UsersModel.Find(ctx, filter, opts)
+	if err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error consultando los usuarios", cmm.LevelDatabase, "SLISE073")
+	}
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &result); err != nil {
+		return result, 0, cmm.NewErrorHandler(err, "Error decodificando los usuarios", cmm.LevelDatabase, "SLISE074")
+	}
+
+	return result, totalDocs, cmm.NewEmptyErrorHandler()
+}

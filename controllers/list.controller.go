@@ -503,3 +503,30 @@ func GetBacktestRunController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "Corrida de backtest.", "CLIS015", run)
 	}
 }
+
+// ListUsersController lista los usuarios del sistema para el super usuario, sin los datos de la contraseña ni del login
+func ListUsersController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE026", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListUsersFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE027", nil, err)
+			return
+		}
+
+		users, total, err := services.GetUsersService(payload.Limit, payload.Page, payload.Search, payload.StartDate, payload.EndDate, filters.TagPrivilege)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de usuarios.", "CLIS016", map[string]any{"users": users, "page": total})
+	}
+}
