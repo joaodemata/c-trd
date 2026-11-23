@@ -128,6 +128,22 @@ func ExtractGoogleTrendsFileObservations(responseData []byte) ([]Observation, *c
 	return observations, cmm.NewEmptyErrorHandler()
 }
 
+// ExtractGoogleTrendsFileHistory extractor de la ruta local /operation/google_trends/series para el backtesting: igual
+// que ExtractGoogleTrendsFileObservations pero sin validar que el archivo este al dia, porque el backtest evalua fechas
+// pasadas. No exige un minimo de puntos, eso lo decide cada regla
+func ExtractGoogleTrendsFileHistory(responseData []byte) ([]Observation, *cmm.ErrorHandler) {
+	var data googleTrendsFileResponse
+	if err := json.Unmarshal(responseData, &data); err != nil {
+		return nil, cmm.NewErrorHandler(err, "Error parsing Google Trends file response", cmm.LevelFatal, "PCGTFE004")
+	}
+
+	observations := make([]Observation, len(data.Data.Points))
+	for i, point := range data.Data.Points {
+		observations[i] = Observation{At: point.Date.UTC(), Value: point.Value}
+	}
+	return observations, cmm.NewEmptyErrorHandler()
+}
+
 // parseGoogleTrendsFile extrae los valores de la serie y la fecha del ultimo periodo
 func parseGoogleTrendsFile(responseData []byte) ([]float64, *time.Time, *cmm.ErrorHandler) {
 	observations, err := ExtractGoogleTrendsFileObservations(responseData)

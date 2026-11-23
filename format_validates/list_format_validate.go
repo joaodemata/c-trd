@@ -87,3 +87,28 @@ type PortfolioRoiFormat struct {
 }
 
 var PortfolioRoiFormatValidate = common.FormatValidateMiddleware[PortfolioRoiFormat]
+
+// ListBacktestDatasetsFormat filtros propios del listado de datasets, se concatena con cmm.PaginationFormatValidate
+type ListBacktestDatasetsFormat struct {
+	IdAsset string `json:"idAsset" in:"query" validate:"omitempty,mongodb"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListBacktestDatasetsFormatValidate = common.FormatValidateMiddlewareWithKey[ListBacktestDatasetsFormat]("filters")
+
+// ListBacktestRunsFormat filtros propios del listado de corridas de backtest, se concatena con cmm.PaginationFormatValidate
+type ListBacktestRunsFormat struct {
+	TagStatus string `json:"tagStatus" in:"query" validate:"omitempty,oneof=BACKTEST-QUEUED BACKTEST-RUNNING BACKTEST-SUCCESS BACKTEST-FAILED"`
+	IdTrigger string `json:"idTrigger" in:"query" validate:"omitempty,mongodb"`
+	IdDataset string `json:"idDataset" in:"query" validate:"omitempty,mongodb"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListBacktestRunsFormatValidate = common.FormatValidateMiddlewareWithKey[ListBacktestRunsFormat]("filters")
+
+// GetBacktestRunFormat corrida de backtest a consultar con sus operaciones
+type GetBacktestRunFormat struct {
+	IdRun string `json:"idRun" in:"query" validate:"required,mongodb"`
+}
+
+var GetBacktestRunFormatValidate = common.FormatValidateMiddleware[GetBacktestRunFormat]

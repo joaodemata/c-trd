@@ -409,3 +409,97 @@ func ListPortfolioRoiController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "ROI del portfolio.", "CLIS012", map[string]any{"roi": roi})
 	}
 }
+
+// ListBacktestDatasetsController lista los datasets de backtest, opcionalmente de un asset
+func ListBacktestDatasetsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE021", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListBacktestDatasetsFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE022", nil, err)
+			return
+		}
+
+		var idAsset primitive.ObjectID
+		if filters.IdAsset != "" {
+			idAsset, err = cmm.ParseHexToObjectId(filters.IdAsset)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+
+		datasets, total, err := services.GetBacktestDatasetsService(payload.Limit, payload.Page, payload.Search, idAsset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de datasets de backtest.", "CLIS013", map[string]any{"datasets": datasets, "page": total})
+	}
+}
+
+// ListBacktestRunsController lista las corridas de backtest sin sus operaciones
+func ListBacktestRunsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*cmm.PaginationFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE023", nil, err)
+			return
+		}
+
+		filters, err := cmm.GetFromRequestContext[*fv.ListBacktestRunsFormat](r, "filters")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE024", nil, err)
+			return
+		}
+
+		var idTrigger, idDataset primitive.ObjectID
+		if filters.IdTrigger != "" {
+			idTrigger, err = cmm.ParseHexToObjectId(filters.IdTrigger)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+		if filters.IdDataset != "" {
+			idDataset, err = cmm.ParseHexToObjectId(filters.IdDataset)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+		}
+
+		runs, total, err := services.GetBacktestRunsService(payload.Limit, payload.Page, payload.Search, filters.TagStatus, idTrigger, idDataset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Listado de corridas de backtest.", "CLIS014", map[string]any{"runs": runs, "page": total})
+	}
+}
+
+// GetBacktestRunController detalle de una corrida de backtest con sus operaciones
+func GetBacktestRunController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		run, err := cmm.GetFromRequestContext[*models.BacktestRunsModelType](r, "backtestRun")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, "CLISE025", nil, err)
+			return
+		}
+
+		res.Send(http.StatusOK, "SUCCESS", "Corrida de backtest.", "CLIS015", run)
+	}
+}

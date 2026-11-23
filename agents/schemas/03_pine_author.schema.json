@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["pineIndicator", "pineStrategy", "riskLogic", "alertSetup", "changes"],
   "properties": {
-    "pineIndicator": { "type": "string", "description": "Pine v6 indicator() that calls alert() with the webhook JSON" },
+    "pineIndicator": { "type": "string", "description": "Pine v6 indicator() that calls alert() with the webhook JSON and plots CTRD_SIGNAL_<tag>, CTRD_SL_<tag> and CTRD_TP_<tag> in the data window" },
     "pineStrategy": { "type": "string", "description": "Pine v6 strategy() twin with identical logic, for backtesting" },
     "riskLogic": {
       "type": "object",
