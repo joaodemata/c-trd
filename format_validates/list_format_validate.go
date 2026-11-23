@@ -112,3 +112,11 @@ type GetBacktestRunFormat struct {
 }
 
 var GetBacktestRunFormatValidate = common.FormatValidateMiddleware[GetBacktestRunFormat]
+
+// ListUsersFormat filtro opcional por privilegio del listado de usuarios, se concatena con cmm.PaginationFormatValidate
+type ListUsersFormat struct {
+	TagPrivilege string `json:"tagPrivilege" in:"query" validate:"omitempty,oneof=SUPER_USER GENERIC_USER AGENT"`
+}
+
+// Se inyecta en "filters" porque "payload" lo ocupa la paginacion
+var ListUsersFormatValidate = common.FormatValidateMiddlewareWithKey[ListUsersFormat]("filters")
