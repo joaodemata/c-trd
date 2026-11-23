@@ -3,7 +3,9 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -1634,4 +1637,302 @@ func DeletePortfolioTransactionService(transaction models.PortfolioTransactionsM
 	}
 
 	return cmm.NewEmptyErrorHandler()
+}
+
+// InsertConditionEvaluationsService inserta las evaluaciones de un lote de condiciones. Recibe el contexto de la
+// transaccion del lote para que el historico se guarde junto con los cambios de status o no se guarde
+func InsertConditionEvaluationsService(ctx context.Context, evaluations []models.ConditionEvaluationsModelType) *cmm.ErrorHandler {
+	if len(evaluations) == 0 {
+		return cmm.NewEmptyErrorHandler()
+	}
+
+	documents := make([]interface{}, len(evaluations))
+	for i, evaluation := range evaluations {
+		documents[i] = evaluation
+	}
+
+	// Unordered es mas rapido ya que las evaluaciones son independientes
+	if _, err := models.ConditionEvaluationsModel.InsertMany(ctx, documents, options.InsertMany().SetOrdered(false)); err != nil {
+		return cmm.NewErrorHandler(err, "Error insertando las evaluaciones de las condiciones.", cmm.LevelDatabase, "SOPRE099")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// ---------- Backtesting ----------
+
+// Nombre valido del archivo de un dataset: el SHA-256 del contenido en hexadecimal
+var backtestFileSha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// SaveBacktestDatasetFileService guarda el CSV de un dataset con su SHA-256 como nombre y retorna el hash. Los archivos
+// nunca se reemplazan ni se borran: si el mismo contenido ya existe no se vuelve a escribir, y un dataset que cambia de
+// archivo deja el anterior para repetir las corridas viejas. Se escribe en un temporal y se renombra para que una
+// lectura concurrente nunca vea un archivo a medias
+func SaveBacktestDatasetFileService(content []byte) (string, *cmm.ErrorHandler) {
+	sum := sha256.Sum256(content)
+	fileSha256 := hex.EncodeToString(sum[:])
+
+	dir := backtestDir()
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", cmm.NewErrorHandler(err, "Error creando la carpeta de backtests", cmm.LevelFatal, "SOPRE100")
+	}
+
+	path := backtestFilePath(fileSha256)
+	if _, err := os.Stat(path); err == nil {
+		return fileSha256, cmm.NewEmptyErrorHandler()
+	}
+
+	tmp, err := os.CreateTemp(dir, fileSha256+"-*.tmp")
+	if err != nil {
+		return "", cmm.NewErrorHandler(err, "Error creando el archivo temporal", cmm.LevelFatal, "SOPRE101")
+	}
+	defer os.Remove(tmp.Name())
+
+	_, writeErr := tmp.Write(content)
+	closeErr := tmp.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		return "", cmm.NewErrorHandler(err, "Error escribiendo el archivo temporal", cmm.LevelFatal, "SOPRE102")
+	}
+
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return "", cmm.NewErrorHandler(err, "Error guardando el CSV del dataset", cmm.LevelFatal, "SOPRE103")
+	}
+
+	return fileSha256, cmm.NewEmptyErrorHandler()
+}
+
+// ReadBacktestDatasetFileService lee el CSV guardado con ese SHA-256 y valida que el contenido no haya cambiado
+func ReadBacktestDatasetFileService(fileSha256 string) ([]byte, *cmm.ErrorHandler) {
+	if !backtestFileSha256Pattern.MatchString(fileSha256) {
+		return nil, cmm.NewErrorHandler(fmt.Errorf("sha256 %q", fileSha256), "El SHA-256 del dataset no es valido", cmm.LevelError, "SOPRE104")
+	}
+
+	content, err := os.ReadFile(backtestFilePath(fileSha256))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, cmm.NewErrorHandler(err, "El CSV del dataset no existe en la carpeta de backtests", cmm.LevelError, "SOPRE105")
+	}
+	if err != nil {
+		return nil, cmm.NewErrorHandler(err, "Error leyendo el CSV del dataset", cmm.LevelFatal, "SOPRE106")
+	}
+
+	sum := sha256.Sum256(content)
+	if hex.EncodeToString(sum[:]) != fileSha256 {
+		return nil, cmm.NewErrorHandler(fmt.Errorf("sha256 %s", fileSha256), "El CSV del dataset cambio en disco", cmm.LevelFatal, "SOPRE107")
+	}
+
+	return content, cmm.NewEmptyErrorHandler()
+}
+
+// UpsertBacktestDatasetService guarda el dataset del asset y la temporalidad: si ya existe uno no borrado le cambia el
+// archivo y el usuario que lo subio (conserva su id), si no lo crea. Retorna el id del dataset
+func UpsertBacktestDatasetService(dataset models.BacktestDatasetsModelType) (string, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"id_asset": dataset.IDAsset, "id_candlestick_timeframe": dataset.IDCandlestickTimeframe, "logical_delete": false}
+	update := bson.M{
+		"$set": bson.M{
+			"tag_asset":                  dataset.TagAsset,
+			"asset":                      dataset.Asset,
+			"tag_candlestick_timeframe":  dataset.TagCandlestickTimeframe,
+			"candlestick_timeframe":      dataset.CandlestickTimeframe,
+			"file_sha256":                dataset.FileSha256,
+			"original_name":              dataset.OriginalName,
+			"size_bytes":                 dataset.SizeBytes,
+			"row_count":                  dataset.RowCount,
+			"first_bar_at":               dataset.FirstBarAt,
+			"last_bar_at":                dataset.LastBarAt,
+			"allow_session_gaps":         dataset.AllowSessionGaps,
+			"gaps":                       dataset.Gaps,
+			"signal_tags":                dataset.SignalTags,
+			"id_user":                    dataset.IDUser,
+			"id_type_privilege":          dataset.IDTypePrivilege,
+			"tag_type_privilege":         dataset.TagTypePrivilege,
+			"name_type_privilege":        dataset.NameTypePrivilege,
+			"description_type_privilege": dataset.DescriptionTypePrivilege,
+			"last_updated_at":            dataset.LastUpdatedAt,
+		},
+		"$setOnInsert": bson.M{
+			"_id":          dataset.ID,
+			"created_date": dataset.CreatedDate,
+			"core_db":      dataset.CoreDB,
+			"core_version": dataset.CoreVersion,
+			"user_db":      dataset.UserDB,
+			"schema_db":    dataset.SchemaDB,
+		},
+	}
+	opts := options.FindOneAndUpdate().
+		SetUpsert(true).
+		SetReturnDocument(options.After).
+		SetProjection(bson.M{"_id": 1})
+
+	var saved models.BacktestDatasetsModelType
+	if err := models.BacktestDatasetsModel.FindOneAndUpdate(ctx, filter, update, opts).Decode(&saved); err != nil {
+		return "", cmm.NewErrorHandler(err, "Error guardando el dataset", cmm.LevelDatabase, "SOPRE108")
+	}
+
+	return saved.ID.Hex(), cmm.NewEmptyErrorHandler()
+}
+
+// CreateBacktestRunsService inserta las corridas en cola y retorna sus ids en el mismo orden
+func CreateBacktestRunsService(runs []models.BacktestRunsModelType) ([]string, *cmm.ErrorHandler) {
+	ids := make([]string, 0, len(runs))
+	if len(runs) == 0 {
+		return ids, cmm.NewEmptyErrorHandler()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	documents := make([]interface{}, len(runs))
+	for i, run := range runs {
+		documents[i] = run
+	}
+
+	if _, err := models.BacktestRunsModel.InsertMany(ctx, documents); err != nil {
+		return ids, cmm.NewErrorHandler(err, "Error encolando las corridas de backtest", cmm.LevelDatabase, "SOPRE109")
+	}
+
+	for _, run := range runs {
+		ids = append(ids, run.ID.Hex())
+	}
+	return ids, cmm.NewEmptyErrorHandler()
+}
+
+// FailStaleBacktestRunsService marca fallidas las corridas en ejecucion por mas de BacktestRunClaimTimeout: el binario
+// se cayo sin cerrarlas. Guarda en la corrida el tracking code SOPRE110. Retorna cuantas marco
+func FailStaleBacktestRunsService(now time.Time) (int64, *cmm.ErrorHandler) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	// No se usa NewErrorHandler porque registra el error en el log en cada ejecucion aunque no haya corridas abandonadas
+	staleMessage := fmt.Sprintf("La corrida estuvo en ejecucion mas de %s sin terminar, el backtester se detuvo", cmm.BacktestRunClaimTimeout)
+	staleTrackingCode := "SOPRE110"
+	filter := bson.M{
+		"logical_delete": false,
+		"tag_status":     cmm.BacktestRunStatusRunning.Tag,
+		"started_at":     bson.M{"$lt": now.Add(-cmm.BacktestRunClaimTimeout)},
+	}
+	update := bson.M{"$set": bson.M{
+		"id_status":           cmm.BacktestRunStatusFailed.ID,
+		"tag_status":          cmm.BacktestRunStatusFailed.Tag,
+		"status":              cmm.BacktestRunStatusFailed.Name,
+		"error":               staleMessage,
+		"error_tracking_code": staleTrackingCode,
+		"finished_at":         now,
+		"last_updated_at":     now,
+	}}
+
+	result, err := models.BacktestRunsModel.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, cmm.NewErrorHandler(err, "Error marcando las corridas de backtest abandonadas", cmm.LevelDatabase, "SOPRE111")
+	}
+
+	return result.ModifiedCount, cmm.NewEmptyErrorHandler()
+}
+
+// ClaimBacktestRunService toma la corrida en cola mas antigua y la pasa a ejecucion con un FindOneAndUpdate atomico,
+// asi dos ejecuciones del binario no procesan la misma. Si no hay ninguna retorna la corrida vacia sin error
+func ClaimBacktestRunService(now time.Time) (models.BacktestRunsModelType, *cmm.ErrorHandler) {
+	var run models.BacktestRunsModelType
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	filter := bson.M{"logical_delete": false, "tag_status": cmm.BacktestRunStatusQueued.Tag}
+	update := bson.M{"$set": bson.M{
+		"id_status":       cmm.BacktestRunStatusRunning.ID,
+		"tag_status":      cmm.BacktestRunStatusRunning.Tag,
+		"status":          cmm.BacktestRunStatusRunning.Name,
+		"started_at":      now,
+		"last_updated_at": now,
+	}}
+	opts := options.FindOneAndUpdate().
+		SetSort(bson.D{{Key: "created_date", Value: 1}, {Key: "_id", Value: 1}}).
+		SetReturnDocument(options.After)
+
+	err := models.BacktestRunsModel.FindOneAndUpdate(ctx, filter, update, opts).Decode(&run)
+	if err == mongo.ErrNoDocuments {
+		return models.BacktestRunsModelType{}, cmm.NewEmptyErrorHandler()
+	}
+	if err != nil {
+		return models.BacktestRunsModelType{}, cmm.NewErrorHandler(err, "Error tomando la corrida de backtest de la cola", cmm.LevelDatabase, "SOPRE112")
+	}
+
+	return run, cmm.NewEmptyErrorHandler()
+}
+
+// BacktestRunFinish resultado con el que se cierra una corrida de backtest. Results es nil y Error tiene la razon si fallo
+type BacktestRunFinish struct {
+	IDRun             primitive.ObjectID
+	Status            cmm.CatalogStatus
+	Conditions        []models.BacktestRunCondition
+	Results           *models.BacktestResults
+	Trades            []models.BacktestTrade
+	Error             *string
+	ErrorTrackingCode *string
+}
+
+// FinishBacktestRunService cierra la corrida si sigue en ejecucion. Si ya no lo esta (se marco abandonada) retorna error
+func FinishBacktestRunService(finish BacktestRunFinish, now time.Time) *cmm.ErrorHandler {
+	ctx, cancel := context.WithTimeout(context.Background(), cmm.DBTimeout)
+	defer cancel()
+
+	conditions := finish.Conditions
+	if conditions == nil {
+		conditions = []models.BacktestRunCondition{}
+	}
+	trades := finish.Trades
+	if trades == nil {
+		trades = []models.BacktestTrade{}
+	}
+
+	filter := bson.M{"_id": finish.IDRun, "tag_status": cmm.BacktestRunStatusRunning.Tag}
+	update := bson.M{"$set": bson.M{
+		"id_status":           finish.Status.ID,
+		"tag_status":          finish.Status.Tag,
+		"status":              finish.Status.Name,
+		"conditions":          conditions,
+		"results":             finish.Results,
+		"trades":              trades,
+		"error":               finish.Error,
+		"error_tracking_code": finish.ErrorTrackingCode,
+		"finished_at":         now,
+		"last_updated_at":     now,
+	}}
+
+	result, err := models.BacktestRunsModel.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return cmm.NewErrorHandler(err, "Error cerrando la corrida de backtest", cmm.LevelDatabase, "SOPRE113")
+	}
+	if result.MatchedCount == 0 {
+		return cmm.NewErrorHandler(fmt.Errorf("run %s", finish.IDRun.Hex()), "La corrida de backtest ya no esta en ejecucion", cmm.LevelError, "SOPRE114")
+	}
+
+	return cmm.NewEmptyErrorHandler()
+}
+
+// backtestDir carpeta donde se guardan los CSV de los datasets
+func backtestDir() string {
+	if dir := os.Getenv(cmm.BacktestDirEnv); dir != "" {
+		return dir
+	}
+	return cmm.BacktestDefaultDir
+}
+
+// backtestFilePath ruta del CSV de un dataset. El nombre sale del hash, nunca del nombre subido
+func backtestFilePath(fileSha256 string) string {
+	return filepath.Join(backtestDir(), fileSha256+".csv")
+}
+
+// PineCodeSha256Service SHA-256 en hexadecimal del pine_code del trigger, nil si no tiene. Se guarda en la corrida de
+// backtest para saber con que version del codigo se exportaron las señales
+func PineCodeSha256Service(pineCode *string) *string {
+	if pineCode == nil {
+		return nil
+	}
+
+	sum := sha256.Sum256([]byte(*pineCode))
+	hash := hex.EncodeToString(sum[:])
+	return &hash
 }

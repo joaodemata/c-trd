@@ -85,9 +85,10 @@ func TestEconomicCalendarHighImpactUpcomingCallback(t *testing.T) {
 
 			got, err := providers.EconomicCalendarHighImpactUpcomingCallback(calendarBody(t, tt.events...), map[string]any{"hours": tt.hours})
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("got %v, want %v", got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("got %v, want %v", got.Accepted, tt.want)
 			}
+			requireAsOf(t, got.AsOf, time.Time{})
 		})
 	}
 }
@@ -116,9 +117,10 @@ func TestEconomicCalendarHighImpactClusterCallback(t *testing.T) {
 
 			got, err := providers.EconomicCalendarHighImpactClusterCallback(calendarBody(t, tt.events...), map[string]any{"hours": int64(24), "minReleases": tt.minReleases})
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("got %v, want %v", got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("got %v, want %v", got.Accepted, tt.want)
 			}
+			requireAsOf(t, got.AsOf, time.Time{})
 		})
 	}
 }
@@ -148,8 +150,45 @@ func TestEconomicCalendarHighImpactSurpriseCallback(t *testing.T) {
 
 			got, err := providers.EconomicCalendarHighImpactSurpriseCallback(calendarBody(t, tt.events...), map[string]any{"hours": int64(6), "surprisePercent": float64(20)})
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("got %v, want %v", got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("got %v, want %v", got.Accepted, tt.want)
+			}
+			requireAsOf(t, got.AsOf, time.Time{})
+		})
+	}
+}
+
+func TestEconomicCalendarCallbacks_Value(t *testing.T) {
+	t.Parallel()
+
+	sameRelease := highEvent("US", 2*time.Hour, nil, nil)
+	upcoming := []calendarEvent{sameRelease, sameRelease, highEvent("EU", 3*time.Hour, nil, nil), highEvent("JP", 30*time.Hour, nil, nil)}
+	published := []calendarEvent{highEvent("US", -time.Hour, number(0.55), number(0.5)), highEvent("EU", -2*time.Hour, number(3), number(2))}
+
+	tests := []struct {
+		name       string
+		callback   providers.CallbackFunc
+		events     []calendarEvent
+		parameters map[string]any
+		want       float64
+	}{
+		// Upcoming cuenta cada evento pendiente de la ventana (el de 30 horas queda fuera)
+		{"upcoming cuenta los pendientes", providers.EconomicCalendarHighImpactUpcomingCallback, upcoming, map[string]any{"hours": int64(24)}, 3},
+		// Cluster cuenta una vez el mismo pais y hora
+		{"cluster cuenta las publicaciones distintas", providers.EconomicCalendarHighImpactClusterCallback, upcoming, map[string]any{"hours": int64(24), "minReleases": int64(2)}, 2},
+		// Surprise mide la mayor sorpresa: 10% en US y 50% en EU
+		{"surprise mide la mayor sorpresa", providers.EconomicCalendarHighImpactSurpriseCallback, published, map[string]any{"hours": int64(6), "surprisePercent": float64(20)}, 50},
+		{"sin publicaciones el valor es 0", providers.EconomicCalendarHighImpactUpcomingCallback, []calendarEvent{}, map[string]any{"hours": int64(24)}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.callback(calendarBody(t, tt.events...), tt.parameters)
+			testutil.RequireEmptyError(t, err)
+			if got.Value != tt.want {
+				t.Errorf("value = %v, want %v", got.Value, tt.want)
 			}
 		})
 	}
@@ -207,11 +246,9 @@ func TestEconomicCalendarCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(tt.body, tt.parameters)
+			result, err := tt.callback(tt.body, tt.parameters)
 			testutil.RequireTrackingCode(t, err, tt.code)
-			if accepted {
-				t.Error("accepted = true, want false on error")
-			}
+			requireEmptyResult(t, result)
 		})
 	}
 }

@@ -31,6 +31,8 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 - `routers/`: route for each API and join all the middlewares and handlers
 - `agents/`: prompts, JSON schemas, gates and runner of the AI agents (Condition Designer, Trigger Composer, Pine Author; Financial Judge pending). Prompts and schemas are embedded in the binary
 - `cmd/agent_runner/`: CLI that the host cron runs on Thursday night (before the Claude usage resets on Friday 1am); calls `claude -p` and the c-trd API as the `claude` user (privilege AGENT). Deploy steps in `deploy/README.md`
+- `backtest/`: CSV "Export chart data" parsing, simulation, metrics and condition rebuild of the backtester. `runner.go` is the only place outside cronjobs/controllers/data_validates that calls services, and only `cmd/backtester` calls it
+- `cmd/backtester/`: binary that runs the queued `backtest_runs` (host cron, `docker exec` into the API container every minute). Never runs inside the HTTP server or the cron. Deploy steps in `deploy/README.md`
 - `tests/`: all unit tests, one folder per package (`tests/providers/`, `tests/common/`, ...) plus `tests/testutil/` with shared helpers. Tests only use the exported API. Testing conventions are in `TESTING.md`
 
 ## Domain notes
@@ -75,5 +77,5 @@ go test -coverpkg=./... -coverprofile=cover.out ./tests/... && go tool cover -fu
 
 - `cmm.AppConfig` is assigned in `main.go` after the cronjobs and the HTTP server start, so it can be nil very early at startup.
 - `godotenv.Load` runs only on Windows in `main.go`; on other systems the `JM_CTRD_MDB_*` env vars must be exported.
-- The cron ticker fires every 1 minute and the HTTP server has 10s read/write timeouts.
+- The cron ticker fires every 1 minute and the HTTP server has 10s read/write timeouts (a route can extend its own with `cmm.RequestDeadlineMiddleware`, only the backtest CSV upload does: 3 min).
 - All stored times are UTC.

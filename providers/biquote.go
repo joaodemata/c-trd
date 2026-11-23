@@ -11,7 +11,9 @@ import (
 )
 
 // Valores del calendario economico de biquote (GET https://biquote.io/api/calendar). La API devuelve un arreglo de
-// eventos del mas antiguo al mas reciente; importance es el impacto esperado de la publicacion
+// eventos del mas antiguo al mas reciente; importance es el impacto esperado de la publicacion.
+// En los callbacks Value es la cantidad de publicaciones (pendientes o distintas) o la mayor sorpresa en %, y AsOf
+// es nil porque la respuesta no trae la fecha de la consulta
 const (
 	biquoteImportanceHigh = "high"
 	biquoteTypeHoliday    = "holiday"
@@ -139,41 +141,43 @@ type biquoteRelease struct {
 
 // EconomicCalendarHighImpactUpcomingCallback retorna true si hay al menos una publicacion de alto impacto sin dato
 // real dentro de las proximas horas (parametro hours). Anticipa volatilidad alta por la publicacion
-func EconomicCalendarHighImpactUpcomingCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func EconomicCalendarHighImpactUpcomingCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	hours, err := parseBiquoteUpcomingHours(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	releases, err := parseBiquoteHighImpactReleases(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	now := time.Now().UTC()
 	pending := pendingReleasesInWindow(releases, now, now.Add(time.Duration(hours)*time.Hour))
-	hasUpcoming := len(pending) > 0
+	pendingCount := float64(len(pending))
+	hasUpcoming := pendingCount > 0
 
-	return hasUpcoming, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: hasUpcoming, Value: pendingCount, AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // EconomicCalendarHighImpactClusterCallback retorna true si dentro de las proximas horas (parametro hours) hay al menos
 // minReleases publicaciones de alto impacto sin dato real. Varios indicadores del mismo pais a la misma hora (ej: CPI
 // m/m y CPI y/y) cuentan como una sola publicacion
-func EconomicCalendarHighImpactClusterCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func EconomicCalendarHighImpactClusterCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	hours, err := parseBiquoteUpcomingHours(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	minReleases, err := parseBiquoteMinReleases(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	releases, err := parseBiquoteHighImpactReleases(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	now := time.Now().UTC()
@@ -181,26 +185,27 @@ func EconomicCalendarHighImpactClusterCallback(responseData []byte, parameters m
 	distinct := countDistinctReleases(pending)
 	isCluster := distinct >= minReleases
 
-	return isCluster, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isCluster, Value: float64(distinct), AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // EconomicCalendarHighImpactSurpriseCallback retorna true si en las ultimas horas (parametro hours) salio una
 // publicacion de alto impacto cuyo dato real se aleja del pronostico al menos surprisePercent (en % del pronostico).
 // Las publicaciones sin pronostico o con pronostico 0 no se pueden medir y se ignoran
-func EconomicCalendarHighImpactSurpriseCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+func EconomicCalendarHighImpactSurpriseCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	hours, err := parseBiquoteRecentHours(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	surprisePercent, err := parseBiquoteSurprisePercent(parameters)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	releases, err := parseBiquoteHighImpactReleases(responseData)
 	if !err.IsEmtpy() {
-		return false, err
+		return CallbackResult{}, err
 	}
 
 	now := time.Now().UTC()
@@ -208,7 +213,8 @@ func EconomicCalendarHighImpactSurpriseCallback(responseData []byte, parameters 
 	maxSurprise := maxSurprisePercent(published)
 	isSurprise := maxSurprise >= surprisePercent
 
-	return isSurprise, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isSurprise, Value: maxSurprise, AsOf: nil}
+	return result, cmm.NewEmptyErrorHandler()
 }
 
 // parseBiquoteHighImpactReleases retorna los eventos de importancia alta que no son feriados, sin depender del filtro

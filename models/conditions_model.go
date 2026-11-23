@@ -35,6 +35,7 @@ type ConditionsModelType struct {
 	NextExecutionAt *time.Time `bson:"next_execution_at" json:"nextExecutionAt" description:"Momento en el que el cronjob debe evaluar esta condición"`
 	IntervalSeconds *int       `bson:"interval_seconds" json:"intervalSeconds" description:"Frecuencia de actualización en segundos"`
 	LastExecutedAt  *time.Time `bson:"last_executed_at" json:"lastExecutedAt" description:"Última vez que se evaluó la condición"`
+	FailedAttempts  int        `bson:"failed_attempts" json:"failedAttempts" description:"Evaluaciones fallidas seguidas, vuelve a 0 al evaluarse correctamente"`
 
 	IsProcessing bool `bson:"is_processing" json:"isProcessing" description:"Lock optimista para evitar que dos workers procesen el mismo registro"`
 	// Data que se pasa a la API (parametros dinamicos. Ej: symbol, pair, currency)
@@ -114,6 +115,7 @@ func NewConditionModel(
 		ParametersCallback:   map[string]any{},
 		IsWebhookOnly:        false,
 		IsProcessing:         false,
+		FailedAttempts:       0,
 		IDApi:                idApi,
 		IDStatus:             cmm.GenericStatusInactive.ID,
 		TagStatus:            cmm.GenericStatusInactive.Tag,

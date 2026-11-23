@@ -52,5 +52,21 @@ The alert message is a JSON string:
    which c-trd expires the opportunity).
 7. Only long entries for BUY and only short entries for SELL.
 8. If `previousAttempt` has problems, fix only those and explain it in `changes`.
+9. Backtest plots (indicator only). Several triggers of the same asset and timeframe share one
+   TradingView "Export chart data" CSV, so each trigger exposes its signal with titles that carry its
+   own `trigger.tag` (`<tag>` below is that literal tag, e.g. `CTRD_SIGNAL_BTC-EMA-CROSS`):
+   ```
+   plot(entrySignal ? 1 : 0, "CTRD_SIGNAL_<tag>", display = display.data_window)
+   plot(entrySignal ? sl : na, "CTRD_SL_<tag>", display = display.data_window)
+   plot(entrySignal ? tpLast : na, "CTRD_TP_<tag>", display = display.data_window)
+   ```
+   - The titles are literal strings (Pine requires a const title), exactly with these prefixes.
+   - `entrySignal` is the same boolean that sends the entry `alert()` (after the cooldown and the
+     confirmed-bar check): 1 exactly on the bars that alert, 0 on every other bar. Invalidation
+     alerts are not plotted.
+   - `sl` and `tpLast` are the same variables sent as `stopLoss` and the last `takeProfit` in the
+     alert message. Never recompute them for the plots.
+   - `display = display.data_window` keeps the chart clean; the values stay in the Data Window and
+     the export. They use 3 of the 64 plot outputs of the script.
 
 Return ONLY JSON valid against `schemas/03_pine_author.schema.json`.
