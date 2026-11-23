@@ -3,6 +3,7 @@ package providers_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"c_trd/providers"
 	"c_trd/tests/testutil"
@@ -32,9 +33,9 @@ func fearAndGreedZones(t *testing.T, body []byte) [5]bool {
 
 	var zones [5]bool
 	for i, callback := range callbacks {
-		accepted, err := callback(body, nil)
+		result, err := callback(body, nil)
 		testutil.RequireEmptyError(t, err)
-		zones[i] = accepted
+		zones[i] = result.Accepted
 	}
 	return zones
 }
@@ -104,12 +105,10 @@ func TestFearAndGreedCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := providers.FearAndGreedNeutralCallback(tt.body, nil)
+			result, err := providers.FearAndGreedNeutralCallback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.code)
-			if accepted {
-				t.Error("un error no debe aceptar la condicion")
-			}
+			requireEmptyResult(t, result)
 		})
 	}
 }
@@ -125,8 +124,8 @@ func TestDominanceCallbacks_Fixture(t *testing.T) {
 	stablecoinAbove, err := providers.StablecoinDominanceAbove12Callback(body, nil)
 	testutil.RequireEmptyError(t, err)
 
-	if !btcAbove || stablecoinAbove {
-		t.Errorf("btc, stablecoin = %v, %v, want true, false", btcAbove, stablecoinAbove)
+	if !btcAbove.Accepted || stablecoinAbove.Accepted {
+		t.Errorf("btc, stablecoin = %v, %v, want true, false", btcAbove.Accepted, stablecoinAbove.Accepted)
 	}
 }
 
@@ -150,8 +149,11 @@ func TestBtcDominanceAbove60Callback(t *testing.T) {
 			got, err := providers.BtcDominanceAbove60Callback(globalMetricsBody(tt.btcDominance, 1000, 100), nil)
 
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("btc_dominance %v: got %v, want %v", tt.btcDominance, got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("btc_dominance %v: got %v, want %v", tt.btcDominance, got.Accepted, tt.want)
+			}
+			if got.Value != tt.btcDominance {
+				t.Errorf("value = %v, want %v", got.Value, tt.btcDominance)
 			}
 		})
 	}
@@ -179,8 +181,12 @@ func TestStablecoinDominanceAbove12Callback(t *testing.T) {
 			got, err := providers.StablecoinDominanceAbove12Callback(globalMetricsBody(50, tt.totalMarketCap, tt.stablecoinMarketCap), nil)
 
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("stablecoin %v de %v: got %v, want %v", tt.stablecoinMarketCap, tt.totalMarketCap, got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("stablecoin %v de %v: got %v, want %v", tt.stablecoinMarketCap, tt.totalMarketCap, got.Accepted, tt.want)
+			}
+			wantValue := tt.stablecoinMarketCap / tt.totalMarketCap * 100
+			if got.Value != wantValue {
+				t.Errorf("value = %v, want %v", got.Value, wantValue)
 			}
 		})
 	}
@@ -216,12 +222,10 @@ func TestDominanceCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(tt.body, nil)
+			result, err := tt.callback(tt.body, nil)
 
 			testutil.RequireTrackingCode(t, err, tt.code)
-			if accepted {
-				t.Error("un error no debe aceptar la condicion")
-			}
+			requireEmptyResult(t, result)
 		})
 	}
 }
@@ -370,8 +374,8 @@ func TestFearAndGreedThresholdCallbacks(t *testing.T) {
 			below, err := providers.FearAndGreedBelowCallback(body, thresholdParameters(tt.threshold))
 			testutil.RequireEmptyError(t, err)
 
-			if above != tt.wantAbove || below != tt.wantBelow {
-				t.Errorf("valor %s umbral %v: above, below = %v, %v, want %v, %v", tt.value, tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			if above.Accepted != tt.wantAbove || below.Accepted != tt.wantBelow {
+				t.Errorf("valor %s umbral %v: above, below = %v, %v, want %v, %v", tt.value, tt.threshold, above.Accepted, below.Accepted, tt.wantAbove, tt.wantBelow)
 			}
 		})
 	}
@@ -388,8 +392,8 @@ func TestFearAndGreedThresholdCallbacks_Fixture(t *testing.T) {
 	below, err := providers.FearAndGreedBelowCallback(body, thresholdParameters(45.0))
 	testutil.RequireEmptyError(t, err)
 
-	if !above || below {
-		t.Errorf("above, below = %v, %v, want true, false", above, below)
+	if !above.Accepted || below.Accepted {
+		t.Errorf("above, below = %v, %v, want true, false", above.Accepted, below.Accepted)
 	}
 }
 
@@ -420,8 +424,8 @@ func TestDominanceThresholdCallbacks_Fixture(t *testing.T) {
 			got, err := tt.callback(body, thresholdParameters(tt.threshold))
 
 			testutil.RequireEmptyError(t, err)
-			if got != tt.want {
-				t.Errorf("umbral %v: got %v, want %v", tt.threshold, got, tt.want)
+			if got.Accepted != tt.want {
+				t.Errorf("umbral %v: got %v, want %v", tt.threshold, got.Accepted, tt.want)
 			}
 		})
 	}
@@ -461,8 +465,8 @@ func TestDominanceThresholdCallbacks(t *testing.T) {
 			below, err := tt.below(body, thresholdParameters(tt.threshold))
 			testutil.RequireEmptyError(t, err)
 
-			if above != tt.wantAbove || below != tt.wantBelow {
-				t.Errorf("umbral %v: above, below = %v, %v, want %v, %v", tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			if above.Accepted != tt.wantAbove || below.Accepted != tt.wantBelow {
+				t.Errorf("umbral %v: above, below = %v, %v, want %v, %v", tt.threshold, above.Accepted, below.Accepted, tt.wantAbove, tt.wantBelow)
 			}
 		})
 	}
@@ -493,8 +497,8 @@ func TestUsdtDominanceCallbacks(t *testing.T) {
 			below, err := providers.UsdtDominanceBelowCallback(body, thresholdParameters(tt.threshold))
 			testutil.RequireEmptyError(t, err)
 
-			if above != tt.wantAbove || below != tt.wantBelow {
-				t.Errorf("dominancia %s umbral %v: above, below = %v, %v, want %v, %v", tt.dominance, tt.threshold, above, below, tt.wantAbove, tt.wantBelow)
+			if above.Accepted != tt.wantAbove || below.Accepted != tt.wantBelow {
+				t.Errorf("dominancia %s umbral %v: above, below = %v, %v, want %v, %v", tt.dominance, tt.threshold, above.Accepted, below.Accepted, tt.wantAbove, tt.wantBelow)
 			}
 		})
 	}
@@ -543,12 +547,60 @@ func TestThresholdCallbacks_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			accepted, err := tt.callback(tt.body, tt.parameters)
+			result, err := tt.callback(tt.body, tt.parameters)
 
 			testutil.RequireTrackingCode(t, err, tt.code)
-			if accepted {
-				t.Error("un error no debe aceptar la condicion")
+			requireEmptyResult(t, result)
+		})
+	}
+}
+
+func TestCoinMarketCapCallbacks_ValueAndAsOf(t *testing.T) {
+	t.Parallel()
+
+	fearAndGreed := testutil.ReadFixture(t, "coinmarketcap_fear_and_greed_latest.json")
+	globalMetrics := testutil.ReadFixture(t, "coinmarketcap_global_metrics_latest.json")
+	usdtWithDate := []byte(`{"data":{"USDT":[{"cmc_rank":3,"quote":{"USD":{"price":1,"market_cap_dominance":4.5,` +
+		`"last_updated":"2026-10-18T13:01:00.000Z"}}}]},"status":{"error_code":0}}`)
+
+	// Fechas de los fixtures: update_time del Fear and Greed y data.last_updated de global metrics
+	fearAndGreedAsOf := time.Date(2026, 10, 18, 12, 53, 10, 22000000, time.UTC)
+	globalMetricsAsOf := time.Date(2026, 10, 18, 13, 0, 59, 999000000, time.UTC)
+
+	// Dominancias del fixture de global metrics
+	btcDominance := 60.142495559289
+	stablecoinDominance := 282414318807.0041500000 / 2736097140500.8920000000 * 100
+
+	tests := []struct {
+		name       string
+		callback   providers.CallbackFunc
+		body       []byte
+		parameters map[string]any
+		wantValue  float64
+		wantAsOf   time.Time
+	}{
+		{"fear and greed por zona", providers.FearAndGreedNeutralCallback, fearAndGreed, nil, 49, fearAndGreedAsOf},
+		{"fear and greed por umbral", providers.FearAndGreedBelowCallback, fearAndGreed, thresholdParameters(45.0), 49, fearAndGreedAsOf},
+		{"btc fijo", providers.BtcDominanceAbove60Callback, globalMetrics, nil, btcDominance, globalMetricsAsOf},
+		{"btc por umbral", providers.BtcDominanceBelowCallback, globalMetrics, thresholdParameters(60.0), btcDominance, globalMetricsAsOf},
+		{"others2 es 100 - BTC.D", providers.Others2DominanceAboveCallback, globalMetrics, thresholdParameters(39.0), 100 - btcDominance, globalMetricsAsOf},
+		{"stablecoins", providers.StablecoinDominanceAbove12Callback, globalMetrics, nil, stablecoinDominance, globalMetricsAsOf},
+		{"others3 sin last_updated queda nil", providers.Others3DominanceAboveCallback, dominanceGlobalMetricsBody(55, 15), thresholdParameters(29.0), 30, time.Time{}},
+		{"usdt con last_updated de la cotizacion", providers.UsdtDominanceAboveCallback, usdtWithDate, thresholdParameters(4.0), 4.5, time.Date(2026, 10, 18, 13, 1, 0, 0, time.UTC)},
+		{"usdt sin last_updated queda nil", providers.UsdtDominanceBelowCallback, usdtQuotesBody("4.5"), thresholdParameters(4.0), 4.5, time.Time{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := tt.callback(tt.body, tt.parameters)
+
+			testutil.RequireEmptyError(t, err)
+			if result.Value != tt.wantValue {
+				t.Errorf("value = %v, want %v", result.Value, tt.wantValue)
 			}
+			requireAsOf(t, result.AsOf, tt.wantAsOf)
 		})
 	}
 }

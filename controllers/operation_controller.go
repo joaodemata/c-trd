@@ -785,3 +785,126 @@ func DeletePortfolioTransactionController() http.HandlerFunc {
 		res.Send(http.StatusOK, "SUCCESS", "Transaccion borrada", "COPR017", map[string]any{"idTransaction": transaction.ID.Hex()})
 	}
 }
+
+// ---------- Backtesting ----------
+
+// BacktestDatasetUploadController guarda el CSV (ya validado) por su SHA-256 y crea o actualiza el dataset del asset y
+// la temporalidad. El archivo anterior del dataset queda guardado para repetir corridas viejas
+func BacktestDatasetUploadController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		file, err := cmm.GetFromRequestContext[*cmm.UploadedFile](r, "file")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		asset, err := cmm.GetFromRequestContext[*models.AssetsModelType](r, "asset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		timeframe, err := cmm.GetFromRequestContext[*models.CatalogsModelType](r, "timeframe")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		fileData, err := cmm.GetFromRequestContext[*models.BacktestDatasetFileData](r, "backtestFile")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		fileSha256, err := services.SaveBacktestDatasetFileService(file.Content)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+		fileData.FileSha256 = fileSha256
+
+		dataset, err := models.NewBacktestDatasetModel(*asset, *timeframe, *fileData, authSession.RecordOwnerData)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		idDataset, err := services.UpsertBacktestDatasetService(dataset)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		data := map[string]any{
+			"idDataset":  idDataset,
+			"fileSha256": fileSha256,
+			"rowCount":   dataset.RowCount,
+			"firstBarAt": dataset.FirstBarAt,
+			"lastBarAt":  dataset.LastBarAt,
+			"gaps":       dataset.Gaps,
+			"signalTags": dataset.SignalTags,
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Dataset de backtest guardado", "COPR018", data)
+	}
+}
+
+// CreateBacktestRunsController encola una corrida por trigger sobre el archivo actual del dataset. El binario
+// cmd/backtester las ejecuta en orden de llegada
+func CreateBacktestRunsController() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		res := cmm.NewResponseHandler(w)
+
+		payload, err := cmm.GetFromRequestContext[*fv.CreateBacktestRunsFormat](r, "payload")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		dataset, err := cmm.GetFromRequestContext[*models.BacktestDatasetsModelType](r, "dataset")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		triggers, err := cmm.GetFromRequestContext[[]models.TriggersModelType](r, "triggers")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		authSession, err := cmm.GetFromRequestContext[*models.SessionsModelType](r, "authSession")
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		settings := models.BacktestSettings{FeeBps: payload.FeeBps, SlippageBps: payload.SlippageBps, ConditionSource: payload.ConditionSource}
+		runs := make([]models.BacktestRunsModelType, 0, len(triggers))
+		for _, trigger := range triggers {
+			pineCodeSha256 := services.PineCodeSha256Service(trigger.PineCode)
+			run, err := models.NewBacktestRunModel(*dataset, trigger, pineCodeSha256, settings, authSession.RecordOwnerData)
+			if !err.IsEmtpy() {
+				res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+				return
+			}
+			runs = append(runs, run)
+		}
+
+		idRuns, err := services.CreateBacktestRunsService(runs)
+		if !err.IsEmtpy() {
+			res.Error("FAIL", err.Message, err.TrackingCode, nil, err)
+			return
+		}
+
+		res.Send(http.StatusCreated, "SUCCESS", "Corridas de backtest en cola", "COPR019", map[string]any{"idRuns": idRuns})
+	}
+}

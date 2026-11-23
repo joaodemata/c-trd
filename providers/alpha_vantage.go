@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 )
 
-// TODO: seria bueno crear una coleccion que guarde las respuestas de las logicas de los callbacks y acciones de los webhooks
-func RealtimePutCallRatioCallback(responseData []byte, parameters map[string]any) (bool, *cmm.ErrorHandler) {
+// RealtimePutCallRatioCallback retorna true si el put/call ratio es mayor a 1 o menor o igual a 0.6. Value es el ratio
+func RealtimePutCallRatioCallback(responseData []byte, parameters map[string]any) (CallbackResult, *cmm.ErrorHandler) {
 	// 1. Definir un struct local para extraer exactamente lo que necesitamos del JSON
 	type PCRResponse struct {
 		Symbol                string `json:"symbol"`
+		Date                  string `json:"date"`
 		PutCallRatioFullChain string `json:"put_call_ratio_full_chain"`
 
 		// Alpha Vantage responde 200 con alguno de estos campos cuando hay limite de peticiones o un error
@@ -23,20 +25,20 @@ func RealtimePutCallRatioCallback(responseData []byte, parameters map[string]any
 	// 2. Deserializar el JSON desde el []byte
 	var data PCRResponse
 	if err := json.Unmarshal(responseData, &data); err != nil {
-		return false, cmm.NewErrorHandler(err, "Error parsing response data", cmm.LevelFatal, "PCALVE001")
+		return CallbackResult{}, cmm.NewErrorHandler(err, "Error parsing response data", cmm.LevelFatal, "PCALVE001")
 	}
 
 	// Validamos que la respuesta no sea un mensaje de error del proveedor
 	for _, message := range []string{data.ErrorMessage, data.Information, data.Note} {
 		if message != "" {
-			return false, cmm.NewErrorHandler(errors.New(message), "Alpha Vantage returned an error message", cmm.LevelError, "PCALVE003")
+			return CallbackResult{}, cmm.NewErrorHandler(errors.New(message), "Alpha Vantage returned an error message", cmm.LevelError, "PCALVE003")
 		}
 	}
 
 	// 3. Convertir el ratio de string a float64
 	ratio, err := strconv.ParseFloat(data.PutCallRatioFullChain, 64)
 	if err != nil {
-		return false, cmm.NewErrorHandler(err, "Error parsing put call ratio number", cmm.LevelFatal, "PCALVE002")
+		return CallbackResult{}, cmm.NewErrorHandler(err, "Error parsing put call ratio number", cmm.LevelFatal, "PCALVE002")
 	}
 
 	// 4. Aplicar la lógica de negocio: > 1 o <= 0.6 indica Bullish
@@ -45,7 +47,9 @@ func RealtimePutCallRatioCallback(responseData []byte, parameters map[string]any
 		isBullish = true
 	}
 
-	// return
+	// 5. Fecha del dato segun Alpha Vantage (YYYY-MM-DD)
+	asOf := optionalTime(time.DateOnly, data.Date)
 
-	return isBullish, cmm.NewEmptyErrorHandler()
+	result := CallbackResult{Accepted: isBullish, Value: ratio, AsOf: asOf}
+	return result, cmm.NewEmptyErrorHandler()
 }

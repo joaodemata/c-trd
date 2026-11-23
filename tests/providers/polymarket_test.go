@@ -2,9 +2,10 @@ package providers_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
+	"time"
 
-	cmm "c_trd/common"
 	"c_trd/providers"
 	"c_trd/tests/testutil"
 )
@@ -52,8 +53,8 @@ func fomcBody(t *testing.T, events ...fomcEvent) []byte {
 	return body
 }
 
-// fedDecisions ejecuta los tres callbacks sobre la misma respuesta
-func fedDecisions(t *testing.T, body []byte) (cut, hold, hike bool) {
+// fedDecisionResults ejecuta los tres callbacks sobre la misma respuesta
+func fedDecisionResults(t *testing.T, body []byte) (cut, hold, hike providers.CallbackResult) {
 	t.Helper()
 
 	cut, err := providers.FedNextMeetingCutLikely(body, nil)
@@ -65,6 +66,14 @@ func fedDecisions(t *testing.T, body []byte) (cut, hold, hike bool) {
 	return cut, hold, hike
 }
 
+// fedDecisions retorna si cada decision es probable
+func fedDecisions(t *testing.T, body []byte) (cut, hold, hike bool) {
+	t.Helper()
+
+	cutResult, holdResult, hikeResult := fedDecisionResults(t, body)
+	return cutResult.Accepted, holdResult.Accepted, hikeResult.Accepted
+}
+
 func TestFedNextMeetingCallbacks_Fixture(t *testing.T) {
 	t.Parallel()
 
@@ -72,6 +81,31 @@ func TestFedNextMeetingCallbacks_Fixture(t *testing.T) {
 	cut, hold, hike := fedDecisions(t, testutil.ReadFixture(t, "polymarket_fomc_events.json"))
 	if cut || !hold || hike {
 		t.Errorf("cut, hold, hike = %v, %v, %v, want false, true, false", cut, hold, hike)
+	}
+}
+
+func TestFedNextMeetingCallbacks_Probabilities(t *testing.T) {
+	t.Parallel()
+
+	// Value es la probabilidad de cada decision en la reunion de octubre del fixture. /events no trae la fecha de los
+	// precios, asi que AsOf queda nil (la evaluacion usa la hora del servidor con as_of_source SERVER)
+	cut, hold, hike := fedDecisionResults(t, testutil.ReadFixture(t, "polymarket_fomc_events.json"))
+
+	tests := []struct {
+		name   string
+		result providers.CallbackResult
+		want   float64
+	}{
+		{"bajada", cut, 0.005},
+		{"sin cambio", hold, 0.865},
+		{"subida", hike, 0.1385},
+	}
+
+	for _, tt := range tests {
+		if math.Abs(tt.result.Value-tt.want) > 1e-9 {
+			t.Errorf("%s: value = %v, want %v", tt.name, tt.result.Value, tt.want)
+		}
+		requireAsOf(t, tt.result.AsOf, time.Time{})
 	}
 }
 
@@ -158,7 +192,7 @@ func TestFedNextMeetingCallbacks_Errors(t *testing.T) {
 		{"precio fuera de rango", withMarket(highPrice), "PCPOLYE007"},
 	}
 
-	callbacks := map[string]func([]byte, map[string]any) (bool, *cmm.ErrorHandler){
+	callbacks := map[string]providers.CallbackFunc{
 		"cut":  providers.FedNextMeetingCutLikely,
 		"hold": providers.FedNextMeetingHoldLikely,
 		"hike": providers.FedNextMeetingHikeLikely,
@@ -171,8 +205,8 @@ func TestFedNextMeetingCallbacks_Errors(t *testing.T) {
 			for name, callback := range callbacks {
 				got, err := callback(tt.body, nil)
 				testutil.RequireTrackingCode(t, err, tt.code)
-				if got {
-					t.Errorf("%s: se esperaba false con error", name)
+				if got != (providers.CallbackResult{}) {
+					t.Errorf("%s: result = %+v, se esperaba CallbackResult{} con error", name, got)
 				}
 			}
 		})

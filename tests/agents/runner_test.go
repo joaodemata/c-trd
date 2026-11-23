@@ -164,8 +164,10 @@ func composerJSON(tag string) string {
 		tag, fakeIDAsset, fakeIDAction, fakeIDCondition, fakeIDTimeframe, fakeIDVisib, fakeIDCondition)
 }
 
-func pineJSON() string {
+// pineJSON salida valida del Pine Author con los plot del backtest titulados con el tag del trigger
+func pineJSON(tag string) string {
 	out := validPine()
+	out.PineIndicator = agents.RetagPinePlots(out.PineIndicator, pineTriggerTag, tag)
 	out.RiskLogic = agents.RiskLogic{StopLossMethod: "2 ATR", TakeProfitMethod: "2R y 3R", PlannedRR: 3}
 	out.AlertSetup = "Alerta en cierre de vela"
 	out.Changes = []string{}
@@ -194,7 +196,7 @@ func TestRunnerSuccess(t *testing.T) {
 	llm := &scriptedLLM{inputs: map[string][]string{}, responses: map[string][]string{
 		"Condition Designer": {"no tengo json", designerJSON()},
 		"Trigger Composer":   {composerJSON("BTC-1D-FEAR"), composerJSON("BTC-1D-FEAR-V2")},
-		"Pine Author":        {pineJSON()},
+		"Pine Author":        {pineJSON("BTC-1D-FEAR")},
 	}}
 	runner, _ := newRunner(t, fake, llm)
 
@@ -232,6 +234,13 @@ func TestRunnerSuccess(t *testing.T) {
 	}
 	if len(fake.triggerBodies) != 2 || fake.triggerBodies[1]["tag"] != "BTC-1D-FEAR-V2" || !strings.Contains(fake.triggerBodies[1]["code"].(string), "{{ID_WEBHOOK}}") {
 		t.Errorf("triggers enviados = %v", fake.triggerBodies)
+	}
+	// El codigo reutilizado lleva el tag nuevo en los plot del backtest
+	if len(fake.triggerBodies) == 2 {
+		code := fake.triggerBodies[1]["code"].(string)
+		if !strings.Contains(code, `"CTRD_SIGNAL_BTC-1D-FEAR-V2"`) || strings.Contains(code, `"CTRD_SIGNAL_BTC-1D-FEAR"`) {
+			t.Errorf("los plot del backtest no cambiaron al tag nuevo: %s", code)
+		}
 	}
 }
 

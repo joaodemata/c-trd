@@ -3,6 +3,7 @@ package providers_test
 import (
 	"slices"
 	"testing"
+	"time"
 
 	cmm "c_trd/common"
 	"c_trd/providers"
@@ -67,9 +68,9 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 		want   []string
 	}{
 		{"alpha vantage", cmm.ResponseFormatAlphaVantagePutCallRatio, []string{"ProcessAlphaVantageData"}},
-		{"google trends", cmm.ResponseFormatGoogleTrendsSeries, []string{"GoogleTrendsHigh", "GoogleTrendsLow"}},
-		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin"}},
-		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesFalling", "FredSeriesRising"}},
+		{"google trends", cmm.ResponseFormatGoogleTrendsSeries, []string{"GoogleTrendsAboveWithHysteresis", "GoogleTrendsBelow", "GoogleTrendsCrossAbove", "GoogleTrendsCrossBelow", "GoogleTrendsHigh", "GoogleTrendsLow", "GoogleTrendsPercentileAbove", "GoogleTrendsPercentileBelow", "GoogleTrendsSlopeAbove", "GoogleTrendsZScoreAbove", "GoogleTrendsZScoreBelow"}},
+		{"csv de google trends ordenado por nombre", cmm.ResponseFormatGoogleTrendsFile, []string{"GoogleTrendsFileAboveWithHysteresis", "GoogleTrendsFileBelow", "GoogleTrendsFileCrossAbove", "GoogleTrendsFileCrossBelow", "GoogleTrendsFileHigh", "GoogleTrendsFileLow", "GoogleTrendsFileNewMax", "GoogleTrendsFileNewMin", "GoogleTrendsFilePercentileAbove", "GoogleTrendsFilePercentileBelow", "GoogleTrendsFileSlopeAbove", "GoogleTrendsFileZScoreAbove", "GoogleTrendsFileZScoreBelow"}},
+		{"fred", cmm.ResponseFormatFredSeriesObservations, []string{"FredSeriesAboveWithHysteresis", "FredSeriesBelow", "FredSeriesCrossAbove", "FredSeriesCrossBelow", "FredSeriesFalling", "FredSeriesPercentileAbove", "FredSeriesPercentileBelow", "FredSeriesRising", "FredSeriesSlopeAbove", "FredSeriesZScoreAbove", "FredSeriesZScoreBelow"}},
 		{"polymarket fed", cmm.ResponseFormatPolymarketFedDecisions, []string{"FedNextMeetingCutLikely", "FedNextMeetingHikeLikely", "FedNextMeetingHoldLikely"}},
 		{"coinmarketcap fear and greed", cmm.ResponseFormatCoinMarketCapFearGreed, []string{"FearAndGreedAbove", "FearAndGreedBelow", "FearAndGreedExtremeFear", "FearAndGreedExtremeGreed", "FearAndGreedFear", "FearAndGreedGreed", "FearAndGreedNeutral"}},
 		{"coinmarketcap global metrics", cmm.ResponseFormatCoinMarketCapGlobal, []string{"BtcDominanceAbove", "BtcDominanceAbove60", "BtcDominanceBelow", "Others2DominanceAbove", "Others2DominanceBelow", "Others3DominanceAbove", "Others3DominanceBelow", "StablecoinDominanceAbove12"}},
@@ -102,5 +103,30 @@ func TestListCallbacksByResponseFormat(t *testing.T) {
 				t.Errorf("callbacks = %v, want %v", names, tt.want)
 			}
 		})
+	}
+}
+
+// requireAsOf valida la fecha del dato del callback. Con want cero se espera nil (la respuesta no trae fecha)
+func requireAsOf(t *testing.T, got *time.Time, want time.Time) {
+	t.Helper()
+
+	switch {
+	case want.IsZero() && got != nil:
+		t.Errorf("asOf = %s, want nil", got.Format(time.RFC3339Nano))
+	case !want.IsZero() && got == nil:
+		t.Errorf("asOf = nil, want %s", want.Format(time.RFC3339Nano))
+	case !want.IsZero() && !got.Equal(want):
+		t.Errorf("asOf = %s, want %s", got.Format(time.RFC3339Nano), want.Format(time.RFC3339Nano))
+	case got != nil && got.Location() != time.UTC:
+		t.Errorf("asOf debe estar en UTC, esta en %s", got.Location())
+	}
+}
+
+// requireEmptyResult valida que un callback con error retorne CallbackResult{}: sin aceptar, sin valor y sin fecha
+func requireEmptyResult(t *testing.T, got providers.CallbackResult) {
+	t.Helper()
+
+	if got != (providers.CallbackResult{}) {
+		t.Errorf("result = %+v, un error debe retornar CallbackResult{}", got)
 	}
 }
