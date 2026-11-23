@@ -20,4 +20,6 @@ var RegistryList = []cmm.ModelRegistry{
 	{Name: "portfolios", Ptr: &PortfolioModel},
 	{Name: "portfolio_transactions", Ptr: &PortfolioTransactionsModel},
 	{Name: "condition_evaluations", Ptr: &ConditionEvaluationsModel},
+	{Name: "backtest_datasets", Ptr: &BacktestDatasetsModel},
+	{Name: "backtest_runs", Ptr: &BacktestRunsModel},
 }

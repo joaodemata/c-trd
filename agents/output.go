@@ -72,9 +72,13 @@ func DecodeAgentOutput[T any](text string) (T, map[string]any, *cmm.ErrorHandler
 	return out, raw, cmm.NewEmptyErrorHandler()
 }
 
-// ValidatePineOutput revisa lo minimo del contrato del Pine Author antes de guardar el codigo en el trigger
-func ValidatePineOutput(out PineAuthorOutput) []string {
+// ValidatePineOutput revisa lo minimo del contrato del Pine Author antes de guardar el codigo en el trigger. triggerTag
+// es el tag del trigger (Trigger Composer): los plot del backtest llevan ese tag en el titulo
+func ValidatePineOutput(out PineAuthorOutput, triggerTag string) []string {
 	problems := []string{}
+	signalTitle := `"` + cmm.BacktestSignalColumnPrefix + triggerTag + `"`
+	stopLossTitle := `"` + cmm.BacktestStopLossColumnPrefix + triggerTag + `"`
+	takeProfitTitle := `"` + cmm.BacktestTakeProfitColumnPrefix + triggerTag + `"`
 	checks := []struct {
 		ok      bool
 		problem string
@@ -84,6 +88,10 @@ func ValidatePineOutput(out PineAuthorOutput) []string {
 		{strings.Contains(out.PineIndicator, "alert("), "pineIndicator: falta alert(...)"},
 		{strings.Contains(out.PineIndicator, cmm.TriggerCodeWebhookPlaceholder), "pineIndicator: falta el placeholder " + cmm.TriggerCodeWebhookPlaceholder},
 		{!strings.Contains(out.PineIndicator, "{{ID_CANCEL}}"), "pineIndicator: {{ID_CANCEL}} debe reemplazarse por un id de cancelReasons"},
+		{strings.Contains(out.PineIndicator, signalTitle), "pineIndicator: falta el plot " + signalTitle + " para el backtest"},
+		{strings.Contains(out.PineIndicator, stopLossTitle), "pineIndicator: falta el plot " + stopLossTitle + " para el backtest"},
+		{strings.Contains(out.PineIndicator, takeProfitTitle), "pineIndicator: falta el plot " + takeProfitTitle + " para el backtest"},
+		{strings.Contains(out.PineIndicator, "display.data_window"), "pineIndicator: los plot del backtest deben usar display = display.data_window"},
 		{strings.Contains(out.PineStrategy, "//@version=6"), "pineStrategy: falta //@version=6"},
 		{strings.Contains(out.PineStrategy, "strategy("), "pineStrategy: falta strategy(...)"},
 		{len(out.PineIndicator) <= 65536, "pineIndicator: supera 64 KB"},
@@ -95,6 +103,20 @@ func ValidatePineOutput(out PineAuthorOutput) []string {
 		}
 	}
 	return problems
+}
+
+// RetagPinePlots cambia el tag de los titulos de los plot del backtest cuando el runner reutiliza el codigo para un
+// trigger que solo cambio de tag (c-trd rechazo el anterior). Reemplaza los titulos completos entre comillas, asi no
+// toca otros textos que contengan el tag
+func RetagPinePlots(code string, oldTag string, newTag string) string {
+	prefixes := []string{cmm.BacktestSignalColumnPrefix, cmm.BacktestStopLossColumnPrefix, cmm.BacktestTakeProfitColumnPrefix}
+	retagged := code
+	for _, prefix := range prefixes {
+		oldTitle := `"` + prefix + oldTag + `"`
+		newTitle := `"` + prefix + newTag + `"`
+		retagged = strings.ReplaceAll(retagged, oldTitle, newTitle)
+	}
+	return retagged
 }
 
 // RequestBody body de POST /operation/create/condition: la condicion sin los campos de razonamiento

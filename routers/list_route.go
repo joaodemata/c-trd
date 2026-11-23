@@ -35,6 +35,11 @@ func listRoutes(server *http.ServeMux) *http.ServeMux {
 	// ROI calculado al momento con los precios de mercado (una consulta por asset), por eso va aparte del listado de portfolios
 	api.Get("/list/portfolio_roi", c.ListPortfolioRoiController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(portfolioPrivileges...), fv.PortfolioRoiFormatValidate, dv.PortfolioRoiDataValidate)
 
+	// Backtesting (super usuario): datasets, corridas sin operaciones y el detalle de una corrida con sus operaciones
+	api.Get("/list/backtest_datasets", c.ListBacktestDatasetsController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListBacktestDatasetsFormatValidate)
+	api.Get("/list/backtest_runs", c.ListBacktestRunsController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), cmm.PaginationFormatValidate, fv.ListBacktestRunsFormatValidate)
+	api.Get("/list/backtest_run", c.GetBacktestRunController(), generalRateLimit, cmm.AuthenticateRequestMiddleware, dv.AuthDataValidate, dv.PrivilegesDataValidate(cmm.UserPrivilegeSuperUser.Tag), fv.GetBacktestRunFormatValidate, dv.GetBacktestRunDataValidate)
+
 	return server
 
 }

@@ -61,6 +61,15 @@ var (
 	AgentRunStatusFailed     = CatalogStatus{ID: mustParseObjectId("6ae86ce704d146a72e6afe00"), Tag: "RUN-FAILED", Name: "Fallida"}
 )
 
+// BACKTEST_RUN_STATUS. Corrida de backtest de un trigger: la API la deja en cola y el binario cmd/backtester la toma,
+// la ejecuta y la cierra. Se crean con scripts/create_backtest_catalogs.js
+var (
+	BacktestRunStatusQueued  = CatalogStatus{ID: mustParseObjectId("6b049228935fd9c82d919845"), Tag: "BACKTEST-QUEUED", Name: "En cola"}
+	BacktestRunStatusRunning = CatalogStatus{ID: mustParseObjectId("6b049228be88239ab17d242d"), Tag: "BACKTEST-RUNNING", Name: "En ejecucion"}
+	BacktestRunStatusSuccess = CatalogStatus{ID: mustParseObjectId("6b0492280b750163917f0a1e"), Tag: "BACKTEST-SUCCESS", Name: "Exitosa"}
+	BacktestRunStatusFailed  = CatalogStatus{ID: mustParseObjectId("6b0492281b0fa548773d30c0"), Tag: "BACKTEST-FAILED", Name: "Fallida"}
+)
+
 // TYPE_TRANSACTION. Transacciones del portfolio: compra y venta mueven la posicion del asset, el dividendo suma a la
 // ganancia realizada y el deposito y el retiro son movimientos de efectivo sin asset. Se crean con scripts/create_portfolio_catalogs.js
 var (
@@ -79,6 +88,15 @@ const (
 	AgentThesisClaimTimeout = 12 * time.Hour
 	// Placeholder del codigo del trigger que se reemplaza por el id_webhook al guardarlo
 	TriggerCodeWebhookPlaceholder = "{{ID_WEBHOOK}}"
+)
+
+// Prefijos de los titulos de los plot que el pine del trigger expone para el backtest. El titulo completo es el
+// prefijo + tag del trigger, asi varios triggers del mismo asset y temporalidad caben en un solo "Export chart data"
+// de TradingView sin que se repitan las columnas
+const (
+	BacktestSignalColumnPrefix     = "CTRD_SIGNAL_"
+	BacktestStopLossColumnPrefix   = "CTRD_SL_"
+	BacktestTakeProfitColumnPrefix = "CTRD_TP_"
 )
 
 // Eventos del websocket (typeEvent). Solo avisan que algo cambio, sin datos: cada cliente vuelve a consultar su
@@ -112,6 +130,7 @@ const (
 	CatalogTypeAgentThesisStatus = "AGENT_THESIS_STATUS"
 	CatalogTypeAgentRunStatus    = "AGENT_RUN_STATUS"
 	CatalogTypeTransaction       = "TYPE_TRANSACTION"
+	CatalogTypeBacktestRunStatus = "BACKTEST_RUN_STATUS"
 )
 
 // Formatos de respuesta de las APIs (response_format de la coleccion apis). Cada callback declara
@@ -212,6 +231,81 @@ const (
 	GoogleTrendsDirEnv = "JM_CTRD_GOOGLE_TRENDS_DIR"
 	// Carpeta por defecto si la variable no existe (relativa al directorio de ejecucion)
 	GoogleTrendsDefaultDir = "data/google_trends"
+)
+
+// Tags del catalogo TYPE_ACTION: sentido de la operacion del trigger
+const (
+	ActionTagBuy  = "BUY"
+	ActionTagSell = "SELL"
+)
+
+// Backtesting. Los CSV ("Export chart data" de TradingView) se guardan por su SHA-256 y nunca se borran al subir uno
+// nuevo, asi una corrida vieja se puede repetir con los mismos datos
+const (
+	// Variable de entorno con la carpeta donde se guardan los CSV de los datasets
+	BacktestDirEnv = "JM_CTRD_BACKTESTS_DIR"
+	// Carpeta por defecto si la variable no existe (relativa al directorio de ejecucion)
+	BacktestDefaultDir = "data/backtests"
+	// Tamaño maximo del CSV de un dataset
+	BacktestDatasetMaxBytes = 20 << 20
+	// Tiempos de lectura y escritura de la conexion solo para la subida del CSV (el servidor usa 10s): 20 MB en
+	// una conexion lenta tardan mas que eso
+	BacktestUploadReadTimeout  = 3 * time.Minute
+	BacktestUploadWriteTimeout = 3*time.Minute + 30*time.Second
+	// Triggers que se pueden encolar en una sola peticion
+	BacktestMaxTriggersPerRequest = 25
+	// Una corrida con mas operaciones falla en vez de guardar un documento cerca del limite de 16 MB de Mongo
+	BacktestMaxTrades = 20000
+	// Una corrida en ejecucion por mas de este tiempo se considera abandonada (el binario se cayo) y se marca fallida
+	BacktestRunClaimTimeout = 30 * time.Minute
+	// Corridas que procesa cada ejecucion del binario, el resto espera a la siguiente
+	BacktestRunsPerInvocation = 10
+	// Tiempo maximo para traer la historia de un proveedor al reconstruir una condicion
+	BacktestHistoryTimeout = 60 * time.Second
+	// Una evaluacion guardada sirve hasta este multiplo del intervalo de la condicion, despues el estado es desconocido
+	BacktestEvaluationMaxAgeIntervals = 2
+)
+
+// Origen de los datos de las condiciones en un backtest (settings.condition_source)
+const (
+	// Evaluaciones guardadas y, donde no hay, la historia actual del proveedor
+	BacktestConditionSourceAuto = "AUTO"
+	// Solo evaluaciones guardadas por el cronjob
+	BacktestConditionSourceEvaluationsOnly = "EVALUATIONS_ONLY"
+	// Solo la historia actual del proveedor (datos revisados)
+	BacktestConditionSourceCurrentDataOnly = "CURRENT_DATA_ONLY"
+)
+
+// De donde salio el estado de una condicion en un instante del backtest
+const (
+	// Evaluacion guardada por el cronjob (lo que el sistema supo en ese momento)
+	BacktestStateSourceEvaluation = "EVALUATION"
+	// Historia actual del proveedor filtrada a la fecha: puede tener revisiones posteriores (FRED) o reescalado (Google Trends)
+	BacktestStateSourceCurrentData = "CURRENT_DATA"
+	// Sin datos: cuenta como no cumplida
+	BacktestStateSourceUnknown = "UNKNOWN"
+)
+
+// Variantes que se simulan con las mismas señales
+const (
+	BacktestVariantTriggerOnly    = "TRIGGER_ONLY"
+	BacktestVariantWithConditions = "WITH_CONDITIONS"
+)
+
+// Como termino cada oportunidad simulada
+const (
+	BacktestExitTakeProfit = "TP"
+	BacktestExitStopLoss   = "SL"
+	// Llego al final de las max_candlestick_qty velas con la operacion abierta: se cierra al cierre de la ultima vela
+	BacktestExitExpired = "EXPIRED"
+	// Toco el stop loss o el take profit mientras esperaba las condiciones (en curso): setup invalidado, sin operacion
+	BacktestExitCanceled = "CANCELED"
+	// Las condiciones no se cumplieron dentro de la ventana: expiro sin operacion
+	BacktestExitNotActivated = "NOT_ACTIVATED"
+	// El precio de entrada ya estaba del otro lado del stop loss o del take profit (gap): sin operacion
+	BacktestExitInvalidEntry = "INVALID_ENTRY"
+	// El CSV termino antes de cerrar la oportunidad: se reporta pero no entra en las metricas
+	BacktestExitEndOfData = "END_OF_DATA"
 )
 
 // mustParseObjectId convierte un hexadecimal hardcodeado en ObjectID, detiene la app si es invalido

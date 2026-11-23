@@ -67,6 +67,8 @@ services:
     env_file: /opt/ctrd/env/dev.env
     volumes:
       - trends-dev:/app/data/google_trends
+      # CSV de los datasets de backtest, guardados por su SHA-256
+      - backtests-dev:/app/data/backtests
 
   ctrd-qa:
     <<: *ctrd
@@ -74,6 +76,8 @@ services:
     env_file: /opt/ctrd/env/qa.env
     volumes:
       - trends-qa:/app/data/google_trends
+      # CSV de los datasets de backtest, guardados por su SHA-256
+      - backtests-qa:/app/data/backtests
 
   ctrd-sandbox:
     <<: *ctrd
@@ -81,6 +85,8 @@ services:
     env_file: /opt/ctrd/env/sandbox.env
     volumes:
       - trends-sandbox:/app/data/google_trends
+      # CSV de los datasets de backtest, guardados por su SHA-256
+      - backtests-sandbox:/app/data/backtests
 
   ctrd-prod:
     <<: *ctrd
@@ -88,6 +94,8 @@ services:
     env_file: /opt/ctrd/env/prod.env
     volumes:
       - trends-prod:/app/data/google_trends
+      # CSV de los datasets de backtest, guardados por su SHA-256
+      - backtests-prod:/app/data/backtests
 
 networks:
   internal:
@@ -100,3 +108,7 @@ volumes:
   trends-qa:
   trends-sandbox:
   trends-prod:
+  backtests-dev:
+  backtests-qa:
+  backtests-sandbox:
+  backtests-prod:
